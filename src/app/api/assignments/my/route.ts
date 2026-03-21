@@ -45,15 +45,42 @@ export async function GET() {
       }
     }
 
+    // Enrich with related data
+    const [allUsers, allAngles, allFormats, allProducts, allCountries, allOfferTypes] = await Promise.all([
+      db.select({ id: schema.users.id, name: schema.users.name, email: schema.users.email }).from(schema.users),
+      db.select({ id: schema.angles.id, name: schema.angles.name }).from(schema.angles),
+      db.select({ id: schema.formats.id, name: schema.formats.name }).from(schema.formats),
+      db.select({ id: schema.products.id, name: schema.products.name, code: schema.products.code }).from(schema.products),
+      db.select({ id: schema.countries.id, name: schema.countries.name, code: schema.countries.code }).from(schema.countries),
+      db.select({ id: schema.offerTypes.id, name: schema.offerTypes.name }).from(schema.offerTypes),
+    ]);
+
+    const userMap = new Map(allUsers.map(u => [u.id, u]));
+    const angleMap = new Map(allAngles.map(a => [a.id, a]));
+    const formatMap = new Map(allFormats.map(f => [f.id, f]));
+    const productMap = new Map(allProducts.map(p => [p.id, p]));
+    const countryMap = new Map(allCountries.map(c => [c.id, c]));
+    const offerTypeMap = new Map(allOfferTypes.map(o => [o.id, o]));
+
     const enriched = assignments.map(a => ({
       ...a,
+      status: a.status.toUpperCase(),
+      priority: a.priority.toUpperCase(),
       totalTrackedSeconds: timeMap.get(a.id) || 0,
+      assignedTo: userMap.get(a.assignedToId) || { id: a.assignedToId, name: "Unknown", email: "" },
+      assignedBy: userMap.get(a.assignedById) || { id: a.assignedById, name: "Unknown", email: "" },
+      creativeStrategist: a.creativeStrategistId ? userMap.get(a.creativeStrategistId) || null : null,
+      angle: a.angleId ? angleMap.get(a.angleId) || null : null,
+      format: a.formatId ? formatMap.get(a.formatId) || null : null,
+      product: a.productId ? productMap.get(a.productId) || null : null,
+      country: a.countryId ? countryMap.get(a.countryId) || null : null,
+      offerType: a.offerTypeId ? offerTypeMap.get(a.offerTypeId) || null : null,
     }));
 
-    const needsAttention = enriched.filter(a => a.status === "revision");
-    const active = enriched.filter(a => a.status === "editing_now");
-    const pending = enriched.filter(a => a.status === "ready_for_editing");
-    const inReview = enriched.filter(a => ["ready_for_review", "ready_for_posting"].includes(a.status));
+    const needsAttention = enriched.filter(a => a.status === "REVISION");
+    const active = enriched.filter(a => a.status === "EDITING_NOW");
+    const pending = enriched.filter(a => a.status === "READY_FOR_EDITING");
+    const inReview = enriched.filter(a => ["READY_FOR_REVIEW", "READY_FOR_POSTING"].includes(a.status));
 
     return NextResponse.json({
       needsAttention,

@@ -56,6 +56,8 @@ export async function GET(
 
     return NextResponse.json({
       ...assignment,
+      status: assignment.status.toUpperCase(),
+      priority: assignment.priority.toUpperCase(),
       totalTrackedSeconds,
       timeEntries,
       assignedTo,
@@ -100,10 +102,11 @@ export async function PUT(
       videoLengthSeconds, description, scriptContent, revisionFeedback,
     } = body;
 
-    // H2: Input validation
-    if (priority !== undefined) {
+    // H2: Input validation — normalize priority to lowercase for DB
+    const dbPriority = priority !== undefined ? priority.toLowerCase() : undefined;
+    if (dbPriority !== undefined) {
       const validPriorities = ["low", "medium", "high", "urgent"];
-      if (!validPriorities.includes(priority)) {
+      if (!validPriorities.includes(dbPriority)) {
         return NextResponse.json({ error: "Priority must be one of: low, medium, high, urgent" }, { status: 400 });
       }
     }
@@ -137,7 +140,7 @@ export async function PUT(
     if (landingPage !== undefined) updateData.landingPage = landingPage;
     if (assignedToId !== undefined) updateData.assignedToId = assignedToId;
     if (creativeStrategistId !== undefined) updateData.creativeStrategistId = creativeStrategistId;
-    if (priority !== undefined) updateData.priority = priority;
+    if (dbPriority !== undefined) updateData.priority = dbPriority;
     if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
     if (estimatedMinutes !== undefined) updateData.estimatedMinutes = estimatedMinutes;
     if (videoLengthSeconds !== undefined) updateData.videoLengthSeconds = videoLengthSeconds;

@@ -29,8 +29,8 @@ export async function GET(request: NextRequest) {
       conditions.push(eq(schema.assignments.assignedToId, assignedToId));
     }
 
-    if (status) conditions.push(eq(schema.assignments.status, status));
-    if (priority) conditions.push(eq(schema.assignments.priority, priority));
+    if (status) conditions.push(eq(schema.assignments.status, status.toLowerCase()));
+    if (priority) conditions.push(eq(schema.assignments.priority, priority.toLowerCase()));
     if (formatId) conditions.push(eq(schema.assignments.formatId, formatId));
     if (productId) conditions.push(eq(schema.assignments.productId, productId));
 
@@ -89,9 +89,11 @@ export async function GET(request: NextRequest) {
 
     const enriched = assignments.map(a => ({
       ...a,
+      status: a.status.toUpperCase(),
+      priority: a.priority.toUpperCase(),
       totalTrackedSeconds: timeMap.get(a.id) || 0,
-      assignedTo: userMap.get(a.assignedToId) || null,
-      assignedBy: userMap.get(a.assignedById) || null,
+      assignedTo: userMap.get(a.assignedToId) || { id: a.assignedToId, name: "Unknown", email: "" },
+      assignedBy: userMap.get(a.assignedById) || { id: a.assignedById, name: "Unknown", email: "" },
       creativeStrategist: a.creativeStrategistId ? userMap.get(a.creativeStrategistId) || null : null,
       angle: a.angleId ? angleMap.get(a.angleId) || null : null,
       format: a.formatId ? formatMap.get(a.formatId) || null : null,
@@ -144,9 +146,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Batch number and assignedToId are required" }, { status: 400 });
     }
 
-    // H2: Input validation
+    // H2: Input validation — normalize priority to lowercase for DB
+    const dbPriority = priority.toLowerCase();
     const validPriorities = ["low", "medium", "high", "urgent"];
-    if (!validPriorities.includes(priority)) {
+    if (!validPriorities.includes(dbPriority)) {
       return NextResponse.json({ error: "Priority must be one of: low, medium, high, urgent" }, { status: 400 });
     }
     if (!Number.isInteger(batchNumber) || batchNumber <= 0) {
@@ -200,7 +203,7 @@ export async function POST(request: NextRequest) {
         assignedById: userId,
         creativeStrategistId: creativeStrategistId || null,
         status: "ready_for_editing",
-        priority,
+        priority: dbPriority,
         dueDate: dueDate ? new Date(dueDate) : null,
         estimatedMinutes: estimatedMinutes || null,
         scriptContent: scriptContent || null,

@@ -24,7 +24,7 @@ export async function GET() {
       })
       .from(schema.users);
 
-    return NextResponse.json(users);
+    return NextResponse.json({ users });
   } catch (error) {
     console.error("Users GET error:", error);
     return NextResponse.json(

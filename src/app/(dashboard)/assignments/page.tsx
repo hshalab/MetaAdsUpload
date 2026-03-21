@@ -171,7 +171,7 @@ export default function AssignmentsPage() {
     fetchBoard();
   }, [fetchBoard]);
 
-  const editors = users.filter((u) => u.role === "EMPLOYEE" || u.role === "EDITOR");
+  const editors = users.filter((u) => u.role === "editor" || u.role === "employee");
 
   const handleStatusChange = async (assignmentId: string, newStatus: AssignmentStatus) => {
     try {

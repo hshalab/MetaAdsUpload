@@ -3,6 +3,20 @@ import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
 
+const STATUS_KEYS = [
+  "READY_FOR_EDITING",
+  "EDITING_NOW",
+  "READY_FOR_REVIEW",
+  "REVISION",
+  "READY_FOR_POSTING",
+  "POSTED",
+] as const;
+
+// Map lowercase DB values to uppercase frontend keys
+function toUpperStatus(dbStatus: string): string {
+  return dbStatus.toUpperCase();
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -19,7 +33,7 @@ export async function GET(request: NextRequest) {
     if (assignedToId) conditions.push(eq(schema.assignments.assignedToId, assignedToId));
     if (formatId) conditions.push(eq(schema.assignments.formatId, formatId));
     if (productId) conditions.push(eq(schema.assignments.productId, productId));
-    if (priority) conditions.push(eq(schema.assignments.priority, priority));
+    if (priority) conditions.push(eq(schema.assignments.priority, priority.toLowerCase()));
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -53,28 +67,47 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Look up users for display
-    const allUsers = await db.select({ id: schema.users.id, name: schema.users.name, email: schema.users.email }).from(schema.users);
-    const userMap = new Map(allUsers.map(u => [u.id, u]));
+    // Look up related entities
+    const [allUsers, allAngles, allFormats, allProducts, allCountries, allOfferTypes] = await Promise.all([
+      db.select({ id: schema.users.id, name: schema.users.name, email: schema.users.email }).from(schema.users),
+      db.select({ id: schema.angles.id, name: schema.angles.name }).from(schema.angles),
+      db.select({ id: schema.formats.id, name: schema.formats.name }).from(schema.formats),
+      db.select({ id: schema.products.id, name: schema.products.name, code: schema.products.code }).from(schema.products),
+      db.select({ id: schema.countries.id, name: schema.countries.name, code: schema.countries.code }).from(schema.countries),
+      db.select({ id: schema.offerTypes.id, name: schema.offerTypes.name }).from(schema.offerTypes),
+    ]);
 
-    type BoardStatus = "ready_for_editing" | "editing_now" | "ready_for_review" | "revision" | "ready_for_posting" | "posted";
-    const board: Record<BoardStatus, unknown[]> = {
-      ready_for_editing: [],
-      editing_now: [],
-      ready_for_review: [],
-      revision: [],
-      ready_for_posting: [],
-      posted: [],
-    };
+    const userMap = new Map(allUsers.map(u => [u.id, u]));
+    const angleMap = new Map(allAngles.map(a => [a.id, a]));
+    const formatMap = new Map(allFormats.map(f => [f.id, f]));
+    const productMap = new Map(allProducts.map(p => [p.id, p]));
+    const countryMap = new Map(allCountries.map(c => [c.id, c]));
+    const offerTypeMap = new Map(allOfferTypes.map(o => [o.id, o]));
+
+    // Build board with UPPERCASE keys
+    const board: Record<string, unknown[]> = {};
+    for (const key of STATUS_KEYS) {
+      board[key] = [];
+    }
 
     for (const a of assignments) {
+      const upperStatus = toUpperStatus(a.status);
       const enriched = {
         ...a,
+        status: upperStatus,
+        priority: a.priority.toUpperCase(),
         totalTrackedSeconds: timeMap.get(a.id) || 0,
-        assignedTo: userMap.get(a.assignedToId) || null,
+        assignedTo: userMap.get(a.assignedToId) || { id: a.assignedToId, name: "Unknown", email: "" },
+        assignedBy: userMap.get(a.assignedById) || { id: a.assignedById, name: "Unknown", email: "" },
+        creativeStrategist: a.creativeStrategistId ? userMap.get(a.creativeStrategistId) || null : null,
+        angle: a.angleId ? angleMap.get(a.angleId) || null : null,
+        format: a.formatId ? formatMap.get(a.formatId) || null : null,
+        product: a.productId ? productMap.get(a.productId) || null : null,
+        country: a.countryId ? countryMap.get(a.countryId) || null : null,
+        offerType: a.offerTypeId ? offerTypeMap.get(a.offerTypeId) || null : null,
       };
-      if (a.status in board) {
-        board[a.status as BoardStatus].push(enriched);
+      if (upperStatus in board) {
+        board[upperStatus].push(enriched);
       }
     }
 

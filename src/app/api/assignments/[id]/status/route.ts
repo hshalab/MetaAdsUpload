@@ -21,6 +21,14 @@ export async function PATCH(
       return NextResponse.json({ error: "Status is required" }, { status: 400 });
     }
 
+    // Normalize to lowercase for DB storage
+    const dbStatus = status.toLowerCase();
+
+    const validStatuses = ["ready_for_editing", "editing_now", "ready_for_review", "revision", "ready_for_posting", "posted"];
+    if (!validStatuses.includes(dbStatus)) {
+      return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
+    }
+
     const [current] = await db.select().from(schema.assignments).where(eq(schema.assignments.id, id));
     if (!current) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
@@ -38,20 +46,20 @@ export async function PATCH(
         revision: ["ready_for_review"],
       };
 
-      if (!allowedTransitions[current.status]?.includes(status)) {
+      if (!allowedTransitions[current.status]?.includes(dbStatus)) {
         return NextResponse.json({ error: "Invalid status transition" }, { status: 403 });
       }
     }
 
-    const updateData: Record<string, unknown> = { status, updatedAt: new Date() };
+    const updateData: Record<string, unknown> = { status: dbStatus, updatedAt: new Date() };
 
-    if (status === "editing_now" && !current.startedAt) {
+    if (dbStatus === "editing_now" && !current.startedAt) {
       updateData.startedAt = new Date();
     }
-    if (status === "posted") {
+    if (dbStatus === "posted") {
       updateData.completedAt = new Date();
     }
-    if (status === "revision" && revisionFeedback) {
+    if (dbStatus === "revision" && revisionFeedback) {
       updateData.revisionFeedback = revisionFeedback;
     }
 

@@ -14,7 +14,7 @@ export async function GET() {
       .select({ count: sql<number>`count(*)` })
       .from(schema.assignments);
 
-    // By status
+    // By status — return UPPERCASE keys to match frontend
     const byStatusRows = await db
       .select({
         status: schema.assignments.status,
@@ -25,10 +25,10 @@ export async function GET() {
 
     const byStatus: Record<string, number> = {};
     for (const row of byStatusRows) {
-      byStatus[row.status] = row.count;
+      byStatus[row.status.toUpperCase()] = row.count;
     }
 
-    // By priority (excluding posted)
+    // By priority (excluding posted) — UPPERCASE keys
     const byPriorityRows = await db
       .select({
         priority: schema.assignments.priority,
@@ -40,7 +40,7 @@ export async function GET() {
 
     const byPriority: Record<string, number> = {};
     for (const row of byPriorityRows) {
-      byPriority[row.priority] = row.count;
+      byPriority[row.priority.toUpperCase()] = row.count;
     }
 
     // Overdue count
@@ -54,7 +54,7 @@ export async function GET() {
         )
       );
 
-    // Average time from completed time entries linked to assignments
+    // Average time from completed time entries
     const [avgResult] = await db
       .select({ avg: sql<number>`coalesce(avg(${schema.timeEntries.durationSeconds}), 0)` })
       .from(schema.timeEntries)
