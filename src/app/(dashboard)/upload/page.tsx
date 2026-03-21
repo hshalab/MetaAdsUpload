@@ -3,6 +3,7 @@
 import { UploadWizard } from "@/components/upload/upload-wizard";
 import { UploadQueue } from "@/components/upload/upload-queue";
 import { useUploadQueue } from "@/hooks/use-upload-queue";
+import { Upload } from "lucide-react";
 import { toast } from "sonner";
 
 export default function UploadPage() {
@@ -29,6 +30,13 @@ export default function UploadPage() {
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+          <Upload className="h-6 w-6 text-cyan-400" />
+          Upload Ads
+        </h1>
+        <p className="text-sm text-slate-500 mt-0.5">Configure and upload ads to Meta</p>
+      </div>
       <UploadWizard onAddToQueue={handleAddToQueue} onSaveTemplate={handleSaveTemplate} />
       <UploadQueue
         jobs={jobs}
