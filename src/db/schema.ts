@@ -134,19 +134,44 @@ export const timeEntries = pgTable("time_entries", {
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  isDefault: boolean("is_default").default(false).notNull(),
+
+  // Campaign
   objective: text("objective").default("OUTCOME_SALES"),
-  budgetType: text("budget_type").default("ABO"),
-  dailyBudget: real("daily_budget"),
+  budgetType: text("budget_type").default("ABO"), // ABO or CBO
+  dailyBudget: real("daily_budget"), // in SEK
+
+  // Ad Copy
   headlines: jsonb("headlines").$type<string[]>().default([]),
   primaryTexts: jsonb("primary_texts").$type<string[]>().default([]),
   descriptions: jsonb("descriptions").$type<string[]>().default([]),
-  linkUrl: text("link_url"),
   ctaType: text("cta_type").default("SHOP_NOW"),
-  targeting: jsonb("targeting").$type<Record<string, unknown>>().default({}),
-  placements: jsonb("placements").$type<string[]>().default([]),
-  pixelId: text("pixel_id"),
+
+  // Landing Pages
+  landingPages: jsonb("landing_pages").$type<string[]>().default([]),
+
+  // Targeting
+  targetCountries: jsonb("target_countries").$type<string[]>().default(["SE"]),
+  ageMin: integer("age_min"),
+  ageMax: integer("age_max"),
+  genders: jsonb("genders").$type<number[]>(), // [1]=female, [2]=male, [1,2]=all
+
+  // Optimization
   optimizationGoal: text("optimization_goal").default("OFFSITE_CONVERSIONS"),
-  conversionEvent: text("conversion_event").default("Purchase"),
+  conversionEvent: text("conversion_event").default("PURCHASE"),
+  bidStrategy: text("bid_strategy").default("LOWEST_COST_WITHOUT_CAP"),
+
+  // Naming Templates
+  adsetNameTemplate: text("adset_name_template").default("{product} {angle} {country}"),
+  adNameTemplate: text("ad_name_template").default("{country} {editor} {creative} {lp}"),
+
+  // Product / Angle defaults
+  productName: text("product_name"),
+  angleName: text("angle_name"),
+
+  // Pixel
+  pixelId: text("pixel_id"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
