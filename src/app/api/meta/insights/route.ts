@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const { searchParams } = request.nextUrl;
     const from = searchParams.get("from") || new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
     const to = searchParams.get("to") || new Date().toISOString().split("T")[0];

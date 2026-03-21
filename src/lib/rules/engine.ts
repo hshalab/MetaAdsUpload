@@ -3,6 +3,16 @@ import { eq, and, gte } from "drizzle-orm";
 import { evaluateAllConditions } from "./conditions";
 import { executeAction } from "./actions";
 
+/**
+ * Parse timeRange string (e.g., "7d", "14d", "30d") into a Date.
+ * Defaults to 7 days if not parseable.
+ */
+function parseTimeRange(timeRange: string): Date {
+  const match = timeRange.match(/^(\d+)d$/);
+  const days = match ? parseInt(match[1], 10) : 7;
+  return new Date(Date.now() - days * 86400000);
+}
+
 export async function runAllRules() {
   const rules = await db.select().from(schema.automationRules).where(eq(schema.automationRules.enabled, true));
   const results: Array<{ ruleId: number; entityId: string; action: string }> = [];
@@ -10,6 +20,14 @@ export async function runAllRules() {
   for (const rule of rules) {
     const conditions = rule.conditions as Array<{ metric: string; operator: string; value: number; timeRange: string }>;
     const action = rule.action as { type: string; value?: number };
+
+    // Determine the widest timeRange across all conditions
+    const timeRanges = conditions.map((c) => c.timeRange || "7d");
+    const earliestDate = timeRanges.reduce((earliest, tr) => {
+      const d = parseTimeRange(tr);
+      return d < earliest ? d : earliest;
+    }, new Date());
+    const dateFilter = earliestDate.toISOString().split("T")[0];
 
     // Get entities based on level
     let entities: Array<{ id: string; daily_budget: number | null }> = [];
@@ -36,9 +54,12 @@ export async function runAllRules() {
       );
       if (recentExecs.length > 0) continue;
 
-      // Get aggregated metrics for entity
+      // Get aggregated metrics for entity, filtered by timeRange
       const insightRows = await db.select().from(schema.insights).where(
-        eq(schema.insights.entityId, entity.id)
+        and(
+          eq(schema.insights.entityId, entity.id),
+          gte(schema.insights.dateStart, dateFilter)
+        )
       );
 
       if (insightRows.length === 0) continue;

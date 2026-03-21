@@ -4,10 +4,22 @@ export async function uploadImage(imageFile: Buffer, filename: string) {
   const form = new FormData();
   form.append("filename", filename);
   form.append("bytes", new Blob([new Uint8Array(imageFile)]), filename);
-  return metaApi<{ images: Record<string, { hash: string }> }>(
+  const result = await metaApi<{ images?: Record<string, { hash: string }> }>(
     `/${await getAdAccountId()}/adimages`,
     { method: "POST", body: form }
   );
+
+  const images = result.images;
+  if (!images || Object.keys(images).length === 0) {
+    throw new Error("Meta API returned no image data after upload");
+  }
+
+  const firstImage = Object.values(images)[0];
+  if (!firstImage?.hash) {
+    throw new Error("Meta API returned image without hash");
+  }
+
+  return { images, hash: firstImage.hash };
 }
 
 export async function uploadVideo(videoFile: Buffer, filename: string) {

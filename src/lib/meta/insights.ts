@@ -54,10 +54,10 @@ export async function getInsights(params: {
     queryParams.breakdowns = breakdowns.join(",");
   }
 
-  const data = await metaApi<{ data: InsightData[] }>(endpoint, {
+  const data = await metaApi<{ data?: InsightData[] }>(endpoint, {
     params: queryParams,
   });
-  return data.data;
+  return data.data ?? [];
 }
 
 export function extractPurchases(actions?: Array<{ action_type: string; value: string }>) {

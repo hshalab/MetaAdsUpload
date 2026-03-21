@@ -45,8 +45,7 @@ export async function POST(request: NextRequest) {
       metaResult = { videoId: result.id };
     } else {
       const result = await uploadImage(buffer, file.name);
-      const hash = Object.values(result.images)[0]?.hash;
-      metaResult = { hash };
+      metaResult = { hash: result.hash };
     }
 
     const [creative] = await db.insert(schema.creatives).values({

@@ -21,10 +21,10 @@ export async function getAdSets(campaignId?: string, limit = 100) {
   const endpoint = campaignId
     ? `/${campaignId}/adsets`
     : `/${await getAdAccountId()}/adsets`;
-  const data = await metaApi<{ data: AdSet[] }>(endpoint, {
+  const data = await metaApi<{ data?: AdSet[] }>(endpoint, {
     params: { fields: ADSET_FIELDS, limit },
   });
-  return data.data;
+  return data.data ?? [];
 }
 
 export async function createAdSet(params: {

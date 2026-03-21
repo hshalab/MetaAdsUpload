@@ -27,8 +27,7 @@ export async function POST(request: NextRequest) {
     if (creativeConfig.imageBase64) {
       const buffer = Buffer.from(creativeConfig.imageBase64, "base64");
       const result = await uploadImage(buffer, creativeConfig.filename || "image.jpg");
-      const images = result.images;
-      imageHash = Object.values(images)[0]?.hash;
+      imageHash = result.hash;
     }
 
     if (creativeConfig.videoBase64) {

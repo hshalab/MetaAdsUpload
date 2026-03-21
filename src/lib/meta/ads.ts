@@ -14,10 +14,10 @@ const AD_FIELDS = "id,adset_id,campaign_id,name,status,creative{id},preview_shar
 
 export async function getAds(adsetId?: string, limit = 100) {
   const endpoint = adsetId ? `/${adsetId}/ads` : `/${await getAdAccountId()}/ads`;
-  const data = await metaApi<{ data: Ad[] }>(endpoint, {
+  const data = await metaApi<{ data?: Ad[] }>(endpoint, {
     params: { fields: AD_FIELDS, limit },
   });
-  return data.data;
+  return data.data ?? [];
 }
 
 export async function createAd(params: {
