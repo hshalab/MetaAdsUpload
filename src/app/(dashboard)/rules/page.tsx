@@ -1,16 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Play, Zap } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Plus, Trash2, Play, Zap, Shield } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface Rule {
@@ -38,6 +46,13 @@ const presetRules = [
   { name: "Reduce Underperformer", level: "adset", conditions: [{ metric: "roas", operator: "<", value: 1.0, timeRange: "7d" }, { metric: "spend", operator: ">", value: 200, timeRange: "7d" }], action: { type: "adjust_budget", value: -30 }, cooldownHours: 48 },
 ];
 
+const actionColors: Record<string, string> = {
+  pause: "bg-red-500/10 text-red-400 border-red-500/20",
+  activate: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  adjust_budget: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  alert: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+};
+
 export default function RulesPage() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [executions, setExecutions] = useState<Execution[]>([]);
@@ -50,14 +65,14 @@ export default function RulesPage() {
     cooldownHours: 24,
   });
 
-  const fetch_ = async () => {
+  const fetchRules = async () => {
     const res = await fetch("/api/rules");
     const data = await res.json();
     setRules(data.rules || []);
     setExecutions(data.executions || []);
   };
 
-  useEffect(() => { fetch_(); }, []);
+  useEffect(() => { fetchRules(); }, []);
 
   const createRule = async (ruleData?: typeof presetRules[0]) => {
     const payload = ruleData || form;
@@ -69,7 +84,7 @@ export default function RulesPage() {
       });
       toast.success("Rule created");
       setDialogOpen(false);
-      fetch_();
+      fetchRules();
     } catch {
       toast.error("Failed to create rule");
     }
@@ -81,7 +96,7 @@ export default function RulesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, enabled }),
     });
-    fetch_();
+    fetchRules();
   };
 
   const deleteRule = async (id: number) => {
@@ -91,7 +106,7 @@ export default function RulesPage() {
       body: JSON.stringify({ id }),
     });
     toast.success("Rule deleted");
-    fetch_();
+    fetchRules();
   };
 
   const runRules = async () => {
@@ -99,7 +114,7 @@ export default function RulesPage() {
       const res = await fetch("/api/cron/run-rules", { method: "POST" });
       const data = await res.json();
       toast.success(`Rules executed: ${data.results?.length || 0} actions taken`);
-      fetch_();
+      fetchRules();
     } catch {
       toast.error("Failed to run rules");
     }
@@ -107,125 +122,197 @@ export default function RulesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Automation Rules</h2>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={runRules}>
-            <Play className="mr-2 h-4 w-4" /> Run Now
-          </Button>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger render={<Button />}>
-              <Plus className="mr-2 h-4 w-4" /> New Rule
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Create Rule</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Rule Name</Label>
-                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Level</Label>
-                  <Select value={form.level} onValueChange={(v) => setForm({ ...form, level: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="campaign">Campaign</SelectItem>
-                      <SelectItem value="adset">Ad Set</SelectItem>
-                      <SelectItem value="ad">Ad</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Action</Label>
-                  <Select value={form.action.type} onValueChange={(v) => setForm({ ...form, action: { ...form.action, type: v } })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pause">Pause</SelectItem>
-                      <SelectItem value="activate">Activate</SelectItem>
-                      <SelectItem value="adjust_budget">Adjust Budget</SelectItem>
-                      <SelectItem value="alert">Alert</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {form.action.type === "adjust_budget" && (
-                  <div className="space-y-2">
-                    <Label>Budget Change (%)</Label>
-                    <Input type="number" value={form.action.value || 0} onChange={(e) => setForm({ ...form, action: { ...form.action, value: Number(e.target.value) } })} />
-                  </div>
-                )}
-                <Button className="w-full" onClick={() => createRule()}>Create Rule</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Shield className="h-6 w-6 text-cyan-400" />
+            Automation Rules
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">Auto-manage campaigns based on performance</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={runRules}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
+          >
+            <Play className="h-4 w-4" />
+            Run Now
+          </button>
+          <button
+            onClick={() => setDialogOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-sm font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            New Rule
+          </button>
         </div>
       </div>
 
-      {/* Preset rules */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Quick Add Presets</CardTitle></CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
+      {/* Quick Add Presets */}
+      <div className="rounded-xl border border-white/5 bg-[#111827] p-4">
+        <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">Quick Add Presets</h3>
+        <div className="flex flex-wrap gap-2">
           {presetRules.map((p) => (
-            <Button key={p.name} variant="outline" size="sm" onClick={() => createRule(p)}>
-              <Zap className="mr-1 h-3 w-3" /> {p.name}
-            </Button>
+            <button
+              key={p.name}
+              onClick={() => createRule(p)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all"
+            >
+              <Zap className="h-3.5 w-3.5 text-amber-400" />
+              {p.name}
+            </button>
           ))}
-        </CardContent>
-      </Card>
-
-      {/* Active rules */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {rules.map((r) => (
-          <Card key={r.id}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">{r.name}</CardTitle>
-              <div className="flex items-center gap-2">
-                <Switch checked={r.enabled} onCheckedChange={(v) => toggleRule(r.id, v)} />
-                <Button variant="ghost" size="sm" onClick={() => deleteRule(r.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex gap-2">
-                <Badge variant="outline">{r.level}</Badge>
-                <Badge variant={r.enabled ? "default" : "secondary"}>{r.enabled ? "Active" : "Disabled"}</Badge>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                <p>If: {r.conditions.map((c) => `${c.metric} ${c.operator} ${c.value} (${c.timeRange})`).join(" AND ")}</p>
-                <p>Then: {r.action.type}{r.action.value ? ` ${r.action.value}%` : ""}</p>
-                <p>Cooldown: {r.cooldownHours}h</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        </div>
       </div>
 
-      {/* Execution log */}
+      {/* Active Rules */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {rules.map((r) => (
+          <div key={r.id} className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden hover:border-white/10 transition-all">
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">{r.name}</h3>
+                <div className="flex items-center gap-2">
+                  <Switch checked={r.enabled} onCheckedChange={(v) => toggleRule(r.id, v)} />
+                  <button
+                    onClick={() => deleteRule(r.id)}
+                    className="p-1.5 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 text-slate-400 border border-white/10">
+                  {r.level}
+                </span>
+                <span className={cn(
+                  "text-[10px] font-medium px-2 py-0.5 rounded-full border",
+                  r.enabled
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : "bg-white/5 text-slate-500 border-white/10"
+                )}>
+                  {r.enabled ? "Active" : "Disabled"}
+                </span>
+                <span className={cn(
+                  "text-[10px] font-medium px-2 py-0.5 rounded-full border",
+                  actionColors[r.action.type] || "bg-white/5 text-slate-400 border-white/10"
+                )}>
+                  {r.action.type.replace("_", " ")}{r.action.value ? ` ${r.action.value}%` : ""}
+                </span>
+              </div>
+              <div className="mt-3 rounded-lg bg-white/[0.02] border border-white/5 p-2.5 text-xs text-slate-400 space-y-1">
+                <p><span className="text-slate-500">If:</span> {r.conditions.map((c) => `${c.metric} ${c.operator} ${c.value} (${c.timeRange})`).join(" AND ")}</p>
+                <p><span className="text-slate-500">Cooldown:</span> {r.cooldownHours}h</p>
+              </div>
+            </div>
+          </div>
+        ))}
+        {rules.length === 0 && (
+          <div className="col-span-full py-12 text-center text-slate-500">
+            No rules yet. Use a preset or create a custom rule.
+          </div>
+        )}
+      </div>
+
+      {/* Execution Log */}
       {executions.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Recent Executions</CardTitle></CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Entity</TableHead>
-                  <TableHead>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {executions.slice(-20).reverse().map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell className="text-sm">{new Date(e.executedAt).toLocaleString("sv-SE")}</TableCell>
-                    <TableCell className="text-sm font-mono">{e.entityId}</TableCell>
-                    <TableCell className="text-sm">{e.actionTaken}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/5">
+            <h3 className="text-sm font-semibold text-white">Recent Executions</h3>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/5">
+                <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-2.5">Time</th>
+                <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-2.5">Entity</th>
+                <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-2.5">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {executions.slice(-20).reverse().map((e) => (
+                <tr key={e.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <td className="px-4 py-2.5 text-slate-400">{new Date(e.executedAt).toLocaleString("sv-SE")}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{e.entityId}</td>
+                  <td className="px-4 py-2.5 text-slate-300">{e.actionTaken}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
+
+      {/* Create Rule Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md bg-[#111827] border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Shield className="h-5 w-5 text-cyan-400" />
+              Create Rule
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Rule Name</label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="bg-white/5 border-white/10 placeholder:text-slate-600"
+                placeholder="e.g. Scale Winners"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Level</label>
+              <Select value={form.level} onValueChange={(v) => setForm({ ...form, level: v })}>
+                <SelectTrigger className="bg-white/5 border-white/10"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-[#111827] border-white/10">
+                  <SelectItem value="campaign">Campaign</SelectItem>
+                  <SelectItem value="adset">Ad Set</SelectItem>
+                  <SelectItem value="ad">Ad</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Action</label>
+              <Select value={form.action.type} onValueChange={(v) => setForm({ ...form, action: { ...form.action, type: v } })}>
+                <SelectTrigger className="bg-white/5 border-white/10"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-[#111827] border-white/10">
+                  <SelectItem value="pause">Pause</SelectItem>
+                  <SelectItem value="activate">Activate</SelectItem>
+                  <SelectItem value="adjust_budget">Adjust Budget</SelectItem>
+                  <SelectItem value="alert">Alert</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.action.type === "adjust_budget" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Budget Change (%)</label>
+                <Input
+                  type="number"
+                  value={form.action.value || 0}
+                  onChange={(e) => setForm({ ...form, action: { ...form.action, value: Number(e.target.value) } })}
+                  className="bg-white/5 border-white/10"
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => setDialogOpen(false)}
+              className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => createRule()}
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-sm font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all"
+            >
+              Create Rule
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
