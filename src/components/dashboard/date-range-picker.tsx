@@ -12,6 +12,8 @@ interface DateRangePickerProps {
 }
 
 const presets = [
+  { label: "Today", days: 0 },
+  { label: "Yesterday", days: 1 },
   { label: "7d", days: 7 },
   { label: "14d", days: 14 },
   { label: "30d", days: 30 },
@@ -30,7 +32,15 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
             key={preset.label}
             onClick={() => {
               setActiveDays(preset.days);
-              onChange({ from: subDays(new Date(), preset.days), to: new Date() });
+              if (preset.days === 0) {
+                const today = new Date();
+                onChange({ from: today, to: today });
+              } else if (preset.days === 1) {
+                const yesterday = subDays(new Date(), 1);
+                onChange({ from: yesterday, to: yesterday });
+              } else {
+                onChange({ from: subDays(new Date(), preset.days), to: new Date() });
+              }
             }}
             className={cn(
               "px-3 py-1.5 text-xs font-medium transition-all",
