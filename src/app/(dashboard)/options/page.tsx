@@ -1,20 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +10,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import {
   Plus,
   Trash2,
@@ -78,7 +65,6 @@ const TABS_CONFIG: {
   { key: "customerAvatars", label: "Avatars", icon: Users, hasCode: true, hasDescription: true },
 ];
 
-// API endpoint mapping
 function getApiPath(type: OptionType): string {
   const map: Record<OptionType, string> = {
     angles: "angles",
@@ -97,11 +83,9 @@ export default function OptionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<OptionType>("angles");
 
-  // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState({ name: "", code: "", description: "" });
 
-  // Create state
   const [showCreate, setShowCreate] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", code: "", description: "" });
   const [creating, setCreating] = useState(false);
@@ -121,9 +105,7 @@ export default function OptionsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchOptions();
-  }, [fetchOptions]);
+  useEffect(() => { fetchOptions(); }, [fetchOptions]);
 
   const currentConfig = TABS_CONFIG.find((t) => t.key === activeTab)!;
   const currentItems = options ? (options[activeTab] as OptionItem[]) || [] : [];
@@ -131,13 +113,11 @@ export default function OptionsPage() {
   const handleCreate = async () => {
     if (!newItem.name.trim()) return;
     if (currentConfig.hasCode && !newItem.code.trim()) return;
-
     setCreating(true);
     try {
       const body: Record<string, string | undefined> = { name: newItem.name };
       if (currentConfig.hasCode) body.code = newItem.code;
       if (currentConfig.hasDescription) body.description = newItem.description || undefined;
-
       const res = await fetch(`/api/options/${getApiPath(activeTab)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -159,7 +139,6 @@ export default function OptionsPage() {
       const body: Record<string, string | undefined> = { name: editValues.name };
       if (currentConfig.hasCode) body.code = editValues.code;
       if (currentConfig.hasDescription) body.description = editValues.description || undefined;
-
       const res = await fetch(`/api/options/${getApiPath(activeTab)}/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -190,9 +169,7 @@ export default function OptionsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this option?")) return;
     try {
-      const res = await fetch(`/api/options/${getApiPath(activeTab)}/${id}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(`/api/options/${getApiPath(activeTab)}/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
       fetchOptions();
     } catch (err) {
@@ -205,10 +182,8 @@ export default function OptionsPage() {
     if (idx === -1) return;
     if (direction === "up" && idx === 0) return;
     if (direction === "down" && idx === currentItems.length - 1) return;
-
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
     const swapItem = currentItems[swapIdx];
-
     try {
       await Promise.all([
         fetch(`/api/options/${getApiPath(activeTab)}/${id}`, {
@@ -230,17 +205,13 @@ export default function OptionsPage() {
 
   const startEdit = (item: OptionItem) => {
     setEditingId(item.id);
-    setEditValues({
-      name: item.name,
-      code: item.code || "",
-      description: item.description || "",
-    });
+    setEditValues({ name: item.name, code: item.code || "", description: item.description || "" });
   };
 
   if (loading && !options) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-cyan-500 border-t-transparent" />
       </div>
     );
   }
@@ -248,14 +219,17 @@ export default function OptionsPage() {
   if (error && !options) {
     return (
       <div className="max-w-lg mx-auto mt-12">
-        <Card>
-          <CardContent className="py-8 text-center">
-            <AlertCircle className="h-12 w-12 text-yellow-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Could not load options</h2>
-            <p className="text-muted-foreground mb-4">{error}</p>
-            <Button onClick={fetchOptions}>Retry</Button>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-white/5 bg-[#111827] p-8 text-center">
+          <AlertCircle className="h-12 w-12 text-yellow-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-white mb-2">Could not load options</h2>
+          <p className="text-slate-500 mb-4">{error}</p>
+          <button
+            onClick={fetchOptions}
+            className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-sm font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -265,252 +239,260 @@ export default function OptionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            <SlidersHorizontal className="h-7 w-7" />
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <SlidersHorizontal className="h-6 w-6 text-cyan-400" />
             Options Manager
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage dropdown options for assignments
-          </p>
+          <p className="text-sm text-slate-500 mt-0.5">Manage dropdown options for assignments</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchOptions} disabled={loading}>
-          <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+        <button
+          onClick={fetchOptions}
+          disabled={loading}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all disabled:opacity-50"
+        >
+          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           Refresh
-        </Button>
+        </button>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as OptionType)}>
-        <TabsList className="grid grid-cols-6">
-          {TABS_CONFIG.map((tab) => {
-            const Icon = tab.icon;
-            const count = options ? (options[tab.key] as OptionItem[])?.length || 0 : 0;
-            return (
-              <TabsTrigger key={tab.key} value={tab.key} className="gap-1.5 text-xs">
-                <Icon className="h-3.5 w-3.5" />
-                {tab.label}
-                <Badge variant="secondary" className="text-[10px] ml-1 px-1 py-0">
-                  {count}
-                </Badge>
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
+      {/* Tab Navigation */}
+      <div className="flex gap-1 p-1 rounded-xl bg-white/[0.02] border border-white/5">
+        {TABS_CONFIG.map((tab) => {
+          const Icon = tab.icon;
+          const count = options ? (options[tab.key] as OptionItem[])?.length || 0 : 0;
+          const active = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-medium transition-all",
+                active
+                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                  : "text-slate-500 hover:text-slate-300 hover:bg-white/5 border border-transparent"
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {tab.label}
+              <span className={cn(
+                "text-[10px] px-1.5 py-0 rounded-full ml-0.5",
+                active ? "bg-cyan-500/20 text-cyan-400" : "bg-white/5 text-slate-500"
+              )}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-        {TABS_CONFIG.map((tab) => (
-          <TabsContent key={tab.key} value={tab.key} className="mt-4">
-            <Card>
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm font-medium">
-                  {tab.label}
-                </CardTitle>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setShowCreate(true);
-                    setNewItem({ name: "", code: "", description: "" });
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add {tab.label.replace(/s$/, "")}
-                </Button>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      {tab.hasCode && <TableHead>Code</TableHead>}
-                      {tab.hasDescription && <TableHead>Description</TableHead>}
-                      <TableHead className="w-[80px]">Active</TableHead>
-                      <TableHead className="w-[80px]">Order</TableHead>
-                      <TableHead className="w-[120px] text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {currentItems.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={3 + (tab.hasCode ? 1 : 0) + (tab.hasDescription ? 1 : 0)}
-                          className="text-center py-8 text-muted-foreground"
-                        >
-                          No {tab.label.toLowerCase()} yet
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      currentItems.map((item) => (
-                        <TableRow key={item.id} className={cn(!item.isActive && "opacity-50")}>
-                          <TableCell>
-                            {editingId === item.id ? (
-                              <Input
-                                value={editValues.name}
-                                onChange={(e) =>
-                                  setEditValues({ ...editValues, name: e.target.value })
-                                }
-                                className="h-8"
-                              />
-                            ) : (
-                              <span className="font-medium">{item.name}</span>
-                            )}
-                          </TableCell>
-                          {tab.hasCode && (
-                            <TableCell>
-                              {editingId === item.id ? (
-                                <Input
-                                  value={editValues.code}
-                                  onChange={(e) =>
-                                    setEditValues({ ...editValues, code: e.target.value })
-                                  }
-                                  className="h-8 w-24"
-                                />
-                              ) : (
-                                <Badge variant="secondary" className="text-xs">
-                                  {item.code}
-                                </Badge>
-                              )}
-                            </TableCell>
-                          )}
-                          {tab.hasDescription && (
-                            <TableCell>
-                              {editingId === item.id ? (
-                                <Input
-                                  value={editValues.description}
-                                  onChange={(e) =>
-                                    setEditValues({ ...editValues, description: e.target.value })
-                                  }
-                                  className="h-8"
-                                />
-                              ) : (
-                                <span className="text-sm text-muted-foreground">
-                                  {item.description || "-"}
-                                </span>
-                              )}
-                            </TableCell>
-                          )}
-                          <TableCell>
-                            <Switch
-                              checked={item.isActive}
-                              onCheckedChange={(checked) => handleToggleActive(item.id, checked)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => handleReorder(item.id, "up")}
-                              >
-                                <ArrowUp className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => handleReorder(item.id, "down")}
-                              >
-                                <ArrowDown className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {editingId === item.id ? (
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-green-400"
-                                  onClick={() => handleUpdate(item.id)}
-                                >
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => setEditingId(null)}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => startEdit(item)}
-                                >
-                                  <Edit2 className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-destructive hover:text-destructive"
-                                  onClick={() => handleDelete(item.id)}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))
+      {/* Content */}
+      <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
+        <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-white">{currentConfig.label}</h3>
+          <button
+            onClick={() => {
+              setShowCreate(true);
+              setNewItem({ name: "", code: "", description: "" });
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-xs font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add {currentConfig.label.replace(/s$/, "")}
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/5">
+                <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Name</th>
+                {currentConfig.hasCode && (
+                  <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Code</th>
+                )}
+                {currentConfig.hasDescription && (
+                  <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Description</th>
+                )}
+                <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3 w-[80px]">Active</th>
+                <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3 w-[80px]">Order</th>
+                <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3 w-[120px]">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentItems.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={3 + (currentConfig.hasCode ? 1 : 0) + (currentConfig.hasDescription ? 1 : 0)}
+                    className="text-center py-8 text-slate-500"
+                  >
+                    No {currentConfig.label.toLowerCase()} yet
+                  </td>
+                </tr>
+              ) : (
+                currentItems.map((item, i) => (
+                  <tr
+                    key={item.id}
+                    className={cn(
+                      "border-b border-white/5 hover:bg-white/[0.02] transition-colors",
+                      !item.isActive && "opacity-50",
+                      i % 2 === 0 ? "bg-white/[0.01]" : ""
                     )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
-      </Tabs>
+                  >
+                    <td className="px-4 py-3">
+                      {editingId === item.id ? (
+                        <Input
+                          value={editValues.name}
+                          onChange={(e) => setEditValues({ ...editValues, name: e.target.value })}
+                          className="h-8 bg-white/5 border-white/10"
+                        />
+                      ) : (
+                        <span className="font-medium text-white">{item.name}</span>
+                      )}
+                    </td>
+                    {currentConfig.hasCode && (
+                      <td className="px-4 py-3">
+                        {editingId === item.id ? (
+                          <Input
+                            value={editValues.code}
+                            onChange={(e) => setEditValues({ ...editValues, code: e.target.value })}
+                            className="h-8 w-24 bg-white/5 border-white/10"
+                          />
+                        ) : (
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 text-slate-400 border border-white/10">
+                            {item.code}
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {currentConfig.hasDescription && (
+                      <td className="px-4 py-3">
+                        {editingId === item.id ? (
+                          <Input
+                            value={editValues.description}
+                            onChange={(e) => setEditValues({ ...editValues, description: e.target.value })}
+                            className="h-8 bg-white/5 border-white/10"
+                          />
+                        ) : (
+                          <span className="text-sm text-slate-500">{item.description || "-"}</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="px-4 py-3">
+                      <Switch
+                        checked={item.isActive}
+                        onCheckedChange={(checked) => handleToggleActive(item.id, checked)}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={() => handleReorder(item.id, "up")}
+                          className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-all"
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => handleReorder(item.id, "down")}
+                          className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-all"
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {editingId === item.id ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleUpdate(item.id)}
+                            className="p-1.5 rounded hover:bg-emerald-500/10 text-emerald-400 transition-all"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="p-1.5 rounded hover:bg-white/5 text-slate-400 transition-all"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => startEdit(item)}
+                            className="p-1.5 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-all"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="p-1.5 rounded hover:bg-red-500/10 text-red-400/60 hover:text-red-400 transition-all"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Create Modal */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md bg-[#111827] border-white/10">
           <DialogHeader>
-            <DialogTitle>
-              Add {currentConfig.label.replace(/s$/, "")}
-            </DialogTitle>
+            <DialogTitle className="text-white">Add {currentConfig.label.replace(/s$/, "")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Name</Label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Name</label>
               <Input
                 value={newItem.name}
                 onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
                 placeholder="Name"
                 autoFocus
+                className="bg-white/5 border-white/10 placeholder:text-slate-600"
               />
             </div>
             {currentConfig.hasCode && (
-              <div className="space-y-2">
-                <Label>Code</Label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Code</label>
                 <Input
                   value={newItem.code}
                   onChange={(e) => setNewItem({ ...newItem, code: e.target.value })}
                   placeholder="Code (e.g. SE, LP)"
+                  className="bg-white/5 border-white/10 placeholder:text-slate-600"
                 />
               </div>
             )}
             {currentConfig.hasDescription && (
-              <div className="space-y-2">
-                <Label>Description</Label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Description</label>
                 <Input
                   value={newItem.description}
                   onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
                   placeholder="Description (optional)"
+                  className="bg-white/5 border-white/10 placeholder:text-slate-600"
                 />
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>
+            <button
+              onClick={() => setShowCreate(false)}
+              className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
+            >
               Cancel
-            </Button>
-            <Button onClick={handleCreate} disabled={creating}>
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={creating}
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-sm font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all disabled:opacity-50"
+            >
               {creating ? "Creating..." : "Create"}
-            </Button>
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
