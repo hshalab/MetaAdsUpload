@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -119,6 +119,14 @@ function saveTimerState(state: TimerState) {
 }
 
 export default function TimerPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64 text-muted-foreground">Loading timer...</div>}>
+      <TimerPageContent />
+    </Suspense>
+  );
+}
+
+function TimerPageContent() {
   const searchParams = useSearchParams();
   const assignmentIdParam = searchParams.get("assignmentId");
 
