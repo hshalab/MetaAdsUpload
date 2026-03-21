@@ -5,7 +5,44 @@ import { eq } from "drizzle-orm";
 import { createCampaign } from "@/lib/meta/campaigns";
 import { createAdSet } from "@/lib/meta/adsets";
 import { createAd } from "@/lib/meta/ads";
-import { createAdCreative } from "@/lib/meta/creatives";
+import { createAdCreative, uploadImage, uploadVideo } from "@/lib/meta/creatives";
+
+interface CreativeInput {
+  name: string; // filename / creative name
+  type: "video" | "image";
+  base64?: string;
+  metaVideoId?: string;
+  metaImageHash?: string;
+}
+
+interface PublishConfig {
+  // Campaign
+  campaignId?: string; // existing campaign ID, or null to create new
+  campaignName?: string;
+  campaignObjective?: string;
+  budgetType?: "ABO" | "CBO";
+
+  // Ad Set
+  adsetName?: string; // defaults to assignment autoName
+  dailyBudget?: number; // in cents
+  targeting?: Record<string, unknown>;
+  optimizationGoal?: string;
+  conversionEvent?: string;
+  bidStrategy?: string;
+
+  // Template / Copy
+  templateId?: number;
+  headlines?: string[];
+  primaryTexts?: string[];
+  descriptions?: string[];
+  ctaType?: string;
+
+  // Landing pages (multiple = multiply ads)
+  landingPages: string[];
+
+  // Creatives (multiple = multiply ads)
+  creatives: CreativeInput[];
+}
 
 export async function POST(
   request: NextRequest,
@@ -17,130 +54,181 @@ export async function POST(
     if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { id } = await params;
-    const body = await request.json();
-    const {
-      campaignId: existingCampaignId,
-      adsetId: existingAdsetId,
-      creative: creativeConfig,
-      campaign: campaignConfig,
-      adset: adsetConfig,
-    } = body;
+    const config: PublishConfig = await request.json();
 
-    // Get assignment with related data
+    // Validate
+    if (!config.landingPages?.length) {
+      return NextResponse.json({ error: "At least one landing page is required" }, { status: 400 });
+    }
+    if (!config.creatives?.length) {
+      return NextResponse.json({ error: "At least one creative is required" }, { status: 400 });
+    }
+
+    // Get assignment
     const [assignment] = await db.select().from(schema.assignments).where(eq(schema.assignments.id, id));
     if (!assignment) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
 
     if (assignment.status !== "ready_for_posting") {
-      return NextResponse.json({ error: "Assignment must be in 'ready_for_posting' status to publish" }, { status: 400 });
+      return NextResponse.json({ error: "Assignment must be in 'ready_for_posting' status" }, { status: 400 });
     }
 
-    if (assignment.metaAdId) {
-      return NextResponse.json({ error: "Assignment already published", metaAdId: assignment.metaAdId }, { status: 400 });
-    }
-
-    // Get editor info for ad naming
+    // Get editor info
     const [editor] = await db.select().from(schema.users).where(eq(schema.users.id, assignment.assignedToId));
     const editorName = editor?.name?.split(" ")[0] || "Unknown";
 
-    // Get related entities for naming
-    const formatRow = assignment.formatId ? (await db.select().from(schema.formats).where(eq(schema.formats.id, assignment.formatId)))[0] : null;
-    const productRow = assignment.productId ? (await db.select().from(schema.products).where(eq(schema.products.id, assignment.productId)))[0] : null;
-    const countryRow = assignment.countryId ? (await db.select().from(schema.countries).where(eq(schema.countries.id, assignment.countryId)))[0] : null;
-    const angleRow = assignment.angleId ? (await db.select().from(schema.angles).where(eq(schema.angles.id, assignment.angleId)))[0] : null;
-
+    // Get related entities
+    const countryRow = assignment.countryId
+      ? (await db.select().from(schema.countries).where(eq(schema.countries.id, assignment.countryId)))[0]
+      : null;
     const countryCode = countryRow?.code || "SE";
-    const productName = productRow?.name || "Product";
-    const formatName = formatRow?.name || "Video";
-    const angleName = angleRow?.name || "";
 
-    // Build ad name: "SE EditorName ProductName AngleName FormatName B{batch}V{version}"
-    const adName = `${countryCode} ${editorName} ${productName}${angleName ? ` ${angleName}` : ""} ${formatName} B${assignment.batchNumber}V${assignment.version}`;
+    // Load template if specified
+    let headlines = config.headlines || [];
+    let primaryTexts = config.primaryTexts || [];
+    let descriptions = config.descriptions || [];
+    let ctaType = config.ctaType || "SHOP_NOW";
+
+    if (config.templateId) {
+      const [template] = await db.select().from(schema.templates).where(eq(schema.templates.id, config.templateId));
+      if (template) {
+        if (!headlines.length) headlines = (template.headlines as string[]) || [];
+        if (!primaryTexts.length) primaryTexts = (template.primaryTexts as string[]) || [];
+        if (!descriptions.length) descriptions = (template.descriptions as string[]) || [];
+        ctaType = template.ctaType || ctaType;
+      }
+    }
 
     const { getPageId, getPixelId } = await import("@/lib/meta/client");
     const pageId = await getPageId();
     const pixelId = await getPixelId();
 
-    let campaignIdResult = existingCampaignId;
-    let adsetIdResult = existingAdsetId;
-
-    // Step 1: Create campaign if not provided
-    if (!campaignIdResult && campaignConfig) {
+    // --- Step 1: Campaign ---
+    let campaignId = config.campaignId;
+    if (!campaignId) {
       const campaign = await createCampaign({
-        name: campaignConfig.name || `${countryCode} ${productName} Campaign`,
-        objective: campaignConfig.objective || "OUTCOME_SALES",
+        name: config.campaignName || `${countryCode} ${assignment.autoName || assignment.title}`,
+        objective: config.campaignObjective || "OUTCOME_SALES",
         status: "PAUSED",
-        daily_budget: campaignConfig.budgetType === "CBO" ? (campaignConfig.dailyBudget || 5000) : undefined,
+        daily_budget: config.budgetType === "CBO" ? (config.dailyBudget || 50000) : undefined,
       });
-      campaignIdResult = campaign.id;
+      campaignId = campaign.id;
     }
 
-    if (!campaignIdResult) {
-      return NextResponse.json({ error: "Campaign ID is required. Either provide an existing one or campaign config to create one." }, { status: 400 });
-    }
-
-    // Step 2: Create adset if not provided
-    if (!adsetIdResult && adsetConfig) {
-      const adset = await createAdSet({
-        campaign_id: campaignIdResult,
-        name: adsetConfig.name || `${countryCode} ${productName} ${editorName} Adset`,
-        daily_budget: adsetConfig.dailyBudget || 5000,
-        targeting: adsetConfig.targeting || { geo_locations: { countries: [countryCode] } },
-        optimization_goal: adsetConfig.optimizationGoal || "OFFSITE_CONVERSIONS",
-        billing_event: "IMPRESSIONS",
-        bid_strategy: adsetConfig.bidStrategy || "LOWEST_COST_WITHOUT_CAP",
-        status: "PAUSED",
-        promoted_object: pixelId ? { pixel_id: pixelId, custom_event_type: adsetConfig.conversionEvent || "PURCHASE" } : undefined,
-      });
-      adsetIdResult = adset.id;
-    }
-
-    if (!adsetIdResult) {
-      return NextResponse.json({ error: "Adset ID is required. Either provide an existing one or adset config to create one." }, { status: 400 });
-    }
-
-    // Step 3: Create creative + ad
-    const creativePayload: Record<string, unknown> = {
-      name: adName,
-      object_story_spec: { page_id: pageId },
-    };
-
-    // If assignment has a deliverable URL or R2 key, use it as video/image
-    if (creativeConfig?.videoId) {
-      (creativePayload.object_story_spec as Record<string, unknown>).video_data = {
-        video_id: creativeConfig.videoId,
-        message: creativeConfig.primaryText || "",
-        title: creativeConfig.headline || "",
-        call_to_action: {
-          type: creativeConfig.ctaType || "SHOP_NOW",
-          value: { link: assignment.landingPage || creativeConfig.linkUrl || "" },
-        },
-      };
-    } else if (creativeConfig?.imageHash) {
-      (creativePayload.object_story_spec as Record<string, unknown>).link_data = {
-        link: assignment.landingPage || creativeConfig.linkUrl || "",
-        message: creativeConfig.primaryText || "",
-        name: creativeConfig.headline || "",
-        image_hash: creativeConfig.imageHash,
-        call_to_action: { type: creativeConfig.ctaType || "SHOP_NOW" },
-      };
-    }
-
-    const adCreative = await createAdCreative(creativePayload as Parameters<typeof createAdCreative>[0]);
-
-    const ad = await createAd({
-      adset_id: adsetIdResult,
-      name: adName,
-      creative: { creative_id: adCreative.id },
+    // --- Step 2: Ad Set ---
+    const adsetName = config.adsetName || assignment.autoName || assignment.title;
+    const adset = await createAdSet({
+      campaign_id: campaignId,
+      name: adsetName,
+      daily_budget: config.budgetType !== "CBO" ? (config.dailyBudget || 5000) : undefined,
+      targeting: config.targeting || { geo_locations: { countries: [countryCode] } },
+      optimization_goal: config.optimizationGoal || "OFFSITE_CONVERSIONS",
+      billing_event: "IMPRESSIONS",
+      bid_strategy: config.bidStrategy || "LOWEST_COST_WITHOUT_CAP",
       status: "PAUSED",
+      promoted_object: pixelId
+        ? { pixel_id: pixelId, custom_event_type: config.conversionEvent || "PURCHASE" }
+        : undefined,
     });
 
-    // Step 4: Update assignment with Meta IDs and set status to posted
+    // --- Step 3: Upload creatives & create ads (creatives × landing pages) ---
+    const createdAds: Array<{
+      adId: string;
+      adName: string;
+      creativeName: string;
+      landingPage: string;
+      creativeId: string;
+    }> = [];
+
+    for (const creative of config.creatives) {
+      // Upload media if base64 provided
+      let videoId = creative.metaVideoId;
+      let imageHash = creative.metaImageHash;
+
+      if (creative.base64) {
+        const buffer = Buffer.from(creative.base64, "base64");
+        if (creative.type === "video") {
+          const result = await uploadVideo(buffer, creative.name);
+          videoId = result.id;
+        } else {
+          const result = await uploadImage(buffer, creative.name);
+          imageHash = Object.values(result.images)[0]?.hash;
+        }
+      }
+
+      // For each landing page, create an ad
+      for (let lpIdx = 0; lpIdx < config.landingPages.length; lpIdx++) {
+        const landingPage = config.landingPages[lpIdx];
+        const lpSuffix = config.landingPages.length > 1 ? ` LP${lpIdx + 1}` : "";
+
+        // Creative name = filename without extension
+        const cleanCreativeName = creative.name.replace(/\.[^.]+$/, "");
+        const adName = `${countryCode} ${editorName} ${cleanCreativeName}${lpSuffix}`;
+
+        // Build creative payload
+        const creativePayload: Record<string, unknown> = {
+          name: adName,
+          object_story_spec: { page_id: pageId },
+        };
+
+        if (videoId) {
+          (creativePayload.object_story_spec as Record<string, unknown>).video_data = {
+            video_id: videoId,
+            message: primaryTexts[0] || "",
+            title: headlines[0] || "",
+            call_to_action: {
+              type: ctaType,
+              value: { link: landingPage },
+            },
+          };
+        } else if (imageHash) {
+          (creativePayload.object_story_spec as Record<string, unknown>).link_data = {
+            link: landingPage,
+            message: primaryTexts[0] || "",
+            name: headlines[0] || "",
+            description: descriptions[0] || "",
+            image_hash: imageHash,
+            call_to_action: { type: ctaType },
+          };
+        }
+
+        // If multiple headlines/texts, use asset_feed_spec
+        if (headlines.length > 1 || primaryTexts.length > 1) {
+          creativePayload.asset_feed_spec = {
+            ...(headlines.length > 0 ? { titles: headlines.map((t) => ({ text: t })) } : {}),
+            ...(primaryTexts.length > 0 ? { bodies: primaryTexts.map((t) => ({ text: t })) } : {}),
+            ...(descriptions.length > 0 ? { descriptions: descriptions.map((t) => ({ text: t })) } : {}),
+            link_urls: [{ website_url: landingPage }],
+            call_to_action_types: [ctaType],
+          };
+        }
+
+        const adCreative = await createAdCreative(creativePayload as Parameters<typeof createAdCreative>[0]);
+
+        const ad = await createAd({
+          adset_id: adset.id,
+          name: adName,
+          creative: { creative_id: adCreative.id },
+          status: "PAUSED",
+        });
+
+        createdAds.push({
+          adId: ad.id,
+          adName,
+          creativeName: creative.name,
+          landingPage,
+          creativeId: adCreative.id,
+        });
+      }
+    }
+
+    // --- Step 4: Update assignment ---
+    const allAdIds = createdAds.map((a) => a.adId);
     const [updated] = await db
       .update(schema.assignments)
       .set({
-        metaAdId: ad.id,
-        metaAdsetId: adsetIdResult,
-        metaCampaignId: campaignIdResult,
+        metaAdId: allAdIds[0], // primary ad ID
+        metaAdsetId: adset.id,
+        metaCampaignId: campaignId,
         status: "posted",
         completedAt: new Date(),
         updatedAt: new Date(),
@@ -152,11 +240,12 @@ export async function POST(
       success: true,
       assignment: updated,
       meta: {
-        campaignId: campaignIdResult,
-        adsetId: adsetIdResult,
-        adId: ad.id,
-        creativeId: adCreative.id,
-        adName,
+        campaignId,
+        adsetId: adset.id,
+        adsetName,
+        totalAds: createdAds.length,
+        formula: `${config.creatives.length} creatives × ${config.landingPages.length} landing pages = ${createdAds.length} ads`,
+        ads: createdAds,
       },
     });
   } catch (error) {

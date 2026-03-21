@@ -28,6 +28,7 @@ import {
 } from "@/components/assignments/assignment-card";
 import { AssignmentModal } from "@/components/assignments/assignment-modal";
 import { AssignmentDetail } from "@/components/assignments/assignment-detail";
+import { PublishDialog } from "@/components/assignments/publish-dialog";
 import { cn } from "@/lib/utils";
 
 interface AssignmentBoard {
@@ -65,11 +66,13 @@ function KanbanColumn({
   assignments,
   onCardClick,
   onStatusChange,
+  onPublish,
 }: {
   status: AssignmentStatus;
   assignments: EditorAssignment[];
   onCardClick: (a: EditorAssignment) => void;
   onStatusChange: (id: string, status: AssignmentStatus) => void;
+  onPublish?: (a: EditorAssignment) => void;
 }) {
   const config = STATUS_CONFIG[status];
   const StatusIcon = config.icon;
@@ -94,6 +97,7 @@ function KanbanColumn({
             assignment={assignment}
             onClick={() => onCardClick(assignment)}
             onStatusChange={(newStatus) => onStatusChange(assignment.id, newStatus)}
+            onPublish={status === "READY_FOR_POSTING" && onPublish ? () => onPublish(assignment) : undefined}
           />
         ))}
         {assignments.length === 0 && (
@@ -126,6 +130,7 @@ export default function AssignmentsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<EditorAssignment | null>(null);
   const [viewingAssignment, setViewingAssignment] = useState<EditorAssignment | null>(null);
+  const [publishingAssignment, setPublishingAssignment] = useState<EditorAssignment | null>(null);
 
   const fetchBoard = useCallback(async () => {
     setLoading(true);
@@ -367,6 +372,7 @@ export default function AssignmentsPage() {
               assignments={filterBySearch(board[status] || [])}
               onCardClick={handleCardClick}
               onStatusChange={handleStatusChange}
+              onPublish={(a) => setPublishingAssignment(a)}
             />
           ))}
         </div>
@@ -407,6 +413,19 @@ export default function AssignmentsPage() {
               setViewingAssignment(null);
               fetchBoard();
             });
+          }}
+        />
+      )}
+
+      {/* Publish Dialog */}
+      {publishingAssignment && (
+        <PublishDialog
+          assignment={publishingAssignment}
+          open={!!publishingAssignment}
+          onOpenChange={(open) => { if (!open) setPublishingAssignment(null); }}
+          onPublished={() => {
+            setPublishingAssignment(null);
+            fetchBoard();
           }}
         />
       )}

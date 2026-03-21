@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Video,
   Image,
+  Rocket,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -178,9 +179,10 @@ interface AssignmentCardProps {
   assignment: EditorAssignment;
   onClick: () => void;
   onStatusChange: (status: AssignmentStatus) => void;
+  onPublish?: () => void;
 }
 
-export function AssignmentCard({ assignment, onClick, onStatusChange }: AssignmentCardProps) {
+export function AssignmentCard({ assignment, onClick, onStatusChange, onPublish }: AssignmentCardProps) {
   const priority = PRIORITY_CONFIG[assignment.priority];
   const FormatIcon = getFormatIcon(assignment.format?.name);
   const overdue =
@@ -215,6 +217,15 @@ export function AssignmentCard({ assignment, onClick, onStatusChange }: Assignme
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-[#111827] border-white/10" onClick={(e) => e.stopPropagation()}>
+            {assignment.status === "READY_FOR_POSTING" && onPublish && (
+              <DropdownMenuItem
+                onClick={onPublish}
+                className="text-emerald-400 focus:text-emerald-400"
+              >
+                <Rocket className="h-4 w-4 mr-2" />
+                Publish to Meta
+              </DropdownMenuItem>
+            )}
             {(Object.keys(STATUS_CONFIG) as AssignmentStatus[]).map((status) => {
               const config = STATUS_CONFIG[status];
               const Icon = config.icon;
