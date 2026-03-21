@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
 
   const appId = process.env.META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
-  const baseUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  const rawBase = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  const baseUrl = rawBase.replace(/\/+$/, "");
   const redirectUri = `${baseUrl}/api/meta/callback`;
 
   try {
