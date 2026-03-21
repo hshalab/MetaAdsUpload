@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { getAdSets, createAdSet, updateAdSet } from "@/lib/meta/adsets";
 
 export async function GET(request: NextRequest) {
   try {
+    // H8: Auth + admin check
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const campaignId = request.nextUrl.searchParams.get("campaign_id") || undefined;
     const adsets = await getAdSets(campaignId);
     return NextResponse.json({ data: adsets });
@@ -16,6 +22,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const body = await request.json();
     const result = await createAdSet(body);
     return NextResponse.json(result);
@@ -29,6 +39,10 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const body = await request.json();
     const { id, ...params } = body;
     if (!id) return NextResponse.json({ error: "Missing ad set ID" }, { status: 400 });

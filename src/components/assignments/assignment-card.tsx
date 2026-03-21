@@ -1,0 +1,308 @@
+"use client";
+
+import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Calendar,
+  Clock,
+  MoreVertical,
+  Play,
+  Eye,
+  AlertTriangle,
+  CheckCircle2,
+  Target,
+  MessageSquare,
+  Video,
+  Image,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+// --- Shared types ---
+export type AssignmentStatus =
+  | "READY_FOR_EDITING"
+  | "EDITING_NOW"
+  | "READY_FOR_REVIEW"
+  | "REVISION"
+  | "READY_FOR_POSTING"
+  | "POSTED";
+
+export type AssignmentPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+
+export interface ScriptHook {
+  id: string;
+  label: string;
+  eng: string;
+  se: string;
+}
+
+export interface ScriptContent {
+  hooks: ScriptHook[];
+  body: { eng: string; se: string };
+}
+
+export interface EditorAssignment {
+  id: string;
+  title: string;
+  description: string | null;
+  batchNumber: number;
+  version: number;
+  formatId: string | null;
+  format: { id: string; name: string } | null;
+  angleId: string | null;
+  angle: { id: string; name: string } | null;
+  productId: string | null;
+  product: { id: string; name: string; code: string } | null;
+  countryId: string | null;
+  country: { id: string; name: string; code: string } | null;
+  offerTypeId: string | null;
+  offerType: { id: string; name: string } | null;
+  customerAvatars: string[];
+  landingPage: string | null;
+  assignedToId: string;
+  assignedTo: { id: string; name: string; email: string };
+  assignedById: string;
+  assignedBy: { id: string; name: string; email: string };
+  creativeStrategistId: string | null;
+  creativeStrategist: { id: string; name: string; email: string } | null;
+  status: AssignmentStatus;
+  priority: AssignmentPriority;
+  dueDate: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  estimatedMinutes: number | null;
+  videoLengthSeconds: number | null;
+  googleDriveLink: string | null;
+  scriptContent: ScriptContent | null;
+  autoName: string | null;
+  revisionFeedback: string | null;
+  totalTrackedSeconds: number;
+  createdAt: string;
+  updatedAt: string;
+  timeEntries?: Array<{
+    id: string;
+    startTime: string;
+    endTime: string | null;
+    duration: number | null;
+    taskType: string;
+  }>;
+}
+
+export const STATUS_CONFIG: Record<
+  AssignmentStatus,
+  { label: string; color: string; bgClass: string; icon: React.ElementType }
+> = {
+  READY_FOR_EDITING: {
+    label: "Ready for Editing",
+    color: "text-blue-400",
+    bgClass: "bg-blue-500/10 border-blue-500/30",
+    icon: Play,
+  },
+  EDITING_NOW: {
+    label: "Editing Now",
+    color: "text-yellow-400",
+    bgClass: "bg-yellow-500/10 border-yellow-500/30",
+    icon: Clock,
+  },
+  READY_FOR_REVIEW: {
+    label: "Ready for Review",
+    color: "text-purple-400",
+    bgClass: "bg-purple-500/10 border-purple-500/30",
+    icon: Eye,
+  },
+  REVISION: {
+    label: "Revision",
+    color: "text-red-400",
+    bgClass: "bg-red-500/10 border-red-500/30",
+    icon: AlertTriangle,
+  },
+  READY_FOR_POSTING: {
+    label: "Ready for Posting",
+    color: "text-green-400",
+    bgClass: "bg-green-500/10 border-green-500/30",
+    icon: CheckCircle2,
+  },
+  POSTED: {
+    label: "Posted",
+    color: "text-gray-400",
+    bgClass: "bg-gray-500/10 border-gray-500/30",
+    icon: CheckCircle2,
+  },
+};
+
+export const PRIORITY_CONFIG: Record<
+  AssignmentPriority,
+  { label: string; color: string; bgClass: string }
+> = {
+  URGENT: { label: "Urgent", color: "text-red-400", bgClass: "bg-red-500/20 border-red-500/30" },
+  HIGH: { label: "High", color: "text-orange-400", bgClass: "bg-orange-500/20 border-orange-500/30" },
+  MEDIUM: { label: "Medium", color: "text-blue-400", bgClass: "bg-blue-500/20 border-blue-500/30" },
+  LOW: { label: "Low", color: "text-gray-400", bgClass: "bg-gray-500/20 border-gray-500/30" },
+};
+
+const COUNTRY_FLAGS: Record<string, string> = {
+  SE: "\u{1F1F8}\u{1F1EA}",
+  NO: "\u{1F1F3}\u{1F1F4}",
+  DK: "\u{1F1E9}\u{1F1F0}",
+  FI: "\u{1F1EB}\u{1F1EE}",
+  DE: "\u{1F1E9}\u{1F1EA}",
+  UK: "\u{1F1EC}\u{1F1E7}",
+  US: "\u{1F1FA}\u{1F1F8}",
+};
+
+export function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function isOverdue(dueDate: string | null): boolean {
+  if (!dueDate) return false;
+  return new Date(dueDate) < new Date();
+}
+
+function getFormatIcon(formatName: string | undefined) {
+  if (!formatName) return Video;
+  const name = formatName.toUpperCase();
+  if (name.includes("STATIC")) return Image;
+  return Video;
+}
+
+interface AssignmentCardProps {
+  assignment: EditorAssignment;
+  onClick: () => void;
+  onStatusChange: (status: AssignmentStatus) => void;
+}
+
+export function AssignmentCard({ assignment, onClick, onStatusChange }: AssignmentCardProps) {
+  const priority = PRIORITY_CONFIG[assignment.priority];
+  const FormatIcon = getFormatIcon(assignment.format?.name);
+  const overdue =
+    isOverdue(assignment.dueDate) &&
+    !["POSTED", "READY_FOR_POSTING"].includes(assignment.status);
+  const countryCode = assignment.country?.code;
+  const countryFlag = countryCode ? COUNTRY_FLAGS[countryCode] || "" : "";
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group",
+        overdue && "border-red-500/50 bg-red-500/5"
+      )}
+      onClick={onClick}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {countryFlag && <span className="text-base flex-shrink-0">{countryFlag}</span>}
+          <h4 className="font-semibold text-sm text-foreground truncate">
+            {assignment.autoName || assignment.title}
+          </h4>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreVertical className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            {(Object.keys(STATUS_CONFIG) as AssignmentStatus[]).map((status) => {
+              const config = STATUS_CONFIG[status];
+              const Icon = config.icon;
+              return (
+                <DropdownMenuItem
+                  key={status}
+                  onClick={() => onStatusChange(status)}
+                  className={cn(assignment.status === status && "bg-accent")}
+                >
+                  <Icon className={cn("h-4 w-4 mr-2", config.color)} />
+                  {config.label}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Format & Product */}
+      <div className="flex items-center gap-2 mb-2 text-xs">
+        {assignment.format && (
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <FormatIcon className="h-3 w-3" />
+            {assignment.format.name}
+          </span>
+        )}
+        {assignment.product && (
+          <>
+            {assignment.format && <span className="text-muted-foreground/40">|</span>}
+            <span className="text-muted-foreground">{assignment.product.name}</span>
+          </>
+        )}
+      </div>
+
+      {/* Angle */}
+      {assignment.angle && (
+        <div className="flex items-center gap-1 mb-2 text-xs text-muted-foreground">
+          <Target className="h-3 w-3" />
+          {assignment.angle.name}
+        </div>
+      )}
+
+      {/* Assigned To */}
+      <div className="flex items-center gap-2 mb-2">
+        <div className="h-5 w-5 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-[10px] font-medium flex-shrink-0">
+          {assignment.assignedTo.name.charAt(0)}
+        </div>
+        <span className="text-xs text-muted-foreground truncate">{assignment.assignedTo.name}</span>
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between pt-2 border-t border-border">
+        {assignment.dueDate ? (
+          <span
+            className={cn(
+              "flex items-center gap-1 text-xs",
+              overdue ? "text-red-400 font-medium" : "text-muted-foreground"
+            )}
+          >
+            <Calendar className="h-3 w-3" />
+            {new Date(assignment.dueDate).toLocaleDateString("sv-SE")}
+          </span>
+        ) : (
+          <span />
+        )}
+        <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", priority.bgClass, priority.color)}>
+          {priority.label}
+        </Badge>
+      </div>
+
+      {/* Tracked Time */}
+      {assignment.totalTrackedSeconds > 0 && (
+        <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          {formatDuration(assignment.totalTrackedSeconds)} tracked
+        </div>
+      )}
+
+      {/* Revision Feedback Indicator */}
+      {assignment.status === "REVISION" && assignment.revisionFeedback && (
+        <div className="mt-1.5 flex items-center gap-1 text-xs text-red-400">
+          <MessageSquare className="h-3 w-3" />
+          Has feedback
+        </div>
+      )}
+    </div>
+  );
+}

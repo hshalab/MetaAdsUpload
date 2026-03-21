@@ -1,4 +1,133 @@
-import { pgTable, text, integer, real, boolean, timestamp, jsonb, serial, varchar, date } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, boolean, timestamp, jsonb, serial, varchar, date, index } from "drizzle-orm/pg-core";
+
+// ─── Users & Auth ────────────────────────────────────────────────────────────
+
+export const users = pgTable("users", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(), // bcrypt hash
+  name: text("name").notNull(),
+  role: text("role").notNull().default("editor"), // "admin" | "editor"
+  isActive: boolean("is_active").default(true).notNull(),
+  hourlyRate: real("hourly_rate"),
+  timezone: text("timezone").default("Europe/Stockholm"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Dynamic Option Tables ───────────────────────────────────────────────────
+
+export const angles = pgTable("angles", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const products = pgTable("products", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  code: text("code").notNull().unique(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const formats = pgTable("formats", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const countries = pgTable("countries", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  code: text("code").notNull().unique(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const offerTypes = pgTable("offer_types", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const customerAvatars = pgTable("customer_avatars", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  code: text("code").notNull().unique(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ─── Assignments ─────────────────────────────────────────────────────────────
+
+export const assignments = pgTable("assignments", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  description: text("description"),
+  batchNumber: integer("batch_number").notNull(),
+  version: integer("version").default(1).notNull(),
+  formatId: text("format_id"),
+  angleId: text("angle_id"),
+  productId: text("product_id"),
+  countryId: text("country_id"),
+  offerTypeId: text("offer_type_id"),
+  customerAvatarIds: jsonb("customer_avatar_ids").$type<string[]>().default([]),
+  landingPage: text("landing_page"),
+  assignedToId: text("assigned_to_id").notNull(),
+  assignedById: text("assigned_by_id").notNull(),
+  creativeStrategistId: text("creative_strategist_id"),
+  status: text("status").notNull().default("ready_for_editing"),
+  // Statuses: ready_for_editing, editing_now, ready_for_review, revision, ready_for_posting, posted
+  priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
+  dueDate: timestamp("due_date"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  estimatedMinutes: integer("estimated_minutes"),
+  videoLengthSeconds: integer("video_length_seconds"),
+  scriptContent: jsonb("script_content").$type<{ hooks: Array<{ id: string; label: string; eng: string; se: string }>; body: { eng: string; se: string } }>(),
+  autoName: text("auto_name"),
+  revisionFeedback: text("revision_feedback"),
+  deliverableUrl: text("deliverable_url"),
+  deliverableR2Key: text("deliverable_r2_key"),
+  metaAdId: text("meta_ad_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("assignments_assigned_to_id_idx").on(table.assignedToId),
+  index("assignments_status_idx").on(table.status),
+]);
+
+// ─── Time Entries ────────────────────────────────────────────────────────────
+
+export const timeEntries = pgTable("time_entries", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull(),
+  assignmentId: text("assignment_id"),
+  taskType: text("task_type").notNull(), // new_video, revision, sourcing, static_ad, other
+  taskName: text("task_name").notNull(),
+  notes: text("notes"),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time"),
+  durationSeconds: integer("duration_seconds"),
+  videoOutputSeconds: integer("video_output_seconds"),
+  status: text("status").notNull().default("in_progress"), // in_progress, completed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("time_entries_user_id_idx").on(table.userId),
+  index("time_entries_assignment_id_idx").on(table.assignmentId),
+  index("time_entries_status_idx").on(table.status),
+]);
 
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
@@ -106,7 +235,9 @@ export const insights = pgTable("insights", {
   breakdownKey: text("breakdown_key"), // e.g., "age:25-34" or "placement:feed"
   breakdownValue: text("breakdown_value"),
   syncedAt: timestamp("synced_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("insights_entity_date_idx").on(table.entityId, table.entityType, table.dateStart),
+]);
 
 export const automationRules = pgTable("automation_rules", {
   id: serial("id").primaryKey(),

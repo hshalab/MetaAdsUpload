@@ -3,6 +3,9 @@ import { metaApi, getAdAccountId } from "./client";
 export interface InsightData {
   date_start: string;
   date_stop: string;
+  campaign_id?: string;
+  adset_id?: string;
+  ad_id?: string;
   spend?: string;
   impressions?: string;
   reach?: string;
@@ -31,9 +34,8 @@ export async function getInsights(params: {
   limit?: number;
 }) {
   const { entityId, level = "campaign", dateRange, breakdowns, limit = 500 } = params;
-  const endpoint = entityId
-    ? `/${entityId}/insights`
-    : `/${getAdAccountId()}/insights`;
+  const adAccountId = entityId || await getAdAccountId();
+  const endpoint = `/${adAccountId}/insights`;
 
   const queryParams: Record<string, string | number | boolean> = {
     fields: INSIGHT_FIELDS,

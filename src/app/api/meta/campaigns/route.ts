@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { getCampaigns, createCampaign, updateCampaign } from "@/lib/meta/campaigns";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 
 export async function GET() {
   try {
+    // H8: Auth + admin check
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const campaigns = await getCampaigns();
 
     // Update cache
@@ -49,6 +55,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const body = await request.json();
     const result = await createCampaign(body);
     return NextResponse.json(result);
@@ -62,6 +72,10 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const body = await request.json();
     const { id, ...params } = body;
     if (!id) return NextResponse.json({ error: "Missing campaign ID" }, { status: 400 });

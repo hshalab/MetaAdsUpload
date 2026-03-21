@@ -12,6 +12,11 @@ import {
   Zap,
   Settings,
   LogOut,
+  Users,
+  LayoutGrid,
+  ClipboardList,
+  Timer,
+  SlidersHorizontal,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +29,11 @@ const navItems = [
   { href: "/templates", label: "Templates", icon: FileText },
   { href: "/creatives", label: "Creatives", icon: Image },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/assignments", label: "Assignments", icon: LayoutGrid },
+  { href: "/my-work", label: "My Work", icon: ClipboardList },
+  { href: "/timer", label: "Timer", icon: Timer },
+  { href: "/options", label: "Options", icon: SlidersHorizontal },
+  { href: "/editors", label: "Editors", icon: Users },
   { href: "/rules", label: "Rules", icon: Zap },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

@@ -1,8 +1,25 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
+import type { Session } from "next-auth";
+
+declare module "next-auth" {
+  interface User {
+    role?: string;
+  }
+}
+
+declare module "@auth/core/jwt" {
+  interface JWT {
+    role?: string;
+  }
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  trustHost: true,
+  trustHost: !!process.env.NEXTAUTH_URL,
   providers: [
     Credentials({
       name: "credentials",
@@ -16,12 +33,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!email || !password) return null;
 
-        const validEmail = process.env.AUTH_EMAIL || "admin@apotekhunden.se";
-        const validPassword = process.env.AUTH_PASSWORD || "admin123";
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(and(eq(users.email, email), eq(users.isActive, true)))
+          .limit(1);
 
-        if (email !== validEmail || password !== validPassword) return null;
+        if (!user) return null;
 
-        return { id: "1", email, name: "Admin" };
+        const isValid = await bcrypt.compare(password, user.password);
+        if (!isValid) return null;
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        };
       },
     }),
   ],
@@ -32,12 +60,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: "jwt",
   },
   callbacks: {
+    jwt({ token, user }) {
+      if (user) {
+        token.role = user.role;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.sub as string;
+        (session.user as unknown as Record<string, unknown>).role = token.role;
+
+        // M8: Verify user is still active in DB
+        const [dbUser] = await db
+          .select({ isActive: users.isActive })
+          .from(users)
+          .where(and(eq(users.id, token.sub as string), eq(users.isActive, true)))
+          .limit(1);
+
+        if (!dbUser) {
+          // Return empty session for deactivated/deleted users
+          return { expires: session.expires } as Session;
+        }
+      }
+      return session;
+    },
     authorized({ auth: session, request }) {
       const isLoggedIn = !!session?.user;
       const isOnLogin = request.nextUrl.pathname.startsWith("/login");
       const isAuthApi = request.nextUrl.pathname.startsWith("/api/auth");
+      const isSeedApi = request.nextUrl.pathname.startsWith("/api/seed");
+      const isCronApi = request.nextUrl.pathname.startsWith("/api/cron");
 
       if (isAuthApi) return true;
+      if (isSeedApi) {
+        // Seed route handles its own secret-based auth
+        return true;
+      }
+      if (isCronApi) {
+        // Cron routes handle their own Bearer token auth
+        return true;
+      }
       if (isOnLogin) return true;
       if (isLoggedIn) return true;
 

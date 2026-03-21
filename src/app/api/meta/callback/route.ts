@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { db, schema } from "@/db";
 
 export async function GET(request: NextRequest) {
+  // C4: Auth + admin role check
+  const session = await auth();
+  if (!session?.user) return NextResponse.redirect(new URL("/login", request.url));
+  if ((session.user as any).role !== "admin") return NextResponse.redirect(new URL("/settings?error=forbidden", request.url));
+
   const code = request.nextUrl.searchParams.get("code");
   const error = request.nextUrl.searchParams.get("error");
 
