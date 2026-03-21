@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, and, gte, lte, sql, isNotNull } from "drizzle-orm";
 
 interface BonusTier {
   minSpend: number;
@@ -25,15 +25,14 @@ function calculateBonus(spend: number, roas: number): { bonus: number; tier: str
   return { bonus: 0, tier: null };
 }
 
-/** Parse editor name from ad name. Convention: "SE EditorName ..." */
+/** Fallback: Parse editor name from ad name. Convention: "SE EditorName ..." */
 function parseEditor(adName: string): string | null {
-  const match = adName.match(/^SE\s+(\S+)/i);
+  const match = adName.match(/^[A-Z]{2}\s+(\S+)/i);
   return match ? match[1] : null;
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // C2: Auth check
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -41,7 +40,27 @@ export async function GET(request: NextRequest) {
     const from = searchParams.get("from") || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
     const to = searchParams.get("to") || new Date().toISOString().split("T")[0];
 
-    // Get ad-level insights with ad metadata
+    // Get all editors
+    const allEditors = await db.select().from(schema.users).where(eq(schema.users.role, "editor"));
+    const editorMap = new Map(allEditors.map((e) => [e.id, e]));
+
+    // Get published assignments (those with metaAdId)
+    const publishedAssignments = await db
+      .select()
+      .from(schema.assignments)
+      .where(isNotNull(schema.assignments.metaAdId));
+
+    // Build a map: metaAdId -> editorId (assignedToId)
+    const adToEditorMap = new Map<string, string>();
+    const adToAssignmentMap = new Map<string, typeof publishedAssignments[0]>();
+    for (const a of publishedAssignments) {
+      if (a.metaAdId) {
+        adToEditorMap.set(a.metaAdId, a.assignedToId);
+        adToAssignmentMap.set(a.metaAdId, a);
+      }
+    }
+
+    // Get ad-level insights
     const adInsights = await db
       .select({
         entityId: schema.insights.entityId,
@@ -65,14 +84,16 @@ export async function GET(request: NextRequest) {
 
     // Get ad metadata for names
     const adsData = await db.select().from(schema.adsCache);
-    const adMap = new Map(adsData.map((a) => [a.id, a]));
+    const adCacheMap = new Map(adsData.map((a) => [a.id, a]));
 
     // Group by editor
-    const editorMap = new Map<string, {
-      editor: string;
+    const editorDataMap = new Map<string, {
+      editorId: string;
+      editorName: string;
       ads: Array<{
         id: string;
         name: string;
+        assignmentId: string | null;
         spend: number;
         impressions: number;
         linkClicks: number;
@@ -92,10 +113,28 @@ export async function GET(request: NextRequest) {
     }>();
 
     for (const row of adInsights) {
-      const ad = adMap.get(row.entityId);
-      const adName = ad?.name || row.entityId;
-      const editor = parseEditor(adName);
-      if (!editor) continue;
+      const adCache = adCacheMap.get(row.entityId);
+      const adName = adCache?.name || row.entityId;
+
+      // Primary: look up editor via assignment linkage
+      let editorId = adToEditorMap.get(row.entityId);
+      let editorName: string | null = null;
+      let assignmentId: string | null = null;
+
+      if (editorId) {
+        const editor = editorMap.get(editorId);
+        editorName = editor?.name?.split(" ")[0] || "Unknown";
+        assignmentId = adToAssignmentMap.get(row.entityId)?.id || null;
+      } else {
+        // Fallback: parse from ad name convention
+        editorName = parseEditor(adName);
+        if (!editorName) continue;
+        // Try to find matching editor in DB
+        const matchingEditor = allEditors.find((e) =>
+          e.name.toLowerCase().startsWith(editorName!.toLowerCase())
+        );
+        editorId = matchingEditor?.id || `name:${editorName}`;
+      }
 
       const spend = row.spend || 0;
       const impressions = row.impressions || 0;
@@ -108,9 +147,10 @@ export async function GET(request: NextRequest) {
       const hookRate = impressions > 0 ? (videoViews3s / impressions) * 100 : 0;
       const { bonus, tier: bonusTier } = calculateBonus(spend, roas);
 
-      if (!editorMap.has(editor)) {
-        editorMap.set(editor, {
-          editor,
+      if (!editorDataMap.has(editorId)) {
+        editorDataMap.set(editorId, {
+          editorId,
+          editorName: editorName!,
           ads: [],
           totalSpend: 0,
           totalImpressions: 0,
@@ -120,10 +160,11 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      const entry = editorMap.get(editor)!;
+      const entry = editorDataMap.get(editorId)!;
       entry.ads.push({
         id: row.entityId,
         name: adName,
+        assignmentId,
         spend,
         impressions,
         linkClicks,
@@ -142,17 +183,41 @@ export async function GET(request: NextRequest) {
       entry.totalPurchaseValue += purchaseValue;
     }
 
+    // Get existing payouts for this period
+    const existingPayouts = await db
+      .select()
+      .from(schema.editorPayouts)
+      .where(
+        and(
+          gte(schema.editorPayouts.periodFrom, from),
+          lte(schema.editorPayouts.periodTo, to)
+        )
+      );
+
+    const payoutsByEditor = new Map<string, typeof existingPayouts>();
+    for (const p of existingPayouts) {
+      if (!payoutsByEditor.has(p.editorId)) payoutsByEditor.set(p.editorId, []);
+      payoutsByEditor.get(p.editorId)!.push(p);
+    }
+
     // Build response
-    const editors = Array.from(editorMap.values()).map((e) => {
+    const editors = Array.from(editorDataMap.values()).map((e) => {
       const roas = e.totalSpend > 0 ? e.totalPurchaseValue / e.totalSpend : 0;
       const ctr = e.totalImpressions > 0 ? (e.totalLinkClicks / e.totalImpressions) * 100 : 0;
       const totalBonus = e.ads.reduce((sum, a) => sum + a.bonus, 0);
-
-      // Sort ads by spend descending
       e.ads.sort((a, b) => b.spend - a.spend);
 
+      const payouts = payoutsByEditor.get(e.editorId) || [];
+      const paidAmount = payouts
+        .filter((p) => p.status === "paid")
+        .reduce((sum, p) => sum + p.amount, 0);
+      const pendingAmount = payouts
+        .filter((p) => p.status === "pending")
+        .reduce((sum, p) => sum + p.amount, 0);
+
       return {
-        editor: e.editor,
+        editorId: e.editorId,
+        editor: e.editorName,
         totalSpend: e.totalSpend,
         totalPurchaseValue: e.totalPurchaseValue,
         totalPurchases: e.totalPurchases,
@@ -160,12 +225,15 @@ export async function GET(request: NextRequest) {
         roas,
         ctr,
         totalBonus,
+        paidAmount,
+        pendingAmount,
+        unpaidAmount: totalBonus - paidAmount - pendingAmount,
         adCount: e.ads.length,
         ads: e.ads,
+        payouts,
       };
     });
 
-    // Sort editors by total spend descending
     editors.sort((a, b) => b.totalSpend - a.totalSpend);
 
     return NextResponse.json({

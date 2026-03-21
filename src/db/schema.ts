@@ -101,6 +101,8 @@ export const assignments = pgTable("assignments", {
   deliverableUrl: text("deliverable_url"),
   deliverableR2Key: text("deliverable_r2_key"),
   metaAdId: text("meta_ad_id"),
+  metaAdsetId: text("meta_adset_id"),
+  metaCampaignId: text("meta_campaign_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -276,6 +278,28 @@ export const uploadJobs = pgTable("upload_jobs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 });
+
+// ─── Editor Payouts ─────────────────────────────────────────────────────────
+
+export const editorPayouts = pgTable("editor_payouts", {
+  id: serial("id").primaryKey(),
+  editorId: text("editor_id").notNull(), // FK to users
+  amount: real("amount").notNull(),
+  currency: text("currency").default("USD").notNull(),
+  periodFrom: date("period_from").notNull(),
+  periodTo: date("period_to").notNull(),
+  adIds: jsonb("ad_ids").$type<string[]>().default([]), // which Meta ad IDs earned the bonus
+  assignmentIds: jsonb("assignment_ids").$type<string[]>().default([]), // which assignments
+  breakdown: jsonb("breakdown").$type<Array<{ adId: string; adName: string; spend: number; roas: number; bonus: number }>>().default([]),
+  status: text("status").notNull().default("pending"), // "pending" | "paid"
+  notes: text("notes"),
+  paidAt: timestamp("paid_at"),
+  paidById: text("paid_by_id"), // admin who marked as paid
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("editor_payouts_editor_id_idx").on(table.editorId),
+  index("editor_payouts_status_idx").on(table.status),
+]);
 
 export const metaConnections = pgTable("meta_connections", {
   id: serial("id").primaryKey(),
