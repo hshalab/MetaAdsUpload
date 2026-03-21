@@ -42,15 +42,18 @@ export async function metaApi<T = unknown>(
   const token = options.token || await getAccessToken();
 
   const url = new URL(`${META_BASE_URL}${endpoint}`);
-  url.searchParams.set("access_token", token);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
 
-  const fetchOptions: RequestInit = { method };
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  const fetchOptions: RequestInit = { method, headers };
   if (body) {
     if (body instanceof FormData) {
       fetchOptions.body = body;
     } else {
-      fetchOptions.headers = { "Content-Type": "application/json" };
+      headers["Content-Type"] = "application/json";
       fetchOptions.body = JSON.stringify(body);
     }
   }

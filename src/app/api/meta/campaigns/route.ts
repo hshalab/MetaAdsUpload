@@ -9,7 +9,7 @@ export async function GET() {
     // H8: Auth + admin check
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const campaigns = await getCampaigns();
 
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
     const result = await createCampaign(body);
@@ -74,7 +74,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
     const { id, ...params } = body;

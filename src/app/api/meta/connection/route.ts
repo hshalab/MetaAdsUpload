@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
+import { guardAdmin } from "@/lib/auth-helpers";
 
 export async function GET() {
+  const { error } = await guardAdmin();
+  if (error) return error;
+
   try {
     const connections = await db.select().from(schema.metaConnections).orderBy(schema.metaConnections.createdAt);
     const active = connections.find((c) => c.isActive);
@@ -28,12 +32,15 @@ export async function GET() {
         pixelId: active.pixelId,
       } : null,
     });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
   }
 }
 
 export async function PATCH(request: NextRequest) {
+  const { error } = await guardAdmin();
+  if (error) return error;
+
   try {
     const body = await request.json();
     const { id, activeAdAccountId, activePageId, pixelId, isActive } = body;
@@ -45,7 +52,6 @@ export async function PATCH(request: NextRequest) {
     if (activePageId !== undefined) updates.activePageId = activePageId;
     if (pixelId !== undefined) updates.pixelId = pixelId;
     if (isActive !== undefined) {
-      // If activating this one, deactivate others
       if (isActive) {
         await db.update(schema.metaConnections).set({ isActive: false });
       }
@@ -54,17 +60,20 @@ export async function PATCH(request: NextRequest) {
 
     await db.update(schema.metaConnections).set(updates).where(eq(schema.metaConnections.id, id));
     return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const { error } = await guardAdmin();
+  if (error) return error;
+
   try {
     const { id } = await request.json();
     await db.delete(schema.metaConnections).where(eq(schema.metaConnections.id, id));
     return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed" }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
   }
 }

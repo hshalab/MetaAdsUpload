@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
     const formatId = searchParams.get("formatId");
     const productId = searchParams.get("productId");
 
-    const userId = (session.user as any).id;
-    const userRole = (session.user as any).role;
+    const userId = session.user.id;
+    const userRole = session.user.role;
 
     const conditions = [];
 
@@ -119,9 +119,9 @@ export async function POST(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const userId = (session.user as any).id;
+    const userId = session.user.id;
     const body = await request.json();
     const {
       batchNumber,

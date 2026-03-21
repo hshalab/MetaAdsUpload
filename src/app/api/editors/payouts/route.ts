@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
     const { editorId, amount, currency, periodFrom, periodTo, adIds, assignmentIds, breakdown, notes } = body;
@@ -87,7 +87,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
     const { id, status, notes } = body;
@@ -98,7 +98,7 @@ export async function PATCH(request: NextRequest) {
     if (status === "paid") {
       updateData.status = "paid";
       updateData.paidAt = new Date();
-      updateData.paidById = (session.user as any).id;
+      updateData.paidById = session.user.id;
     } else if (status === "pending") {
       updateData.status = "pending";
       updateData.paidAt = null;
@@ -124,7 +124,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
     const { id } = body;

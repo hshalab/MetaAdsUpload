@@ -12,7 +12,7 @@ export async function POST(
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await params;
-    const userId = (session.user as any).id;
+    const userId = session.user.id;
 
     const [assignment] = await db.select().from(schema.assignments).where(eq(schema.assignments.id, id));
 

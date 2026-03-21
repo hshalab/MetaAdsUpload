@@ -1,4 +1,6 @@
+import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import type { Session } from "next-auth";
 
 export async function getSession() {
   return await auth();
@@ -17,9 +19,23 @@ export async function requireAdmin() {
   if (!session?.user) {
     throw new Error("Unauthorized");
   }
-  const role = (session.user as unknown as Record<string, unknown>).role;
-  if (role !== "admin") {
+  if (session.user.role !== "admin") {
     throw new Error("Forbidden: admin access required");
   }
   return session;
+}
+
+/**
+ * Guard helper for API routes — returns a NextResponse error if auth fails,
+ * or null if the session is valid. Avoids try/catch boilerplate.
+ */
+export async function guardAdmin(): Promise<{ session: Session; error: null } | { session: null; error: NextResponse }> {
+  const session = await auth() as Session | null;
+  if (!session?.user) {
+    return { session: null, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  if (session.user.role !== "admin") {
+    return { session: null, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+  return { session, error: null };
 }

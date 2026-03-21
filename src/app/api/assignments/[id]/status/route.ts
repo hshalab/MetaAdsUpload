@@ -12,8 +12,8 @@ export async function PATCH(
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await params;
-    const userId = (session.user as any).id;
-    const userRole = (session.user as any).role;
+    const userId = session.user.id;
+    const userRole = session.user.role;
     const body = await request.json();
     const { status, revisionFeedback } = body;
 

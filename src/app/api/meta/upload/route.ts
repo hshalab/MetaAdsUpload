@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     // C3: Auth + admin role check
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
     const {

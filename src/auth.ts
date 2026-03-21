@@ -10,6 +10,15 @@ declare module "next-auth" {
   interface User {
     role?: string;
   }
+  interface Session {
+    user: {
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+      image?: string | null;
+    };
+  }
 }
 
 declare module "@auth/core/jwt" {
@@ -74,7 +83,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub as string;
-        (session.user as unknown as Record<string, unknown>).role = token.role;
+        session.user.role = token.role as string;
 
         try {
           // M8: Verify user is still active in DB
@@ -85,7 +94,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .limit(1);
 
           if (!dbUser) {
-            return { expires: session.expires } as Session;
+            return { expires: session.expires } as unknown as Session;
           }
         } catch (error) {
           console.error("Session DB check error:", error);

@@ -13,7 +13,7 @@ export async function POST(
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await params;
-    const userId = (session.user as any).id;
+    const userId = session.user.id;
     const body = await request.json();
     const { videoLengthSeconds, deliverableUrl } = body;
 

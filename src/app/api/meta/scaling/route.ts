@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const searchParams = request.nextUrl.searchParams;
     const statusFilter = searchParams.get("status") || "ACTIVE"; // ACTIVE, PAUSED, or ALL
@@ -185,7 +185,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((session.user as any).role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
     const { actions } = body as {

@@ -8,8 +8,8 @@ export async function GET(request: NextRequest) {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const userId = (session.user as any).id;
-    const userRole = (session.user as any).role;
+    const userId = session.user.id;
+    const userRole = session.user.role;
     const { searchParams } = request.nextUrl;
     const assignmentId = searchParams.get("assignmentId");
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const userId = (session.user as any).id;
+    const userId = session.user.id;
     const body = await request.json();
     const { assignmentId, taskType, taskName, notes, startTime, endTime, durationSeconds, videoOutputSeconds } = body;
 

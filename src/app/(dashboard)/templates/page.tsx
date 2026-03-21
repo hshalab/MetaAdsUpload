@@ -117,7 +117,7 @@ export default function TemplatesPage() {
       isDefault: t.isDefault,
       objective: t.objective,
       budgetType: t.budgetType,
-      dailyBudget: t.dailyBudget || 50,
+      dailyBudget: t.dailyBudget ?? 50,
       headlines: t.headlines.length > 0 ? t.headlines : [""],
       primaryTexts: t.primaryTexts.length > 0 ? t.primaryTexts : [""],
       descriptions: t.descriptions.length > 0 ? t.descriptions : [""],
