@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { eq, and, sql, desc, asc } from "drizzle-orm";
+import { eq, and, sql, desc, asc, inArray } from "drizzle-orm";
 import { generateAutoName } from "@/lib/auto-name";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(schema.timeEntries.status, "completed"),
-            sql`${schema.timeEntries.assignmentId} = ANY(${assignmentIds})`
+            inArray(schema.timeEntries.assignmentId, assignmentIds)
           )
         )
         .groupBy(schema.timeEntries.assignmentId);

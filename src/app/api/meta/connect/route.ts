@@ -12,7 +12,8 @@ export async function GET() {
     return NextResponse.json({ error: "META_APP_ID not configured" }, { status: 500 });
   }
 
-  const redirectUri = `${process.env.NEXTAUTH_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/api/meta/callback`;
+  const baseUrl = process.env.NEXTAUTH_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  const redirectUri = `${baseUrl}/api/meta/callback`;
 
   const scopes = [
     "ads_management",

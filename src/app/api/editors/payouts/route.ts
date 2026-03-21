@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 
 // GET - List payouts (optionally filtered by editorId)
 export async function GET(request: NextRequest) {
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // Enrich with editor names
     const editorIds = [...new Set(payouts.map((p) => p.editorId))];
     const editors = editorIds.length > 0
-      ? await db.select().from(schema.users)
+      ? await db.select().from(schema.users).where(inArray(schema.users.id, editorIds))
       : [];
     const editorMap = new Map(editors.map((e) => [e.id, e]));
 
