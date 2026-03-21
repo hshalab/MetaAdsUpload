@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
-import bcrypt from "bcryptjs";
+import * as bcrypt from "bcryptjs";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function GET() {

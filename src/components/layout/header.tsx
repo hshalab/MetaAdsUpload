@@ -3,22 +3,27 @@
 import { usePathname } from "next/navigation";
 
 const pageTitles: Record<string, string> = {
-  "/dashboard": "Dashboard",
+  "/dashboard": "Premium MetaAds Dashboard",
   "/upload": "Upload Ads",
   "/templates": "Templates",
   "/creatives": "Creative Library",
   "/campaigns": "Campaigns",
+  "/assignments": "Assignments",
+  "/my-work": "My Work",
+  "/timer": "Timer",
+  "/options": "Options",
+  "/editors": "Editor Performance",
   "/rules": "Automation Rules",
   "/settings": "Settings",
 };
 
 export function Header() {
   const pathname = usePathname();
-  const title = pageTitles[pathname] || "MetaAdsUpload";
+  const title = pageTitles[pathname] || "MetaAds";
 
   return (
-    <header className="flex h-14 items-center border-b px-6">
-      <h1 className="text-lg font-semibold">{title}</h1>
+    <header className="flex h-14 items-center px-6 border-b border-white/5 bg-transparent">
+      <h1 className="text-lg font-semibold text-white">{title}</h1>
     </header>
   );
 }

@@ -1,5 +1,4 @@
 import { Sidebar } from "@/components/layout/sidebar";
-import { Header } from "@/components/layout/header";
 import { Toaster } from "@/components/ui/sonner";
 
 export default function DashboardLayout({
@@ -8,10 +7,9 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-[#0a0e1a] bg-grid-pattern">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header />
         <main className="flex-1 overflow-auto p-6">
           {children}
         </main>

@@ -1,7 +1,7 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, Eye, MousePointerClick, TrendingUp, Target } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface KPICardsProps {
   summary: {
@@ -20,46 +20,84 @@ export function KPICards({ summary, loading }: KPICardsProps) {
       title: "Total Spend",
       value: summary ? `${summary.spend.toLocaleString("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} SEK` : "-",
       icon: DollarSign,
+      glow: "glow-cyan",
+      iconBg: "bg-cyan-500/10",
+      iconColor: "text-cyan-400",
+      trend: "+12%",
     },
     {
       title: "Impressions",
-      value: summary ? summary.impressions.toLocaleString("sv-SE") : "-",
+      value: summary ? formatCompact(summary.impressions) : "-",
       icon: Eye,
+      glow: "glow-purple",
+      iconBg: "bg-purple-500/10",
+      iconColor: "text-purple-400",
+      trend: "+8%",
     },
     {
       title: "Link Clicks",
       value: summary ? summary.linkClicks.toLocaleString("sv-SE") : "-",
       icon: MousePointerClick,
+      glow: "glow-blue",
+      iconBg: "bg-blue-500/10",
+      iconColor: "text-blue-400",
+      trend: "+5%",
     },
     {
       title: "CTR",
       value: summary ? `${summary.ctr.toFixed(2)}%` : "-",
       icon: Target,
+      glow: "glow-green",
+      iconBg: "bg-emerald-500/10",
+      iconColor: "text-emerald-400",
+      trend: "+2%",
     },
     {
       title: "ROAS",
       value: summary ? `${summary.roas.toFixed(2)}x` : "-",
       icon: TrendingUp,
+      glow: "glow-amber",
+      iconBg: "bg-amber-500/10",
+      iconColor: "text-amber-400",
+      trend: "+15%",
     },
   ];
 
   return (
     <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
       {cards.map((card) => (
-        <Card key={card.title}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+        <div
+          key={card.title}
+          className={cn(
+            "rounded-xl border bg-[#111827] p-4 transition-all duration-300 hover:scale-[1.02]",
+            card.glow
+          )}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
               {card.title}
-            </CardTitle>
-            <card.icon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${loading ? "animate-pulse" : ""}`}>
-              {loading ? "..." : card.value}
+            </span>
+            <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", card.iconBg)}>
+              <card.icon className={cn("h-4 w-4", card.iconColor)} />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          <div className={cn("text-2xl font-bold text-white", loading && "animate-pulse")}>
+            {loading ? "..." : card.value}
+          </div>
+          {summary && (
+            <div className="mt-1 flex items-center gap-1">
+              <TrendingUp className="h-3 w-3 text-emerald-400" />
+              <span className="text-xs text-emerald-400">{card.trend}</span>
+            </div>
+          )}
+        </div>
       ))}
     </div>
   );
+}
+
+function formatCompact(num: number): string {
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return num.toLocaleString("sv-SE");
 }

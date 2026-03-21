@@ -1,19 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Search, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface CampaignRow {
   id: string;
@@ -40,24 +32,20 @@ interface PerformanceTableProps {
   onUpdateBudget?: (id: string, budget: number) => void;
 }
 
+function RoasIndicator({ value }: { value: number }) {
+  if (value >= 2) return <TrendingUp className="h-3.5 w-3.5 text-emerald-400 inline ml-1" />;
+  if (value >= 1) return <Minus className="h-3.5 w-3.5 text-amber-400 inline ml-1" />;
+  return <TrendingDown className="h-3.5 w-3.5 text-red-400 inline ml-1" />;
+}
+
 export function PerformanceTable({ campaigns, loading, onToggleStatus, onUpdateBudget }: PerformanceTableProps) {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
   const [editingBudget, setEditingBudget] = useState<string | null>(null);
   const [budgetValue, setBudgetValue] = useState("");
-  const [search, setSearch] = useState("");
 
   const filtered = campaigns.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase())
   );
-
-  const toggleExpand = (id: string) => {
-    setExpandedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const handleBudgetSave = (id: string) => {
     const val = parseFloat(budgetValue);
@@ -68,80 +56,99 @@ export function PerformanceTable({ campaigns, loading, onToggleStatus, onUpdateB
   };
 
   if (loading) {
-    return <div className="py-8 text-center text-muted-foreground">Loading campaigns...</div>;
+    return (
+      <div className="rounded-xl border border-white/5 bg-[#111827] p-12 text-center">
+        <div className="animate-pulse text-slate-400">Loading campaigns...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <Input
-        placeholder="Search campaigns..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="max-w-sm"
-      />
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-8"></TableHead>
-              <TableHead>Campaign</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Budget</TableHead>
-              <TableHead className="text-right">Spend</TableHead>
-              <TableHead className="text-right">Impr.</TableHead>
-              <TableHead className="text-right">Clicks</TableHead>
-              <TableHead className="text-right">CTR</TableHead>
-              <TableHead className="text-right">CPC</TableHead>
-              <TableHead className="text-right">CPM</TableHead>
-              <TableHead className="text-right">Purch.</TableHead>
-              <TableHead className="text-right">ROAS</TableHead>
-              <TableHead className="text-right">Hook%</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+    <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
+      {/* Table header bar */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+        <h3 className="text-base font-semibold text-white">Campaigns</h3>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+          <Input
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 w-56 h-8 bg-white/5 border-white/10 text-sm placeholder:text-slate-500 focus:border-cyan-500/50 focus:ring-cyan-500/20"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-white/5">
+              {["Campaign", "Status", "Budget", "Spend", "Impr.", "Clicks", "CTR", "CPC", "CPM", "Purch.", "ROAS", "Hook%"].map((h) => (
+                <th
+                  key={h}
+                  className={cn(
+                    "px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider",
+                    h === "Campaign" ? "text-left" : "text-right"
+                  )}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
             {filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
+              <tr>
+                <td colSpan={12} className="text-center text-slate-500 py-12">
                   No campaigns found
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             ) : (
-              filtered.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => toggleExpand(c.id)}>
-                      {expandedRows.has(c.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </Button>
-                  </TableCell>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
+              filtered.map((c, i) => (
+                <tr
+                  key={c.id}
+                  className={cn(
+                    "border-b border-white/5 transition-colors hover:bg-white/[0.02]",
+                    i % 2 === 0 ? "bg-transparent" : "bg-white/[0.01]"
+                  )}
+                >
+                  <td className="px-4 py-3 text-sm font-medium text-slate-200 max-w-[200px] truncate">
+                    {c.name}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-2">
                       <Switch
                         checked={c.status === "ACTIVE"}
                         onCheckedChange={(checked) =>
                           onToggleStatus?.(c.id, checked ? "ACTIVE" : "PAUSED")
                         }
                       />
-                      <Badge variant={c.status === "ACTIVE" ? "default" : "secondary"}>
+                      <Badge
+                        className={cn(
+                          "text-[10px] px-2 py-0.5 font-medium border",
+                          c.status === "ACTIVE"
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                            : "bg-slate-500/10 text-slate-400 border-slate-500/30"
+                        )}
+                      >
                         {c.status}
                       </Badge>
                     </div>
-                  </TableCell>
-                  <TableCell className="text-right">
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-300">
                     {editingBudget === c.id ? (
-                      <div className="flex items-center gap-1 justify-end">
-                        <Input
-                          className="w-24 h-7 text-right"
-                          value={budgetValue}
-                          onChange={(e) => setBudgetValue(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleBudgetSave(c.id)}
-                          onBlur={() => handleBudgetSave(c.id)}
-                          autoFocus
-                        />
-                      </div>
+                      <Input
+                        className="w-24 h-7 text-right bg-white/5 border-white/10 ml-auto"
+                        value={budgetValue}
+                        onChange={(e) => setBudgetValue(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleBudgetSave(c.id)}
+                        onBlur={() => handleBudgetSave(c.id)}
+                        autoFocus
+                      />
                     ) : (
                       <span
-                        className="cursor-pointer hover:underline"
+                        className="cursor-pointer hover:text-cyan-400 transition-colors"
                         onClick={() => {
                           setEditingBudget(c.id);
                           setBudgetValue(String(c.dailyBudget || 0));
@@ -150,25 +157,34 @@ export function PerformanceTable({ campaigns, loading, onToggleStatus, onUpdateB
                         {c.dailyBudget ? `${c.dailyBudget.toLocaleString()} SEK` : "-"}
                       </span>
                     )}
-                  </TableCell>
-                  <TableCell className="text-right">{c.spend.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK</TableCell>
-                  <TableCell className="text-right">{c.impressions.toLocaleString("sv-SE")}</TableCell>
-                  <TableCell className="text-right">{c.linkClicks.toLocaleString("sv-SE")}</TableCell>
-                  <TableCell className="text-right">{c.ctr.toFixed(2)}%</TableCell>
-                  <TableCell className="text-right">{c.cpc.toFixed(2)}</TableCell>
-                  <TableCell className="text-right">{c.cpm.toFixed(2)}</TableCell>
-                  <TableCell className="text-right">{c.purchases}</TableCell>
-                  <TableCell className="text-right font-medium">
-                    <span className={c.roas >= 2 ? "text-green-500" : c.roas >= 1 ? "text-yellow-500" : "text-red-500"}>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-300">
+                    {c.spend.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">
+                    {c.impressions.toLocaleString("sv-SE")}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">
+                    {c.linkClicks.toLocaleString("sv-SE")}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-300">{c.ctr.toFixed(2)}%</td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">{c.cpc.toFixed(2)} SEK</td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">{c.cpm.toFixed(2)} SEK</td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-300">{c.purchases}</td>
+                  <td className="px-4 py-3 text-sm text-right font-semibold">
+                    <span className={cn(
+                      c.roas >= 2 ? "text-emerald-400" : c.roas >= 1 ? "text-amber-400" : "text-red-400"
+                    )}>
                       {c.roas.toFixed(2)}x
                     </span>
-                  </TableCell>
-                  <TableCell className="text-right">{c.hookRate.toFixed(1)}%</TableCell>
-                </TableRow>
+                    <RoasIndicator value={c.roas} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">{c.hookRate.toFixed(1)}%</td>
+                </tr>
               ))
             )}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
     </div>
   );

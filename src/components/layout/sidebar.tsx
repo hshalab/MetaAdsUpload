@@ -19,9 +19,6 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -42,43 +39,48 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-screen w-64 flex-col border-r bg-card">
-      <div className="flex h-14 items-center px-4">
-        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg">
-          <Megaphone className="h-5 w-5" />
-          MetaAdsUpload
+    <div className="flex h-screen w-56 flex-col bg-[#0f1629] border-r border-white/5">
+      {/* Logo */}
+      <div className="flex h-16 items-center px-5 gap-2.5">
+        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center">
+          <Megaphone className="h-4 w-4 text-white" />
+        </div>
+        <Link href="/dashboard" className="font-bold text-base text-white tracking-tight">
+          MetaAds
         </Link>
       </div>
-      <Separator />
-      <ScrollArea className="flex-1 px-3 py-2">
-        <nav className="flex flex-col gap-1">
-          {navItems.map((item) => (
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-auto">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href;
+          return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                pathname === item.href
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200",
+                isActive
+                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent"
               )}
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className={cn("h-4 w-4 flex-shrink-0", isActive && "text-cyan-400")} />
               {item.label}
             </Link>
-          ))}
-        </nav>
-      </ScrollArea>
-      <Separator />
-      <div className="p-3">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 text-muted-foreground"
+          );
+        })}
+      </nav>
+
+      {/* Sign Out */}
+      <div className="p-3 border-t border-white/5">
+        <button
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all w-full"
           onClick={() => signOut({ callbackUrl: "/login" })}
         >
           <LogOut className="h-4 w-4" />
           Sign Out
-        </Button>
+        </button>
       </div>
     </div>
   );

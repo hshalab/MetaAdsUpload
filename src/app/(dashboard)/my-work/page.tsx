@@ -90,7 +90,7 @@ export default function MyWorkPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-cyan-500 border-t-transparent" />
       </div>
     );
   }
@@ -177,11 +177,11 @@ export default function MyWorkPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            <ClipboardList className="h-7 w-7" />
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <ClipboardList className="h-6 w-6 text-cyan-400" />
             My Assignments
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-slate-500 mt-0.5">
             Your assigned video and graphic tasks
           </p>
         </div>

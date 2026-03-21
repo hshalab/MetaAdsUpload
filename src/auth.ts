@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
+import * as bcrypt from "bcryptjs";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -19,7 +19,7 @@ declare module "@auth/core/jwt" {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  trustHost: !!process.env.NEXTAUTH_URL,
+  trustHost: true,
   providers: [
     Credentials({
       name: "credentials",
@@ -28,28 +28,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const email = credentials?.email as string;
-        const password = credentials?.password as string;
+        try {
+          const email = credentials?.email as string;
+          const password = credentials?.password as string;
 
-        if (!email || !password) return null;
+          if (!email || !password) return null;
 
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(and(eq(users.email, email), eq(users.isActive, true)))
-          .limit(1);
+          const [user] = await db
+            .select()
+            .from(users)
+            .where(and(eq(users.email, email), eq(users.isActive, true)))
+            .limit(1);
 
-        if (!user) return null;
+          if (!user) return null;
 
-        const isValid = await bcrypt.compare(password, user.password);
-        if (!isValid) return null;
+          const isValid = await bcrypt.compare(password, user.password);
+          if (!isValid) return null;
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        };
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          };
+        } catch (error) {
+          console.error("Auth error:", error);
+          return null;
+        }
       },
     }),
   ],
@@ -71,16 +76,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.sub as string;
         (session.user as unknown as Record<string, unknown>).role = token.role;
 
-        // M8: Verify user is still active in DB
-        const [dbUser] = await db
-          .select({ isActive: users.isActive })
-          .from(users)
-          .where(and(eq(users.id, token.sub as string), eq(users.isActive, true)))
-          .limit(1);
+        try {
+          // M8: Verify user is still active in DB
+          const [dbUser] = await db
+            .select({ isActive: users.isActive })
+            .from(users)
+            .where(and(eq(users.id, token.sub as string), eq(users.isActive, true)))
+            .limit(1);
 
-        if (!dbUser) {
-          // Return empty session for deactivated/deleted users
-          return { expires: session.expires } as Session;
+          if (!dbUser) {
+            return { expires: session.expires } as Session;
+          }
+        } catch (error) {
+          console.error("Session DB check error:", error);
         }
       }
       return session;

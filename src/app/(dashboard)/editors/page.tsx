@@ -3,9 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { format, subDays } from "date-fns";
 import { DateRangePicker } from "@/components/dashboard/date-range-picker";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -22,11 +20,10 @@ import {
   ChevronDown,
   ChevronRight,
   Users,
-  Clock,
   CheckCircle2,
-  AlertTriangle,
   Banknote,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface EditorAd {
   id: string;
@@ -64,12 +61,12 @@ function fmt(n: number, decimals = 0): string {
 }
 
 function BonusBadge({ bonus }: { bonus: number }) {
-  if (bonus === 0) return <span className="text-muted-foreground text-sm">-</span>;
+  if (bonus === 0) return <span className="text-slate-500 text-sm">-</span>;
   const color =
-    bonus >= 50 ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
-    bonus >= 30 ? "bg-purple-500/20 text-purple-400 border-purple-500/30" :
-    bonus >= 20 ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
-    "bg-green-500/20 text-green-400 border-green-500/30";
+    bonus >= 50 ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
+    bonus >= 30 ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
+    bonus >= 20 ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+    "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
 
   return (
     <Badge variant="outline" className={color}>
@@ -84,53 +81,53 @@ function EditorRow({ editor }: { editor: EditorData }) {
 
   return (
     <>
-      <TableRow
-        className="cursor-pointer hover:bg-accent/50"
+      <tr
+        className="border-b border-white/5 cursor-pointer hover:bg-white/[0.02] transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <TableCell className="font-medium">
+        <td className="px-4 py-3 font-medium text-slate-200">
           <div className="flex items-center gap-2">
             {expanded ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-4 w-4 text-slate-500" />
             ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              <ChevronRight className="h-4 w-4 text-slate-500" />
             )}
             {editor.editor}
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-slate-500">
               ({editor.adCount} ad{editor.adCount !== 1 ? "s" : ""})
             </span>
           </div>
-        </TableCell>
-        <TableCell className="text-right">${fmt(editor.totalSpend, 2)}</TableCell>
-        <TableCell className="text-right">${fmt(editor.totalPurchaseValue, 2)}</TableCell>
-        <TableCell className="text-right">
-          <span className={editor.roas >= 2.5 ? "text-green-400" : editor.roas >= 2.0 ? "text-yellow-400" : "text-red-400"}>
+        </td>
+        <td className="px-4 py-3 text-right text-sm text-slate-300">${fmt(editor.totalSpend, 2)}</td>
+        <td className="px-4 py-3 text-right text-sm text-slate-300">${fmt(editor.totalPurchaseValue, 2)}</td>
+        <td className="px-4 py-3 text-right text-sm font-semibold">
+          <span className={editor.roas >= 2.5 ? "text-emerald-400" : editor.roas >= 2.0 ? "text-amber-400" : "text-red-400"}>
             {editor.roas.toFixed(2)}x
           </span>
-        </TableCell>
-        <TableCell className="text-right">{editor.totalPurchases}</TableCell>
-        <TableCell className="text-right">{editor.ctr.toFixed(2)}%</TableCell>
-        <TableCell className="text-right">
-          <span className="font-semibold text-green-400">${fmt(editor.totalBonus)}</span>
-        </TableCell>
-      </TableRow>
+        </td>
+        <td className="px-4 py-3 text-right text-sm text-slate-300">{editor.totalPurchases}</td>
+        <td className="px-4 py-3 text-right text-sm text-slate-400">{editor.ctr.toFixed(2)}%</td>
+        <td className="px-4 py-3 text-right">
+          <span className="font-semibold text-emerald-400">${fmt(editor.totalBonus)}</span>
+        </td>
+      </tr>
       {expanded &&
         editor.ads.map((ad) => (
-          <TableRow key={ad.id} className="bg-muted/30 text-sm">
-            <TableCell className="pl-10 text-muted-foreground">{ad.name}</TableCell>
-            <TableCell className="text-right">${fmt(ad.spend, 2)}</TableCell>
-            <TableCell className="text-right">${fmt(ad.purchaseValue, 2)}</TableCell>
-            <TableCell className="text-right">
-              <span className={ad.roas >= 2.5 ? "text-green-400" : ad.roas >= 2.0 ? "text-yellow-400" : "text-red-400"}>
+          <tr key={ad.id} className="border-b border-white/5 bg-white/[0.01]">
+            <td className="px-4 py-2.5 pl-12 text-sm text-slate-500">{ad.name}</td>
+            <td className="px-4 py-2.5 text-right text-sm text-slate-400">${fmt(ad.spend, 2)}</td>
+            <td className="px-4 py-2.5 text-right text-sm text-slate-400">${fmt(ad.purchaseValue, 2)}</td>
+            <td className="px-4 py-2.5 text-right text-sm">
+              <span className={ad.roas >= 2.5 ? "text-emerald-400" : ad.roas >= 2.0 ? "text-amber-400" : "text-red-400"}>
                 {ad.roas.toFixed(2)}x
               </span>
-            </TableCell>
-            <TableCell className="text-right">{ad.purchases}</TableCell>
-            <TableCell className="text-right">{ad.ctr.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">
+            </td>
+            <td className="px-4 py-2.5 text-right text-sm text-slate-400">{ad.purchases}</td>
+            <td className="px-4 py-2.5 text-right text-sm text-slate-500">{ad.ctr.toFixed(2)}%</td>
+            <td className="px-4 py-2.5 text-right">
               <BonusBadge bonus={ad.bonus} />
-            </TableCell>
-          </TableRow>
+            </td>
+          </tr>
         ))}
     </>
   );
@@ -190,10 +187,11 @@ export default function EditorsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Editor Performance</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-2xl font-bold text-white">Editor Performance</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
             Ad performance and bonus tracking per video editor
           </p>
         </div>
@@ -203,193 +201,142 @@ export default function EditorsPage() {
             to={dateRange.to}
             onChange={setDateRange}
           />
-          <Button variant="outline" size="sm" onClick={fetchEditors} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          <button
+            onClick={fetchEditors}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
-          </Button>
+          </button>
         </div>
       </div>
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Editors</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${loading ? "animate-pulse" : ""}`}>
-              {loading ? "..." : editors.length}
+        {[
+          { title: "Editors", value: loading ? "..." : editors.length, icon: Users, glow: "glow-cyan", iconBg: "bg-cyan-500/10", iconColor: "text-cyan-400" },
+          { title: "Total Ad Spend", value: loading ? "..." : `$${fmt(totalSpend, 2)}`, icon: DollarSign, glow: "glow-purple", iconBg: "bg-purple-500/10", iconColor: "text-purple-400" },
+          { title: "Overall ROAS", value: loading ? "..." : `${overallRoas.toFixed(2)}x`, icon: TrendingUp, glow: "glow-green", iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
+          { title: "Total Bonuses", value: loading ? "..." : `$${fmt(totalBonus)}`, icon: Trophy, glow: "glow-amber", iconBg: "bg-amber-500/10", iconColor: "text-amber-400", valueColor: "text-emerald-400" },
+        ].map((card) => (
+          <div key={card.title} className={cn("rounded-xl border bg-[#111827] p-4 transition-all", card.glow)}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{card.title}</span>
+              <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", card.iconBg)}>
+                <card.icon className={cn("h-4 w-4", card.iconColor)} />
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Ad Spend</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${loading ? "animate-pulse" : ""}`}>
-              {loading ? "..." : `$${fmt(totalSpend, 2)}`}
+            <div className={cn("text-2xl font-bold", card.valueColor || "text-white", loading && "animate-pulse")}>
+              {card.value}
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Overall ROAS</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${loading ? "animate-pulse" : ""}`}>
-              {loading ? "..." : `${overallRoas.toFixed(2)}x`}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Bonuses</CardTitle>
-            <Trophy className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold text-green-400 ${loading ? "animate-pulse" : ""}`}>
-              {loading ? "..." : `$${fmt(totalBonus)}`}
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        ))}
       </div>
 
       {/* Payout Card */}
-      <Card className="border-green-500/30 bg-green-500/5">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium text-green-400 flex items-center gap-2">
-            <Banknote className="h-4 w-4" />
-            YOUR PAYOUT
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-3xl font-bold text-green-400">
-            {loading ? "..." : `$${fmt(totalBonus)}`}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Total bonuses earned this period across {editors.length} editor{editors.length !== 1 ? "s" : ""}
-          </p>
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5 glow-green">
+        <div className="flex items-center gap-2 mb-2">
+          <Banknote className="h-4 w-4 text-emerald-400" />
+          <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Total Payouts</span>
+        </div>
+        <div className="text-3xl font-bold text-emerald-400">
+          {loading ? "..." : `$${fmt(totalBonus)}`}
+        </div>
+        <p className="text-xs text-slate-500 mt-1">
+          Total bonuses earned this period across {editors.length} editor{editors.length !== 1 ? "s" : ""}
+        </p>
+      </div>
 
       {/* Assignment Stats */}
       {assignmentStats.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Assignment Performance
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Editor</TableHead>
-                  <TableHead className="text-right">Completed</TableHead>
-                  <TableHead className="text-right">Avg Edit Time</TableHead>
-                  <TableHead className="text-right">Revision Rate</TableHead>
-                  <TableHead className="text-right">Total Hours</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {assignmentStats.map((stat) => (
-                  <TableRow key={stat.editorName}>
-                    <TableCell className="font-medium">{stat.editorName}</TableCell>
-                    <TableCell className="text-right">{stat.completedAssignments}</TableCell>
-                    <TableCell className="text-right">
-                      {stat.avgEditingMinutes > 0
-                        ? `${Math.round(stat.avgEditingMinutes)}m`
-                        : "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span
-                        className={
-                          stat.revisionRate > 30
-                            ? "text-red-400"
-                            : stat.revisionRate > 15
-                              ? "text-yellow-400"
-                              : "text-green-400"
-                        }
-                      >
-                        {stat.revisionRate.toFixed(0)}%
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {stat.totalTrackedHours.toFixed(1)}h
-                    </TableCell>
-                  </TableRow>
+        <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-slate-400" />
+            <h3 className="text-sm font-semibold text-white">Assignment Performance</h3>
+          </div>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/5">
+                {["Editor", "Completed", "Avg Edit Time", "Revision Rate", "Total Hours"].map((h, i) => (
+                  <th key={h} className={cn("px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider", i > 0 && "text-right")}>
+                    {h}
+                  </th>
                 ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+              </tr>
+            </thead>
+            <tbody>
+              {assignmentStats.map((stat) => (
+                <tr key={stat.editorName} className="border-b border-white/5 hover:bg-white/[0.02]">
+                  <td className="px-4 py-3 text-sm font-medium text-slate-200">{stat.editorName}</td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-300">{stat.completedAssignments}</td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">
+                    {stat.avgEditingMinutes > 0 ? `${Math.round(stat.avgEditingMinutes)}m` : "-"}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right">
+                    <span className={stat.revisionRate > 30 ? "text-red-400" : stat.revisionRate > 15 ? "text-amber-400" : "text-emerald-400"}>
+                      {stat.revisionRate.toFixed(0)}%
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">{stat.totalTrackedHours.toFixed(1)}h</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      {/* Bonus Tiers Reference */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Bonus Tiers</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-3">
-            <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30">
-              $10 — $500+ spend, 2.5+ ROAS
-            </Badge>
-            <Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-blue-500/30">
-              $20 — $1,000+ spend, 2.5+ ROAS
-            </Badge>
-            <Badge variant="outline" className="bg-purple-500/20 text-purple-400 border-purple-500/30">
-              $30 — $3,750+ spend, 2.0+ ROAS
-            </Badge>
-            <Badge variant="outline" className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
-              $50 — $7,500+ spend, 2.0+ ROAS
-            </Badge>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Bonus Tiers */}
+      <div className="rounded-xl border border-white/5 bg-[#111827] p-5">
+        <h3 className="text-sm font-semibold text-white mb-3">Bonus Tiers</h3>
+        <div className="flex flex-wrap gap-3">
+          {[
+            { label: "$10 — $500+ spend, 2.5+ ROAS", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+            { label: "$20 — $1,000+ spend, 2.5+ ROAS", color: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+            { label: "$30 — $3,750+ spend, 2.0+ ROAS", color: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
+            { label: "$50 — $7,500+ spend, 2.0+ ROAS", color: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
+          ].map((tier) => (
+            <Badge key={tier.label} variant="outline" className={tier.color}>{tier.label}</Badge>
+          ))}
+        </div>
+      </div>
 
       {/* Editor Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Editor</TableHead>
-                <TableHead className="text-right">Spend</TableHead>
-                <TableHead className="text-right">Revenue</TableHead>
-                <TableHead className="text-right">ROAS</TableHead>
-                <TableHead className="text-right">Purchases</TableHead>
-                <TableHead className="text-right">CTR</TableHead>
-                <TableHead className="text-right">Bonus</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    Loading editor data...
-                  </TableCell>
-                </TableRow>
-              ) : editors.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    No editor data found. Ads must follow naming convention: &quot;SE EditorName ...&quot;
-                  </TableCell>
-                </TableRow>
-              ) : (
-                editors.map((editor) => (
-                  <EditorRow key={editor.editor} editor={editor} />
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
+        <div className="px-5 py-4 border-b border-white/5">
+          <h3 className="text-sm font-semibold text-white">Editor Breakdown</h3>
+        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-white/5">
+              {["Editor", "Spend", "Revenue", "ROAS", "Purchases", "CTR", "Bonus"].map((h, i) => (
+                <th key={h} className={cn("px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider", i > 0 && "text-right")}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={7} className="text-center py-12 text-slate-500">
+                  Loading editor data...
+                </td>
+              </tr>
+            ) : editors.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="text-center py-12 text-slate-500">
+                  No editor data found. Ads must follow naming convention: &quot;SE EditorName ...&quot;
+                </td>
+              </tr>
+            ) : (
+              editors.map((editor) => (
+                <EditorRow key={editor.editor} editor={editor} />
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

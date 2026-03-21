@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -12,14 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   LayoutGrid,
   Plus,
   Search,
   X,
   RefreshCw,
-  Clock,
   AlertTriangle,
 } from "lucide-react";
 import {
@@ -28,9 +24,11 @@ import {
   type EditorAssignment,
   type AssignmentStatus,
   type AssignmentPriority,
+  formatDuration,
 } from "@/components/assignments/assignment-card";
 import { AssignmentModal } from "@/components/assignments/assignment-modal";
 import { AssignmentDetail } from "@/components/assignments/assignment-detail";
+import { cn } from "@/lib/utils";
 
 interface AssignmentBoard {
   READY_FOR_EDITING: EditorAssignment[];
@@ -61,13 +59,6 @@ interface UserItem {
   role?: string;
 }
 
-function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
 // Kanban Column
 function KanbanColumn({
   status,
@@ -85,18 +76,18 @@ function KanbanColumn({
 
   return (
     <div className="flex-1 min-w-[280px] max-w-[320px]">
-      <div className={`rounded-t-lg px-4 py-3 border ${config.bgClass}`}>
+      <div className={cn("rounded-t-xl px-4 py-3 border", config.bgClass)}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <StatusIcon className={`h-4 w-4 ${config.color}`} />
-            <h3 className={`text-sm font-semibold ${config.color}`}>{config.label}</h3>
+            <StatusIcon className={cn("h-4 w-4", config.color)} />
+            <h3 className={cn("text-sm font-semibold", config.color)}>{config.label}</h3>
           </div>
-          <Badge variant="secondary" className="text-xs">
+          <Badge variant="outline" className="text-xs bg-white/5 border-white/10 text-slate-400">
             {assignments.length}
           </Badge>
         </div>
       </div>
-      <div className="bg-muted/30 rounded-b-lg p-2 min-h-[400px] space-y-2">
+      <div className="bg-[#0d1220] rounded-b-xl p-2 min-h-[400px] space-y-2 border border-t-0 border-white/5">
         {assignments.map((assignment) => (
           <AssignmentCard
             key={assignment.id}
@@ -106,7 +97,7 @@ function KanbanColumn({
           />
         ))}
         {assignments.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground text-sm">
+          <div className="text-center py-8 text-slate-600 text-sm">
             No assignments
           </div>
         )}
@@ -121,12 +112,9 @@ export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Users and options for filters
   const [users, setUsers] = useState<UserItem[]>([]);
   const [formats, setFormats] = useState<OptionItem[]>([]);
-  const [products, setProducts] = useState<OptionItem[]>([]);
 
-  // Filters
   const [filters, setFilters] = useState<{
     assignedToId?: string;
     formatId?: string;
@@ -135,7 +123,6 @@ export default function AssignmentsPage() {
   }>({});
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<EditorAssignment | null>(null);
   const [viewingAssignment, setViewingAssignment] = useState<EditorAssignment | null>(null);
@@ -170,7 +157,6 @@ export default function AssignmentsPage() {
     }
   }, [filters]);
 
-  // Fetch filter options
   useEffect(() => {
     Promise.all([
       fetch("/api/users").then((r) => r.json()).catch(() => ({ users: [] })),
@@ -178,7 +164,6 @@ export default function AssignmentsPage() {
     ]).then(([usersData, optionsData]) => {
       setUsers(usersData.users || []);
       setFormats(optionsData.formats || []);
-      setProducts(optionsData.products || []);
     });
   }, []);
 
@@ -206,7 +191,6 @@ export default function AssignmentsPage() {
     setViewingAssignment(assignment);
   };
 
-  // Client-side search filter
   const filterBySearch = (assignments: EditorAssignment[]) => {
     if (!searchQuery) return assignments;
     const q = searchQuery.toLowerCase();
@@ -227,188 +211,153 @@ export default function AssignmentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            <LayoutGrid className="h-7 w-7" />
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <LayoutGrid className="h-6 w-6 text-cyan-400" />
             Editor Assignments
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-slate-500 mt-0.5">
             Manage video and graphic production tasks
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchBoard} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          <button
+            onClick={fetchBoard}
+            disabled={loading}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
-          </Button>
-          <Button
-            size="sm"
+          </button>
+          <button
             onClick={() => {
               setEditingAssignment(null);
               setShowCreateModal(true);
             }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-sm font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all"
           >
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             New Assignment
-          </Button>
+          </button>
         </div>
       </div>
 
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card>
-            <CardContent className="pt-4 pb-3">
+          {[
+            { label: "Total", value: stats.total, color: "text-white" },
+            { label: "In Progress", value: (stats.byStatus?.EDITING_NOW || 0) + (stats.byStatus?.REVISION || 0), color: "text-yellow-400" },
+            { label: "For Review", value: stats.byStatus?.READY_FOR_REVIEW || 0, color: "text-purple-400" },
+            { label: "Overdue", value: stats.overdue, color: "text-red-400" },
+            { label: "Avg Time", value: stats.avgTimeSeconds > 0 ? formatDuration(stats.avgTimeSeconds) : "-", color: "text-white" },
+          ].map((stat) => (
+            <div key={stat.label} className="rounded-xl border border-white/5 bg-[#111827] p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Total</span>
-                <span className="text-2xl font-bold">{stats.total}</span>
+                <span className="text-xs text-slate-500 uppercase tracking-wider">{stat.label}</span>
+                <span className={cn("text-xl font-bold", stat.color)}>{stat.value}</span>
               </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">In Progress</span>
-                <span className="text-2xl font-bold text-yellow-400">
-                  {(stats.byStatus?.EDITING_NOW || 0) + (stats.byStatus?.REVISION || 0)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">For Review</span>
-                <span className="text-2xl font-bold text-purple-400">
-                  {stats.byStatus?.READY_FOR_REVIEW || 0}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Overdue</span>
-                <span className="text-2xl font-bold text-red-400">{stats.overdue}</span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Avg Time</span>
-                <span className="text-2xl font-bold">
-                  {stats.avgTimeSeconds > 0 ? formatDuration(stats.avgTimeSeconds) : "-"}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          ))}
         </div>
       )}
 
       {/* Filters */}
-      <Card>
-        <CardContent className="py-3">
-          <div className="flex flex-wrap gap-3 items-center">
-            <div className="relative flex-1 min-w-[200px] max-w-[300px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search batch, name, editor..."
-                className="pl-9"
-              />
-            </div>
-
-            <Select
-              value={filters.assignedToId || "all"}
-              onValueChange={(v) =>
-                setFilters({ ...filters, assignedToId: v === "all" ? undefined : v })
-              }
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="All Editors" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Editors</SelectItem>
-                {editors.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={filters.formatId || "all"}
-              onValueChange={(v) =>
-                setFilters({ ...filters, formatId: v === "all" ? undefined : v })
-              }
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="All Formats" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Formats</SelectItem>
-                {formats.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>
-                    {f.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={filters.priority || "all"}
-              onValueChange={(v) =>
-                setFilters({
-                  ...filters,
-                  priority: v === "all" ? undefined : (v as AssignmentPriority),
-                })
-              }
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="All Priorities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value="URGENT">Urgent</SelectItem>
-                <SelectItem value="HIGH">High</SelectItem>
-                <SelectItem value="MEDIUM">Medium</SelectItem>
-                <SelectItem value="LOW">Low</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {hasFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setFilters({});
-                  setSearchQuery("");
-                }}
-              >
-                <X className="h-4 w-4 mr-1" />
-                Clear
-              </Button>
-            )}
+      <div className="rounded-xl border border-white/5 bg-[#111827] p-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-[200px] max-w-[300px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search batch, name, editor..."
+              className="pl-9 bg-white/5 border-white/10 text-sm placeholder:text-slate-600 focus:border-cyan-500/50"
+            />
           </div>
-        </CardContent>
-      </Card>
+
+          <Select
+            value={filters.assignedToId || "all"}
+            onValueChange={(v) =>
+              setFilters({ ...filters, assignedToId: v === "all" ? undefined : v })
+            }
+          >
+            <SelectTrigger className="w-[160px] bg-white/5 border-white/10">
+              <SelectValue placeholder="All Editors" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#111827] border-white/10">
+              <SelectItem value="all">All Editors</SelectItem>
+              {editors.map((e) => (
+                <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filters.formatId || "all"}
+            onValueChange={(v) =>
+              setFilters({ ...filters, formatId: v === "all" ? undefined : v })
+            }
+          >
+            <SelectTrigger className="w-[160px] bg-white/5 border-white/10">
+              <SelectValue placeholder="All Formats" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#111827] border-white/10">
+              <SelectItem value="all">All Formats</SelectItem>
+              {formats.map((f) => (
+                <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filters.priority || "all"}
+            onValueChange={(v) =>
+              setFilters({ ...filters, priority: v === "all" ? undefined : (v as AssignmentPriority) })
+            }
+          >
+            <SelectTrigger className="w-[160px] bg-white/5 border-white/10">
+              <SelectValue placeholder="All Priorities" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#111827] border-white/10">
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="URGENT">Urgent</SelectItem>
+              <SelectItem value="HIGH">High</SelectItem>
+              <SelectItem value="MEDIUM">Medium</SelectItem>
+              <SelectItem value="LOW">Low</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {hasFilters && (
+            <button
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all"
+              onClick={() => {
+                setFilters({});
+                setSearchQuery("");
+              }}
+            >
+              <X className="h-4 w-4" />
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Kanban Board */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-cyan-500 border-t-transparent" />
         </div>
       ) : error ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <AlertTriangle className="h-12 w-12 text-yellow-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Could not load assignments</h3>
-            <p className="text-muted-foreground mb-4">{error}</p>
-            <Button onClick={fetchBoard}>Retry</Button>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-white/5 bg-[#111827] py-12 text-center">
+          <AlertTriangle className="h-12 w-12 text-amber-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-white mb-2">Could not load assignments</h3>
+          <p className="text-slate-500 mb-4">{error}</p>
+          <button
+            onClick={fetchBoard}
+            className="px-4 py-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all"
+          >
+            Retry
+          </button>
+        </div>
       ) : board ? (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {(Object.keys(STATUS_CONFIG) as AssignmentStatus[]).map((status) => (
@@ -422,12 +371,10 @@ export default function AssignmentsPage() {
           ))}
         </div>
       ) : (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <LayoutGrid className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">No assignments yet. Create your first one!</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-white/5 bg-[#111827] py-12 text-center">
+          <LayoutGrid className="h-12 w-12 text-slate-600 mx-auto mb-4" />
+          <p className="text-slate-500">No assignments yet. Create your first one!</p>
+        </div>
       )}
 
       {/* Create/Edit Modal */}

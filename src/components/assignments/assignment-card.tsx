@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,37 +100,37 @@ export const STATUS_CONFIG: Record<
   READY_FOR_EDITING: {
     label: "Ready for Editing",
     color: "text-blue-400",
-    bgClass: "bg-blue-500/10 border-blue-500/30",
+    bgClass: "bg-blue-500/10 border-blue-500/20",
     icon: Play,
   },
   EDITING_NOW: {
     label: "Editing Now",
     color: "text-yellow-400",
-    bgClass: "bg-yellow-500/10 border-yellow-500/30",
+    bgClass: "bg-yellow-500/10 border-yellow-500/20",
     icon: Clock,
   },
   READY_FOR_REVIEW: {
     label: "Ready for Review",
     color: "text-purple-400",
-    bgClass: "bg-purple-500/10 border-purple-500/30",
+    bgClass: "bg-purple-500/10 border-purple-500/20",
     icon: Eye,
   },
   REVISION: {
     label: "Revision",
     color: "text-red-400",
-    bgClass: "bg-red-500/10 border-red-500/30",
+    bgClass: "bg-red-500/10 border-red-500/20",
     icon: AlertTriangle,
   },
   READY_FOR_POSTING: {
     label: "Ready for Posting",
-    color: "text-green-400",
-    bgClass: "bg-green-500/10 border-green-500/30",
+    color: "text-emerald-400",
+    bgClass: "bg-emerald-500/10 border-emerald-500/20",
     icon: CheckCircle2,
   },
   POSTED: {
     label: "Posted",
-    color: "text-gray-400",
-    bgClass: "bg-gray-500/10 border-gray-500/30",
+    color: "text-slate-400",
+    bgClass: "bg-slate-500/10 border-slate-500/20",
     icon: CheckCircle2,
   },
 };
@@ -140,10 +139,10 @@ export const PRIORITY_CONFIG: Record<
   AssignmentPriority,
   { label: string; color: string; bgClass: string }
 > = {
-  URGENT: { label: "Urgent", color: "text-red-400", bgClass: "bg-red-500/20 border-red-500/30" },
-  HIGH: { label: "High", color: "text-orange-400", bgClass: "bg-orange-500/20 border-orange-500/30" },
-  MEDIUM: { label: "Medium", color: "text-blue-400", bgClass: "bg-blue-500/20 border-blue-500/30" },
-  LOW: { label: "Low", color: "text-gray-400", bgClass: "bg-gray-500/20 border-gray-500/30" },
+  URGENT: { label: "Urgent", color: "text-red-400", bgClass: "bg-red-500/10 border-red-500/20" },
+  HIGH: { label: "High", color: "text-orange-400", bgClass: "bg-orange-500/10 border-orange-500/20" },
+  MEDIUM: { label: "Medium", color: "text-blue-400", bgClass: "bg-blue-500/10 border-blue-500/20" },
+  LOW: { label: "Low", color: "text-slate-400", bgClass: "bg-slate-500/10 border-slate-500/20" },
 };
 
 const COUNTRY_FLAGS: Record<string, string> = {
@@ -193,8 +192,8 @@ export function AssignmentCard({ assignment, onClick, onStatusChange }: Assignme
   return (
     <div
       className={cn(
-        "rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group",
-        overdue && "border-red-500/50 bg-red-500/5"
+        "rounded-lg border bg-[#0f1629] p-3 hover:bg-[#131b30] transition-all cursor-pointer group",
+        overdue ? "border-red-500/30 bg-red-500/5" : "border-white/5"
       )}
       onClick={onClick}
     >
@@ -202,22 +201,20 @@ export function AssignmentCard({ assignment, onClick, onStatusChange }: Assignme
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           {countryFlag && <span className="text-base flex-shrink-0">{countryFlag}</span>}
-          <h4 className="font-semibold text-sm text-foreground truncate">
+          <h4 className="font-semibold text-sm text-slate-200 truncate">
             {assignment.autoName || assignment.title}
           </h4>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+            <button
+              className="h-6 w-6 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10 flex-shrink-0"
               onClick={(e) => e.stopPropagation()}
             >
-              <MoreVertical className="h-3 w-3" />
-            </Button>
+              <MoreVertical className="h-3 w-3 text-slate-400" />
+            </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuContent align="end" className="bg-[#111827] border-white/10" onClick={(e) => e.stopPropagation()}>
             {(Object.keys(STATUS_CONFIG) as AssignmentStatus[]).map((status) => {
               const config = STATUS_CONFIG[status];
               const Icon = config.icon;
@@ -225,7 +222,7 @@ export function AssignmentCard({ assignment, onClick, onStatusChange }: Assignme
                 <DropdownMenuItem
                   key={status}
                   onClick={() => onStatusChange(status)}
-                  className={cn(assignment.status === status && "bg-accent")}
+                  className={cn(assignment.status === status && "bg-white/5")}
                 >
                   <Icon className={cn("h-4 w-4 mr-2", config.color)} />
                   {config.label}
@@ -239,22 +236,22 @@ export function AssignmentCard({ assignment, onClick, onStatusChange }: Assignme
       {/* Format & Product */}
       <div className="flex items-center gap-2 mb-2 text-xs">
         {assignment.format && (
-          <span className="flex items-center gap-1 text-muted-foreground">
+          <span className="flex items-center gap-1 text-slate-500">
             <FormatIcon className="h-3 w-3" />
             {assignment.format.name}
           </span>
         )}
         {assignment.product && (
           <>
-            {assignment.format && <span className="text-muted-foreground/40">|</span>}
-            <span className="text-muted-foreground">{assignment.product.name}</span>
+            {assignment.format && <span className="text-slate-700">|</span>}
+            <span className="text-slate-500">{assignment.product.name}</span>
           </>
         )}
       </div>
 
       {/* Angle */}
       {assignment.angle && (
-        <div className="flex items-center gap-1 mb-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1 mb-2 text-xs text-slate-500">
           <Target className="h-3 w-3" />
           {assignment.angle.name}
         </div>
@@ -262,19 +259,19 @@ export function AssignmentCard({ assignment, onClick, onStatusChange }: Assignme
 
       {/* Assigned To */}
       <div className="flex items-center gap-2 mb-2">
-        <div className="h-5 w-5 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-[10px] font-medium flex-shrink-0">
+        <div className="h-5 w-5 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-[10px] font-medium flex-shrink-0">
           {assignment.assignedTo.name.charAt(0)}
         </div>
-        <span className="text-xs text-muted-foreground truncate">{assignment.assignedTo.name}</span>
+        <span className="text-xs text-slate-500 truncate">{assignment.assignedTo.name}</span>
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-2 border-t border-border">
+      <div className="flex items-center justify-between pt-2 border-t border-white/5">
         {assignment.dueDate ? (
           <span
             className={cn(
               "flex items-center gap-1 text-xs",
-              overdue ? "text-red-400 font-medium" : "text-muted-foreground"
+              overdue ? "text-red-400 font-medium" : "text-slate-500"
             )}
           >
             <Calendar className="h-3 w-3" />
@@ -290,7 +287,7 @@ export function AssignmentCard({ assignment, onClick, onStatusChange }: Assignme
 
       {/* Tracked Time */}
       {assignment.totalTrackedSeconds > 0 && (
-        <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="mt-1.5 flex items-center gap-1 text-xs text-slate-500">
           <Clock className="h-3 w-3" />
           {formatDuration(assignment.totalTrackedSeconds)} tracked
         </div>
