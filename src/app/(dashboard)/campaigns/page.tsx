@@ -27,7 +27,7 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <Megaphone className="h-6 w-6 text-cyan-400" />
@@ -37,7 +37,7 @@ export default function CampaignsPage() {
         </div>
         <button
           onClick={handleEmergencyStop}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/20 transition-all"
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/20 transition-all"
         >
           <AlertTriangle className="h-4 w-4" />
           Emergency Stop

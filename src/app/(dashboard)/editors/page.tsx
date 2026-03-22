@@ -348,7 +348,7 @@ export default function EditorsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <Users className="h-6 w-6 text-cyan-400" />
@@ -358,12 +358,12 @@ export default function EditorsPage() {
             Ad performance, bonus tracking and payouts per video editor
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <DateRangePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
           <button
             onClick={fetchEditors}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -372,7 +372,7 @@ export default function EditorsPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
         {[
           { title: "Editors", value: loading ? "..." : editors.length, icon: Users, glow: "glow-cyan", iconBg: "bg-cyan-500/10", iconColor: "text-cyan-400" },
           { title: "Total Ad Spend", value: loading ? "..." : `$${fmt(totalSpend, 2)}`, icon: DollarSign, glow: "glow-purple", iconBg: "bg-purple-500/10", iconColor: "text-purple-400" },

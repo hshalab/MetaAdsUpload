@@ -1,6 +1,6 @@
 "use client";
 
-import { DollarSign, Eye, MousePointerClick, TrendingUp, Target, ShoppingCart, Receipt } from "lucide-react";
+import { DollarSign, Eye, TrendingUp, TrendingDown, Target, ShoppingCart, Receipt, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface KPICardsProps {
@@ -16,15 +16,34 @@ interface KPICardsProps {
   loading: boolean;
 }
 
+function getRoasColor(roas: number): string {
+  if (roas >= 3) return "text-cyan-400";
+  if (roas >= 2) return "text-emerald-400";
+  if (roas >= 1) return "text-amber-400";
+  if (roas > 0) return "text-red-400";
+  return "text-slate-500";
+}
+
+function getRoasIcon(roas: number) {
+  if (roas >= 2) return TrendingUp;
+  if (roas >= 1) return Minus;
+  if (roas > 0) return TrendingDown;
+  return Minus;
+}
+
 export function KPICards({ summary, loading }: KPICardsProps) {
+  const roasValue = summary?.roas ?? 0;
+  const RoasIcon = getRoasIcon(roasValue);
+
   const cards = [
     {
       title: "Total Spend",
-      value: summary ? `${summary.spend.toLocaleString("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} SEK` : "-",
+      value: summary ? `${summary.spend.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK` : "-",
       icon: DollarSign,
       glow: "glow-cyan",
       iconBg: "bg-cyan-500/10",
       iconColor: "text-cyan-400",
+      valueColor: "text-white",
     },
     {
       title: "Impressions",
@@ -33,6 +52,7 @@ export function KPICards({ summary, loading }: KPICardsProps) {
       glow: "glow-purple",
       iconBg: "bg-purple-500/10",
       iconColor: "text-purple-400",
+      valueColor: "text-white",
     },
     {
       title: "Purchases",
@@ -41,24 +61,27 @@ export function KPICards({ summary, loading }: KPICardsProps) {
       glow: "glow-green",
       iconBg: "bg-emerald-500/10",
       iconColor: "text-emerald-400",
+      valueColor: "text-white",
     },
     {
       title: "ROAS",
-      value: summary ? `${summary.roas.toFixed(2)}x` : "-",
-      icon: TrendingUp,
-      glow: "glow-amber",
-      iconBg: "bg-amber-500/10",
-      iconColor: "text-amber-400",
+      value: summary ? `${roasValue.toFixed(2)}x` : "-",
+      icon: RoasIcon,
+      glow: roasValue >= 2 ? "glow-green" : roasValue >= 1 ? "glow-amber" : "glow-cyan",
+      iconBg: roasValue >= 2 ? "bg-emerald-500/10" : roasValue >= 1 ? "bg-amber-500/10" : "bg-red-500/10",
+      iconColor: getRoasColor(roasValue),
+      valueColor: getRoasColor(roasValue),
     },
     {
       title: "CPA",
       value: summary && (summary.cpa ?? 0) > 0
-        ? `${(summary.cpa ?? 0).toLocaleString("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} SEK`
+        ? `${(summary.cpa ?? 0).toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK`
         : "-",
       icon: Receipt,
       glow: "glow-blue",
       iconBg: "bg-blue-500/10",
       iconColor: "text-blue-400",
+      valueColor: "text-white",
     },
     {
       title: "CTR",
@@ -67,11 +90,12 @@ export function KPICards({ summary, loading }: KPICardsProps) {
       glow: "glow-cyan",
       iconBg: "bg-cyan-500/10",
       iconColor: "text-cyan-400",
+      valueColor: "text-white",
     },
   ];
 
   return (
-    <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
       {cards.map((card) => (
         <div
           key={card.title}
@@ -81,14 +105,18 @@ export function KPICards({ summary, loading }: KPICardsProps) {
           )}
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
               {card.title}
             </span>
             <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", card.iconBg)}>
               <card.icon className={cn("h-4 w-4", card.iconColor)} />
             </div>
           </div>
-          <div className={cn("text-2xl font-bold text-white", loading && "animate-pulse")}>
+          <div className={cn(
+            "text-xl sm:text-2xl font-bold tabular-nums",
+            card.valueColor,
+            loading && "animate-pulse"
+          )}>
             {loading ? "..." : card.value}
           </div>
         </div>

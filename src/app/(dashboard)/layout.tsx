@@ -10,8 +10,8 @@ export default function DashboardLayout({
     <div className="flex h-screen overflow-hidden bg-[#0a0e1a] bg-grid-pattern">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <main className="flex-1 overflow-auto p-6">
-          {children}
+        <main className="flex-1 overflow-auto p-4 md:p-6">
+          <div className="max-w-[1800px]">{children}</div>
         </main>
       </div>
       <Toaster />

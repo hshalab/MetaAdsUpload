@@ -56,7 +56,7 @@ export default function CreativesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <Film className="h-6 w-6 text-cyan-400" />
@@ -67,7 +67,7 @@ export default function CreativesPage() {
         <button
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-sm font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all disabled:opacity-50"
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-sm font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all disabled:opacity-50"
         >
           <Upload className="h-4 w-4" />
           {uploading ? "Uploading..." : "Upload Creative"}
@@ -87,7 +87,7 @@ export default function CreativesPage() {
       </div>
 
       {/* Grid */}
-      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {filtered.map((c) => (
           <div key={c.id} className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden hover:border-white/10 transition-all">
             <div className="flex aspect-video items-center justify-center bg-white/[0.02]">
