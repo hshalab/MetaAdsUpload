@@ -40,6 +40,8 @@ interface Assignment {
   title: string;
   autoName: string | null;
   landingPage: string | null;
+  deliverableUrl?: string | null;
+  deliverableR2Key?: string | null;
   metaAdId?: string | null;
   metaAdsetId?: string | null;
   metaCampaignId?: string | null;
@@ -71,6 +73,7 @@ interface CreativeFile {
   type: "video" | "image";
   file?: File;
   base64?: string;
+  deliverableUrl?: string; // R2 URL — backend will download from here
 }
 
 interface PublishResult {
@@ -147,6 +150,22 @@ export function PublishDialog({
       setPublishing(false);
       setAdsetName(assignment.autoName || assignment.title);
       setLandingPages([assignment.landingPage || ""]);
+
+      // Auto-add deliverable as creative if available
+      if (assignment.deliverableUrl) {
+        const filename = assignment.deliverableR2Key
+          ? assignment.deliverableR2Key.split("/").pop() || "deliverable.mp4"
+          : "deliverable.mp4";
+        const isImage = /\.(jpg|jpeg|png|webp)$/i.test(filename);
+        setCreatives([{
+          id: "deliverable",
+          name: filename,
+          type: isImage ? "image" : "video",
+          deliverableUrl: assignment.deliverableUrl,
+        }]);
+      } else {
+        setCreatives([]);
+      }
     }
   }, [open, assignment]);
 
@@ -203,6 +222,7 @@ export function PublishDialog({
           name: c.name,
           type: c.type,
           base64: c.base64,
+          deliverableUrl: c.deliverableUrl,
         })),
       };
 
@@ -561,6 +581,11 @@ export function PublishDialog({
                               <FileImage className="h-4 w-4 text-pink-400" />
                             )}
                             <span className="text-sm text-slate-300">{c.name}</span>
+                            {c.deliverableUrl && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                From Assignment
+                              </span>
+                            )}
                           </div>
                           <button
                             onClick={() => setCreatives(creatives.filter((x) => x.id !== c.id))}
@@ -661,7 +686,7 @@ export function PublishDialog({
                 ) : (
                   <button
                     onClick={handlePublish}
-                    disabled={publishing || creatives.length === 0 || landingPages.filter(Boolean).length === 0}
+                    disabled={publishing || (creatives.length === 0 && !assignment.deliverableUrl) || landingPages.filter(Boolean).length === 0}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-medium text-white hover:from-emerald-400 hover:to-emerald-500 transition-all disabled:opacity-50"
                   >
                     {publishing ? (

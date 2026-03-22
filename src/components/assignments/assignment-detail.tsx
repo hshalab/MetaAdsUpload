@@ -308,8 +308,8 @@ export function AssignmentDetail({
                 </div>
               </div>
 
-              {/* Google Drive Link */}
-              {assignment.googleDriveLink && (
+              {/* Deliverable */}
+              {(assignment.deliverableUrl || assignment.googleDriveLink) && (
                 <Card className="border-blue-500/30 bg-blue-500/5">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-blue-400 flex items-center gap-2">
@@ -317,16 +317,29 @@ export function AssignmentDetail({
                       Deliverable
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <a
-                      href={assignment.googleDriveLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 underline flex items-center gap-2 text-sm break-all"
-                    >
-                      {assignment.googleDriveLink}
-                      <ExternalLink className="h-4 w-4 flex-shrink-0" />
-                    </a>
+                  <CardContent className="space-y-2">
+                    {assignment.deliverableUrl && (
+                      <a
+                        href={assignment.deliverableUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 underline flex items-center gap-2 text-sm break-all"
+                      >
+                        Uploaded file
+                        <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                      </a>
+                    )}
+                    {assignment.googleDriveLink && (
+                      <a
+                        href={assignment.googleDriveLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 underline flex items-center gap-2 text-sm break-all"
+                      >
+                        {assignment.googleDriveLink}
+                        <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                      </a>
+                    )}
                   </CardContent>
                 </Card>
               )}

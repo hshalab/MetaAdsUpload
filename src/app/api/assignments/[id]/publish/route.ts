@@ -11,6 +11,7 @@ interface CreativeInput {
   name: string; // filename / creative name
   type: "video" | "image";
   base64?: string;
+  deliverableUrl?: string; // R2 public URL — backend downloads from here
   metaVideoId?: string;
   metaImageHash?: string;
 }
@@ -56,6 +57,23 @@ export async function POST(
     const { id } = await params;
     const config: PublishConfig = await request.json();
 
+    // Get assignment
+    const [assignment] = await db.select().from(schema.assignments).where(eq(schema.assignments.id, id));
+    if (!assignment) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+
+    // If no creatives provided, auto-use the assignment's deliverable
+    if (!config.creatives?.length && assignment.deliverableUrl) {
+      const filename = assignment.deliverableR2Key
+        ? assignment.deliverableR2Key.split("/").pop() || "deliverable.mp4"
+        : "deliverable.mp4";
+      const isImage = /\.(jpg|jpeg|png|webp)$/i.test(filename);
+      config.creatives = [{
+        name: filename,
+        type: isImage ? "image" : "video",
+        deliverableUrl: assignment.deliverableUrl,
+      }];
+    }
+
     // Validate
     if (!config.landingPages?.length) {
       return NextResponse.json({ error: "At least one landing page is required" }, { status: 400 });
@@ -63,10 +81,6 @@ export async function POST(
     if (!config.creatives?.length) {
       return NextResponse.json({ error: "At least one creative is required" }, { status: 400 });
     }
-
-    // Get assignment
-    const [assignment] = await db.select().from(schema.assignments).where(eq(schema.assignments.id, id));
-    if (!assignment) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
 
     if (assignment.status !== "ready_for_posting") {
       return NextResponse.json({ error: "Assignment must be in 'ready_for_posting' status" }, { status: 400 });
@@ -146,6 +160,19 @@ export async function POST(
 
       if (creative.base64) {
         const buffer = Buffer.from(creative.base64, "base64");
+        if (creative.type === "video") {
+          const result = await uploadVideo(buffer, creative.name);
+          videoId = result.id;
+        } else {
+          const result = await uploadImage(buffer, creative.name);
+          imageHash = Object.values(result.images)[0]?.hash;
+        }
+      } else if (creative.deliverableUrl) {
+        // Download from R2 URL and upload to Meta
+        const fileRes = await fetch(creative.deliverableUrl);
+        if (!fileRes.ok) throw new Error(`Failed to download deliverable from ${creative.deliverableUrl}`);
+        const arrayBuffer = await fileRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
         if (creative.type === "video") {
           const result = await uploadVideo(buffer, creative.name);
           videoId = result.id;

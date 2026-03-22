@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -21,6 +21,14 @@ import {
   MessageSquare,
   RefreshCw,
   ClipboardList,
+  Upload,
+  FileVideo,
+  ExternalLink,
+  TrendingUp,
+  DollarSign,
+  ShoppingCart,
+  BarChart3,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -37,7 +45,23 @@ interface MyAssignmentsResponse {
   active: EditorAssignment[];
   pending: EditorAssignment[];
   inReview: EditorAssignment[];
+  posted: EditorAssignment[];
   total: number;
+}
+
+interface AdInsight {
+  assignmentId: string;
+  adId: string;
+  autoName: string;
+  spend: number;
+  impressions: number;
+  purchases: number;
+  purchaseValue: number;
+  roas: number;
+  cpa: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
 }
 
 const FORMAT_ICONS: Record<string, React.ElementType> = {
@@ -53,9 +77,18 @@ export default function MyWorkPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"active" | "completed" | "all">("active");
+  const [filter, setFilter] = useState<"active" | "completed" | "posted" | "all">("active");
   const [startingId, setStartingId] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
+
+  // Upload state
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Performance insights
+  const [insights, setInsights] = useState<AdInsight[]>([]);
+  const [insightsLoading, setInsightsLoading] = useState(false);
 
   const fetchAssignments = useCallback(async () => {
     setLoading(true);
@@ -72,7 +105,87 @@ export default function MyWorkPage() {
     }
   }, []);
 
+  const fetchInsights = useCallback(async () => {
+    setInsightsLoading(true);
+    try {
+      const res = await fetch("/api/assignments/my/insights");
+      if (res.ok) {
+        const json = await res.json();
+        setInsights(json.insights || []);
+      }
+    } catch {
+      // Silently fail - insights are optional
+    } finally {
+      setInsightsLoading(false);
+    }
+  }, []);
+
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
+  useEffect(() => { fetchInsights(); }, [fetchInsights]);
+
+  // Upload file to R2
+  const handleUpload = async (assignmentId: string, file: File) => {
+    setUploadingId(assignmentId);
+    setUploadProgress(0);
+    try {
+      // 1. Get presigned URL
+      const presignRes = await fetch("/api/upload/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+        }),
+      });
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to get upload URL");
+      }
+      const { uploadUrl, publicUrl, key } = await presignRes.json();
+      setUploadProgress(20);
+
+      // 2. Upload directly to R2
+      const xhr = new XMLHttpRequest();
+      await new Promise<void>((resolve, reject) => {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(20 + Math.round((e.loaded / e.total) * 70));
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed: ${xhr.status}`));
+        };
+        xhr.onerror = () => reject(new Error("Upload failed"));
+        xhr.open("PUT", uploadUrl);
+        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.send(file);
+      });
+      setUploadProgress(90);
+
+      // 3. Save deliverable URL on assignment
+      const saveRes = await fetch(`/api/assignments/${assignmentId}/deliverable`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deliverableUrl: publicUrl,
+          deliverableR2Key: key,
+        }),
+      });
+      if (!saveRes.ok) throw new Error("Failed to save deliverable");
+      setUploadProgress(100);
+
+      // Refresh data
+      await fetchAssignments();
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingId(null);
+      setUploadProgress(0);
+    }
+  };
 
   if (loading) {
     return (
@@ -107,11 +220,13 @@ export default function MyWorkPage() {
     ...(data.active || []),
     ...(data.pending || []),
     ...(data.inReview || []),
+    ...(data.posted || []),
   ].filter((a, i, self) => i === self.findIndex((t) => t.id === a.id));
 
   const filteredAssignments = allAssignments.filter((a) => {
     if (filter === "active") return !["POSTED", "READY_FOR_POSTING"].includes(a.status);
-    if (filter === "completed") return ["POSTED", "READY_FOR_POSTING"].includes(a.status);
+    if (filter === "completed") return a.status === "READY_FOR_POSTING";
+    if (filter === "posted") return a.status === "POSTED";
     return true;
   });
 
@@ -129,6 +244,7 @@ export default function MyWorkPage() {
   const activeCount = allAssignments.filter((a) => !["POSTED", "READY_FOR_POSTING"].includes(a.status)).length;
   const inProgressCount = allAssignments.filter((a) => a.status === "EDITING_NOW").length;
   const revisionCount = allAssignments.filter((a) => a.status === "REVISION").length;
+  const postedCount = allAssignments.filter((a) => a.status === "POSTED").length;
 
   const handleStartWorking = async (assignment: EditorAssignment) => {
     setStartingId(assignment.id);
@@ -145,7 +261,11 @@ export default function MyWorkPage() {
   const handleMarkComplete = async (assignment: EditorAssignment) => {
     setCompletingId(assignment.id);
     try {
-      const res = await fetch(`/api/assignments/${assignment.id}/complete`, { method: "POST" });
+      const res = await fetch(`/api/assignments/${assignment.id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
       if (!res.ok) throw new Error("Failed to complete");
       fetchAssignments();
     } catch (err) {
@@ -153,6 +273,10 @@ export default function MyWorkPage() {
     } finally {
       setCompletingId(null);
     }
+  };
+
+  const getInsightForAssignment = (assignmentId: string): AdInsight | undefined => {
+    return insights.find((i) => i.assignmentId === assignmentId);
   };
 
   return (
@@ -167,7 +291,7 @@ export default function MyWorkPage() {
           <p className="text-sm text-slate-500 mt-0.5">Your assigned video and graphic tasks</p>
         </div>
         <button
-          onClick={fetchAssignments}
+          onClick={() => { fetchAssignments(); fetchInsights(); }}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
         >
           <RefreshCw className="h-4 w-4" /> Refresh
@@ -175,11 +299,12 @@ export default function MyWorkPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: "Active Tasks", value: activeCount, icon: FileText, glow: "glow-cyan", iconBg: "bg-cyan-500/10", iconColor: "text-cyan-400" },
           { label: "In Progress", value: inProgressCount, icon: Timer, glow: "glow-amber", iconBg: "bg-amber-500/10", iconColor: "text-amber-400" },
           { label: "Need Revision", value: revisionCount, icon: AlertCircle, glow: "glow-purple", iconBg: "bg-orange-500/10", iconColor: "text-orange-400" },
+          { label: "Posted", value: postedCount, icon: BarChart3, glow: "glow-green", iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
         ].map((stat) => (
           <div key={stat.label} className={cn("rounded-xl border bg-[#111827] p-4", stat.glow)}>
             <div className="flex items-center gap-3">
@@ -200,7 +325,8 @@ export default function MyWorkPage() {
         {(
           [
             { value: "active", label: "Active" },
-            { value: "completed", label: "Completed" },
+            { value: "posted", label: "Posted" },
+            { value: "completed", label: "Ready" },
             { value: "all", label: "All" },
           ] as const
         ).map((tab) => (
@@ -219,6 +345,21 @@ export default function MyWorkPage() {
         ))}
       </div>
 
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/mp4,video/quicktime,video/webm,image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && uploadingId === null && expandedId) {
+            handleUpload(expandedId, file);
+          }
+          e.target.value = "";
+        }}
+      />
+
       {/* Assignments list */}
       <div className="space-y-3">
         {sortedAssignments.length === 0 ? (
@@ -228,9 +369,11 @@ export default function MyWorkPage() {
             <p className="text-slate-500 mt-1">
               {filter === "active"
                 ? "You don't have any active assignments right now"
-                : filter === "completed"
-                  ? "You haven't completed any assignments yet"
-                  : "No assignments found"}
+                : filter === "posted"
+                  ? "None of your videos have been posted yet"
+                  : filter === "completed"
+                    ? "No assignments ready for posting"
+                    : "No assignments found"}
             </p>
           </div>
         ) : (
@@ -241,6 +384,9 @@ export default function MyWorkPage() {
             const statusConfig = STATUS_CONFIG[assignment.status as AssignmentStatus];
             const canStart = assignment.status === "READY_FOR_EDITING" || assignment.status === "REVISION";
             const canComplete = assignment.status === "EDITING_NOW";
+            const canUpload = assignment.status === "EDITING_NOW" || assignment.status === "REVISION";
+            const isPosted = assignment.status === "POSTED";
+            const insight = isPosted ? getInsightForAssignment(assignment.id) : undefined;
 
             return (
               <div key={assignment.id} className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
@@ -279,8 +425,28 @@ export default function MyWorkPage() {
                             </span>
                           </>
                         )}
+                        {/* Show mini metrics for posted */}
+                        {isPosted && insight && insight.spend > 0 && (
+                          <>
+                            <span className="text-slate-700">|</span>
+                            <span className="text-emerald-400 font-medium">
+                              {insight.roas.toFixed(2)}x ROAS
+                            </span>
+                            <span className="text-slate-700">|</span>
+                            <span className="text-slate-300">
+                              {insight.spend.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
+
+                    {/* Deliverable indicator */}
+                    {assignment.deliverableUrl && (
+                      <div className="flex items-center gap-1 text-emerald-400 flex-shrink-0" title="Video uploaded">
+                        <FileVideo className="h-4 w-4" />
+                      </div>
+                    )}
 
                     {statusConfig && (
                       <Badge variant="outline" className={cn(statusConfig.bgClass, statusConfig.color, "flex-shrink-0")}>
@@ -337,10 +503,138 @@ export default function MyWorkPage() {
                             <p className="text-sm text-slate-400 bg-white/[0.02] rounded-lg p-3">{assignment.description}</p>
                           </div>
                         )}
+
+                        {/* Upload Section */}
+                        {canUpload && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Upload Deliverable</h4>
+                            <div className="rounded-lg border border-white/5 bg-[#0d1220] p-3">
+                              {assignment.deliverableUrl ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <FileVideo className="h-4 w-4 text-emerald-400" />
+                                    <span className="text-emerald-400 font-medium">Video uploaded</span>
+                                  </div>
+                                  <a
+                                    href={assignment.deliverableUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-xs text-cyan-400 hover:underline"
+                                  >
+                                    View file <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      fileInputRef.current?.click();
+                                    }}
+                                    disabled={uploadingId !== null}
+                                    className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                                  >
+                                    Replace file
+                                  </button>
+                                </div>
+                              ) : uploadingId === assignment.id ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-sm text-cyan-400">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Uploading...
+                                  </div>
+                                  <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-300 rounded-full"
+                                      style={{ width: `${uploadProgress}%` }}
+                                    />
+                                  </div>
+                                  <p className="text-xs text-slate-500">{uploadProgress}%</p>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    fileInputRef.current?.click();
+                                  }}
+                                  className="flex items-center gap-2 px-3 py-2 w-full rounded-lg border-2 border-dashed border-white/10 text-sm text-slate-400 hover:border-cyan-500/30 hover:text-cyan-400 hover:bg-cyan-500/5 transition-all"
+                                >
+                                  <Upload className="h-4 w-4" />
+                                  Upload Video
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Show deliverable link for non-upload states */}
+                        {!canUpload && assignment.deliverableUrl && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Deliverable</h4>
+                            <div className="rounded-lg border border-white/5 bg-[#0d1220] p-3">
+                              <div className="flex items-center gap-2 text-sm">
+                                <FileVideo className="h-4 w-4 text-emerald-400" />
+                                <a
+                                  href={assignment.deliverableUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-cyan-400 hover:underline flex items-center gap-1"
+                                >
+                                  View uploaded file <ExternalLink className="h-3 w-3" />
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Right — Script */}
+                      {/* Right — Script OR Performance */}
                       <div>
+                        {/* Performance metrics for posted assignments */}
+                        {isPosted && (
+                          <div className="mb-4">
+                            <h4 className="text-xs font-medium text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                              <BarChart3 className="h-3.5 w-3.5" />
+                              Performance (Last 7 days)
+                            </h4>
+                            {insightsLoading ? (
+                              <div className="rounded-lg border border-white/5 bg-[#0d1220] p-6 text-center">
+                                <Loader2 className="h-5 w-5 animate-spin text-slate-500 mx-auto" />
+                              </div>
+                            ) : insight && insight.spend > 0 ? (
+                              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                  {[
+                                    { label: "Spend", value: `${insight.spend.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK`, icon: DollarSign, color: "text-cyan-400" },
+                                    { label: "ROAS", value: `${insight.roas.toFixed(2)}x`, icon: TrendingUp, color: insight.roas >= 2 ? "text-emerald-400" : insight.roas >= 1 ? "text-amber-400" : "text-red-400" },
+                                    { label: "Purchases", value: insight.purchases.toString(), icon: ShoppingCart, color: "text-emerald-400" },
+                                    { label: "CPA", value: insight.cpa > 0 ? `${insight.cpa.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK` : "-", icon: Target, color: "text-blue-400" },
+                                    { label: "CTR", value: `${insight.ctr.toFixed(2)}%`, icon: Target, color: "text-slate-300" },
+                                    { label: "CPM", value: `${insight.cpm.toFixed(0)} SEK`, icon: DollarSign, color: "text-slate-300" },
+                                  ].map((metric) => (
+                                    <div key={metric.label} className="flex items-center gap-2">
+                                      <metric.icon className={cn("h-3.5 w-3.5", metric.color)} />
+                                      <div>
+                                        <p className="text-xs text-slate-500">{metric.label}</p>
+                                        <p className={cn("text-sm font-semibold", metric.color)}>{metric.value}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="mt-3 pt-2 border-t border-emerald-500/10">
+                                  <p className="text-xs text-slate-500">
+                                    Revenue: <span className="text-emerald-400 font-medium">{insight.purchaseValue.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK</span>
+                                    {" | "}Impressions: <span className="text-slate-300">{insight.impressions.toLocaleString("sv-SE")}</span>
+                                  </p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="rounded-lg border border-white/5 bg-[#0d1220] p-4 text-center">
+                                <p className="text-xs text-slate-500">
+                                  {insight ? "No spend data yet" : "Performance data unavailable"}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {assignment.scriptContent && (
                           <div>
                             <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Script</h4>
