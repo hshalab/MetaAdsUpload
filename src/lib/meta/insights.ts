@@ -21,6 +21,7 @@ export interface InsightData {
 }
 
 const INSIGHT_FIELDS = [
+  "campaign_id", "adset_id", "ad_id",
   "spend", "impressions", "reach", "clicks", "ctr", "cpc", "cpm",
   "actions", "action_values",
   "video_30_sec_watched_actions", "video_avg_time_watched_actions",

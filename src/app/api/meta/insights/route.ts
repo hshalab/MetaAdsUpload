@@ -129,7 +129,15 @@ export async function GET(request: NextRequest) {
     summary.roas = summary.spend > 0 ? summary.purchaseValue / summary.spend : 0;
     summary.cpa = summary.purchases > 0 ? summary.spend / summary.purchases : 0;
 
-    return NextResponse.json({ summary, campaigns });
+    return NextResponse.json({
+      summary,
+      campaigns,
+      _debug: {
+        insightRowsCount: insightsData.length,
+        insightsMapSize: insightsMap.size,
+        sampleInsightRow: insightsData[0] ? { campaign_id: insightsData[0].campaign_id, spend: insightsData[0].spend } : null,
+      },
+    });
   } catch (error) {
     console.error("Insights API error:", error);
     return NextResponse.json(
