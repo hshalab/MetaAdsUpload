@@ -187,9 +187,9 @@ function OptionSelect({
   const selectedItem = items.find((i) => i.id === value);
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <Label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
+        <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
           {label}{required && <span className="text-cyan-400 ml-0.5">*</span>}
         </Label>
         <AddOptionPopover
@@ -200,7 +200,7 @@ function OptionSelect({
         />
       </div>
       <Select value={value || "___none___"} onValueChange={(v) => onChange(v === "___none___" ? "" : v)}>
-        <SelectTrigger className="bg-white/[0.03] border-white/[0.06] text-xs h-8">
+        <SelectTrigger className="bg-white/[0.03] border-white/[0.06] text-sm h-10">
           <span className={!selectedItem ? "text-slate-600" : "text-white"}>
             {selectedItem
               ? showCode && selectedItem.code
@@ -210,9 +210,9 @@ function OptionSelect({
           </span>
         </SelectTrigger>
         <SelectContent className="bg-[#111827] border-white/10">
-          <SelectItem value="___none___" className="text-slate-600 text-xs">— None —</SelectItem>
+          <SelectItem value="___none___" className="text-slate-600">— None —</SelectItem>
           {items.map((item) => (
-            <SelectItem key={item.id} value={item.id} className="text-xs">
+            <SelectItem key={item.id} value={item.id}>
               {showCode && item.code ? `${item.code} — ${item.name}` : item.name}
             </SelectItem>
           ))}
@@ -413,9 +413,9 @@ export function AssignmentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] p-0 bg-[#0d1117] border-white/[0.06] rounded-2xl overflow-hidden">
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-white/[0.04]">
-          <DialogTitle className="text-base font-semibold text-white">
+      <DialogContent className="max-w-[95vw] w-[1200px] max-h-[95vh] p-0 bg-[#0d1117] border-white/[0.06] rounded-2xl overflow-hidden">
+        <DialogHeader className="px-8 pt-6 pb-4 border-b border-white/[0.04]">
+          <DialogTitle className="text-lg font-semibold text-white">
             {assignment ? "Edit Assignment" : "New Assignment"}
           </DialogTitle>
         </DialogHeader>
@@ -425,358 +425,372 @@ export function AssignmentModal({
             <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
           </div>
         ) : (
-          <ScrollArea className="max-h-[76vh]">
-            <form onSubmit={handleSubmit} className="px-6 pb-6 pt-5 space-y-5">
+          <ScrollArea className="max-h-[82vh]">
+            <form onSubmit={handleSubmit} className="px-8 pb-8 pt-6 space-y-6">
 
-              {/* ─── Row 1: Batch + Version + Editor + Priority ─── */}
-              <div className="grid grid-cols-12 gap-3">
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
-                    Batch<span className="text-cyan-400 ml-0.5">*</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    value={form.batchNumber}
-                    onChange={(e) => setForm({ ...form, batchNumber: e.target.value })}
-                    placeholder="146"
-                    required
-                    className="h-8 bg-white/[0.03] border-white/[0.06] text-xs"
-                  />
-                </div>
-                <div className="col-span-1 space-y-1">
-                  <Label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">V.</Label>
-                  <Input
-                    type="number"
-                    value={form.version}
-                    onChange={(e) => setForm({ ...form, version: e.target.value })}
-                    min="1"
-                    className="h-8 bg-white/[0.03] border-white/[0.06] text-xs"
-                  />
-                </div>
-                <div className="col-span-4 space-y-1">
-                  <Label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
-                    Editor<span className="text-cyan-400 ml-0.5">*</span>
-                  </Label>
-                  <Select
-                    value={form.assignedToId || "___none___"}
-                    onValueChange={(v) => setForm({ ...form, assignedToId: v === "___none___" ? "" : v })}
-                  >
-                    <SelectTrigger className="bg-white/[0.03] border-white/[0.06] text-xs h-8">
-                      <span className={!selectedEditor ? "text-slate-600" : "text-white"}>
-                        {selectedEditor?.name || "Select editor..."}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#111827] border-white/10">
-                      <SelectItem value="___none___" className="text-slate-600 text-xs">— Select —</SelectItem>
-                      {editors.map((e) => (
-                        <SelectItem key={e.id} value={e.id} className="text-xs">{e.name}</SelectItem>
-                      ))}
-                      {admins.map((a) => (
-                        <SelectItem key={a.id} value={a.id} className="text-xs">{a.name} (Admin)</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-3 space-y-1">
-                  <Label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Priority</Label>
-                  <div className="flex gap-1">
-                    {PRIORITIES.map((p) => (
-                      <button
-                        key={p.value}
-                        type="button"
-                        onClick={() => setForm({ ...form, priority: p.value })}
-                        className={cn(
-                          "flex-1 h-8 rounded-md border text-[10px] font-medium transition-all",
-                          form.priority === p.value
-                            ? p.color
-                            : "border-white/[0.06] text-slate-600 hover:border-white/10 hover:text-slate-400"
-                        )}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Due</Label>
-                  <Popover>
-                    <PopoverTrigger
-                      className={cn(
-                        "flex items-center w-full justify-start text-left h-8 rounded-md border px-2 text-xs bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]",
-                        !form.dueDate && "text-slate-600"
-                      )}
-                    >
-                      <CalendarIcon className="mr-1.5 h-3 w-3" />
-                      {form.dueDate ? format(form.dueDate, "MMM d") : "Date"}
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-[#111827] border-white/10">
-                      <Calendar
-                        mode="single"
-                        selected={form.dueDate}
-                        onSelect={(date) => setForm({ ...form, dueDate: date })}
-                        initialFocus
+              {/* ─── Two-column layout ─── */}
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8">
+
+                {/* ─── Left Column: Main Content ─── */}
+                <div className="space-y-6">
+
+                  {/* Row 1: Batch + Version + Editor */}
+                  <div className="grid grid-cols-[100px_80px_1fr] gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        Batch<span className="text-cyan-400 ml-0.5">*</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        value={form.batchNumber}
+                        onChange={(e) => setForm({ ...form, batchNumber: e.target.value })}
+                        placeholder="146"
+                        required
+                        className="h-10 bg-white/[0.03] border-white/[0.06] text-sm"
                       />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-
-              {/* ─── Creative Brief ─── */}
-              <div className="rounded-xl border border-white/[0.04] bg-white/[0.015] p-4 space-y-3">
-                <h3 className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Creative Brief</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <OptionSelect
-                    value={form.countryId}
-                    onChange={(v) => setForm({ ...form, countryId: v })}
-                    items={options?.countries || []}
-                    placeholder="Country..."
-                    label="Country"
-                    apiType="countries"
-                    needsCode
-                    showCode
-                    onOptionsRefresh={refreshOptions}
-                  />
-                  <OptionSelect
-                    value={form.productId}
-                    onChange={(v) => setForm({ ...form, productId: v })}
-                    items={options?.products || []}
-                    placeholder="Product..."
-                    label="Product"
-                    apiType="products"
-                    needsCode
-                    showCode
-                    onOptionsRefresh={refreshOptions}
-                  />
-                  <OptionSelect
-                    value={form.formatId}
-                    onChange={(v) => setForm({ ...form, formatId: v })}
-                    items={options?.formats || []}
-                    placeholder="Format..."
-                    label="Format"
-                    apiType="formats"
-                    onOptionsRefresh={refreshOptions}
-                  />
-                  <OptionSelect
-                    value={form.angleId}
-                    onChange={(v) => setForm({ ...form, angleId: v })}
-                    items={options?.angles || []}
-                    placeholder="Angle..."
-                    label="Angle"
-                    apiType="angles"
-                    onOptionsRefresh={refreshOptions}
-                  />
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <OptionSelect
-                    value={form.offerTypeId}
-                    onChange={(v) => setForm({ ...form, offerTypeId: v })}
-                    items={options?.offerTypes || []}
-                    placeholder="Offer type..."
-                    label="Offer Type"
-                    apiType="offer-types"
-                    onOptionsRefresh={refreshOptions}
-                  />
-                  <OptionSelect
-                    value={form.scriptStructureId}
-                    onChange={(v) => setForm({ ...form, scriptStructureId: v })}
-                    items={options?.scriptStructures || []}
-                    placeholder="Structure..."
-                    label="Script Structure"
-                    apiType="script-structures"
-                    onOptionsRefresh={refreshOptions}
-                  />
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Landing Page</Label>
-                    <Input
-                      value={form.landingPage}
-                      onChange={(e) => setForm({ ...form, landingPage: e.target.value })}
-                      placeholder="LP, LP3..."
-                      className="h-8 bg-white/[0.03] border-white/[0.06] text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Creative Strategist</Label>
-                    <Select
-                      value={form.creativeStrategistId || "___none___"}
-                      onValueChange={(v) => setForm({ ...form, creativeStrategistId: v === "___none___" ? "" : v })}
-                    >
-                      <SelectTrigger className="bg-white/[0.03] border-white/[0.06] text-xs h-8">
-                        <span className={!selectedCS ? "text-slate-600" : "text-white"}>
-                          {selectedCS?.name || "Select..."}
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#111827] border-white/10">
-                        <SelectItem value="___none___" className="text-slate-600 text-xs">— None —</SelectItem>
-                        {admins.map((a) => (
-                          <SelectItem key={a.id} value={a.id} className="text-xs">{a.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {/* ─── Description ─── */}
-              <div className="space-y-1">
-                <Label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
-                  Notes / Instructions
-                </Label>
-                <Textarea
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  rows={2}
-                  placeholder="Anything the editor needs to know..."
-                  className="bg-white/[0.03] border-white/[0.06] text-xs resize-none"
-                />
-              </div>
-
-              {/* ─── Customer Avatars (collapsible) ─── */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowAvatars(!showAvatars)}
-                  className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
-                >
-                  <ChevronDown className={cn("h-3 w-3 transition-transform", showAvatars && "rotate-180")} />
-                  Customer Avatars
-                  {form.customerAvatars.length > 0 && (
-                    <span className="text-cyan-400 normal-case">({form.customerAvatars.length})</span>
-                  )}
-                </button>
-                {showAvatars && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {options?.customerAvatars.map((avatar) => (
-                      <button
-                        key={avatar.id}
-                        type="button"
-                        onClick={() => toggleCustomerAvatar(avatar.id)}
-                        className={cn(
-                          "flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-all",
-                          form.customerAvatars.includes(avatar.id)
-                            ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
-                            : "border-white/[0.06] text-slate-500 hover:border-white/10 hover:text-slate-300"
-                        )}
-                      >
-                        <Checkbox
-                          checked={form.customerAvatars.includes(avatar.id)}
-                          className="pointer-events-none h-3 w-3"
-                        />
-                        {avatar.code ? `${avatar.code}` : avatar.name}
-                      </button>
-                    ))}
-                    <AddOptionPopover
-                      type="customer-avatars"
-                      label="Avatar"
-                      needsCode
-                      onCreated={() => refreshOptions()}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* ─── Script (collapsible) ─── */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowScript(!showScript)}
-                  className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
-                >
-                  <ChevronDown className={cn("h-3 w-3 transition-transform", showScript && "rotate-180")} />
-                  Script
-                  {script.hooks.some((h) => h.eng || h.se) && (
-                    <span className="text-emerald-400 normal-case">({script.hooks.filter(h => h.eng || h.se).length} hooks)</span>
-                  )}
-                </button>
-                {showScript && (
-                  <div className="mt-3 rounded-xl border border-white/[0.04] bg-white/[0.015] p-4 space-y-3">
-                    {/* Headers */}
-                    <div className="grid grid-cols-[40px_1fr_1fr_28px] gap-2 text-[9px] font-medium text-slate-600 uppercase tracking-wider">
-                      <div />
-                      <div>English</div>
-                      <div>Svenska</div>
-                      <div />
                     </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Version</Label>
+                      <Input
+                        type="number"
+                        value={form.version}
+                        onChange={(e) => setForm({ ...form, version: e.target.value })}
+                        min="1"
+                        className="h-10 bg-white/[0.03] border-white/[0.06] text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        Editor<span className="text-cyan-400 ml-0.5">*</span>
+                      </Label>
+                      <Select
+                        value={form.assignedToId || "___none___"}
+                        onValueChange={(v) => setForm({ ...form, assignedToId: v === "___none___" ? "" : v })}
+                      >
+                        <SelectTrigger className="bg-white/[0.03] border-white/[0.06] text-sm h-10">
+                          <span className={!selectedEditor ? "text-slate-600" : "text-white"}>
+                            {selectedEditor?.name || "Select editor..."}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#111827] border-white/10">
+                          <SelectItem value="___none___" className="text-slate-600">— Select —</SelectItem>
+                          {editors.map((e) => (
+                            <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+                          ))}
+                          {admins.map((a) => (
+                            <SelectItem key={a.id} value={a.id}>{a.name} (Admin)</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-                    {/* Hooks */}
-                    {script.hooks.map((hook) => (
-                      <div key={hook.id} className="grid grid-cols-[40px_1fr_1fr_28px] gap-2 items-center">
-                        <span className="text-[10px] font-bold text-slate-500 text-center">{hook.label}</span>
+                  {/* Creative Brief */}
+                  <div className="rounded-xl border border-white/[0.04] bg-white/[0.015] p-5 space-y-4">
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Creative Brief</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <OptionSelect
+                        value={form.countryId}
+                        onChange={(v) => setForm({ ...form, countryId: v })}
+                        items={options?.countries || []}
+                        placeholder="Select country..."
+                        label="Country"
+                        apiType="countries"
+                        needsCode
+                        showCode
+                        onOptionsRefresh={refreshOptions}
+                      />
+                      <OptionSelect
+                        value={form.productId}
+                        onChange={(v) => setForm({ ...form, productId: v })}
+                        items={options?.products || []}
+                        placeholder="Select product..."
+                        label="Product"
+                        apiType="products"
+                        needsCode
+                        showCode
+                        onOptionsRefresh={refreshOptions}
+                      />
+                      <OptionSelect
+                        value={form.formatId}
+                        onChange={(v) => setForm({ ...form, formatId: v })}
+                        items={options?.formats || []}
+                        placeholder="Select format..."
+                        label="Format"
+                        apiType="formats"
+                        onOptionsRefresh={refreshOptions}
+                      />
+                      <OptionSelect
+                        value={form.angleId}
+                        onChange={(v) => setForm({ ...form, angleId: v })}
+                        items={options?.angles || []}
+                        placeholder="Select angle..."
+                        label="Angle"
+                        apiType="angles"
+                        onOptionsRefresh={refreshOptions}
+                      />
+                      <OptionSelect
+                        value={form.offerTypeId}
+                        onChange={(v) => setForm({ ...form, offerTypeId: v })}
+                        items={options?.offerTypes || []}
+                        placeholder="Select offer type..."
+                        label="Offer Type"
+                        apiType="offer-types"
+                        onOptionsRefresh={refreshOptions}
+                      />
+                      <OptionSelect
+                        value={form.scriptStructureId}
+                        onChange={(v) => setForm({ ...form, scriptStructureId: v })}
+                        items={options?.scriptStructures || []}
+                        placeholder="Select structure..."
+                        label="Script Structure"
+                        apiType="script-structures"
+                        onOptionsRefresh={refreshOptions}
+                      />
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Landing Page</Label>
                         <Input
-                          value={hook.eng}
-                          onChange={(e) => updateHook(hook.id, "eng", e.target.value)}
-                          placeholder="English hook..."
-                          className="h-7 text-xs bg-white/[0.03] border-white/[0.06]"
+                          value={form.landingPage}
+                          onChange={(e) => setForm({ ...form, landingPage: e.target.value })}
+                          placeholder="LP, LP3..."
+                          className="h-10 bg-white/[0.03] border-white/[0.06] text-sm"
                         />
-                        <Input
-                          value={hook.se}
-                          onChange={(e) => updateHook(hook.id, "se", e.target.value)}
-                          placeholder="Svensk hook..."
-                          className="h-7 text-xs bg-white/[0.03] border-white/[0.06]"
-                        />
-                        <button
-                          type="button"
-                          className="h-7 w-7 flex items-center justify-center rounded text-slate-700 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                          onClick={() => removeHook(hook.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
                       </div>
-                    ))}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Creative Strategist</Label>
+                        <Select
+                          value={form.creativeStrategistId || "___none___"}
+                          onValueChange={(v) => setForm({ ...form, creativeStrategistId: v === "___none___" ? "" : v })}
+                        >
+                          <SelectTrigger className="bg-white/[0.03] border-white/[0.06] text-sm h-10">
+                            <span className={!selectedCS ? "text-slate-600" : "text-white"}>
+                              {selectedCS?.name || "Select..."}
+                            </span>
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#111827] border-white/10">
+                            <SelectItem value="___none___" className="text-slate-600">— None —</SelectItem>
+                            {admins.map((a) => (
+                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
 
-                    {/* Add hook */}
+                  {/* Description */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      Notes / Instructions
+                    </Label>
+                    <Textarea
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      rows={3}
+                      placeholder="Anything the editor needs to know..."
+                      className="bg-white/[0.03] border-white/[0.06] text-sm resize-none"
+                    />
+                  </div>
+
+                  {/* Customer Avatars */}
+                  <div>
                     <button
                       type="button"
-                      onClick={addHook}
-                      className="flex items-center gap-1 text-[10px] text-slate-600 hover:text-cyan-400 transition-colors"
+                      onClick={() => setShowAvatars(!showAvatars)}
+                      className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
                     >
-                      <Plus className="h-3 w-3" />
-                      Add hook
+                      <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAvatars && "rotate-180")} />
+                      Customer Avatars
+                      {form.customerAvatars.length > 0 && (
+                        <span className="text-cyan-400 normal-case font-normal">({form.customerAvatars.length} selected)</span>
+                      )}
                     </button>
-
-                    {/* Body */}
-                    <div className="border-t border-white/[0.04] pt-3">
-                      <div className="grid grid-cols-[40px_1fr_1fr_28px] gap-2 items-start">
-                        <span className="text-[10px] font-bold text-slate-500 text-center pt-2">Body</span>
-                        <Textarea
-                          value={script.body.eng}
-                          onChange={(e) => setScript({ ...script, body: { ...script.body, eng: e.target.value } })}
-                          placeholder="English body..."
-                          rows={3}
-                          className="text-xs bg-white/[0.03] border-white/[0.06] resize-none"
+                    {showAvatars && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {options?.customerAvatars.map((avatar) => (
+                          <button
+                            key={avatar.id}
+                            type="button"
+                            onClick={() => toggleCustomerAvatar(avatar.id)}
+                            className={cn(
+                              "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all",
+                              form.customerAvatars.includes(avatar.id)
+                                ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+                                : "border-white/[0.06] text-slate-500 hover:border-white/10 hover:text-slate-300"
+                            )}
+                          >
+                            <Checkbox
+                              checked={form.customerAvatars.includes(avatar.id)}
+                              className="pointer-events-none h-4 w-4"
+                            />
+                            {avatar.code ? `${avatar.code} — ${avatar.name}` : avatar.name}
+                          </button>
+                        ))}
+                        <AddOptionPopover
+                          type="customer-avatars"
+                          label="Avatar"
+                          needsCode
+                          onCreated={() => refreshOptions()}
                         />
-                        <Textarea
-                          value={script.body.se}
-                          onChange={(e) => setScript({ ...script, body: { ...script.body, se: e.target.value } })}
-                          placeholder="Svensk brodtext..."
-                          rows={3}
-                          className="text-xs bg-white/[0.03] border-white/[0.06] resize-none"
-                        />
-                        <div />
                       </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ─── Right Column: Priority, Due Date, Script ─── */}
+                <div className="space-y-6">
+
+                  {/* Priority */}
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Priority</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PRIORITIES.map((p) => (
+                        <button
+                          key={p.value}
+                          type="button"
+                          onClick={() => setForm({ ...form, priority: p.value })}
+                          className={cn(
+                            "h-10 rounded-lg border text-sm font-medium transition-all",
+                            form.priority === p.value
+                              ? p.color
+                              : "border-white/[0.06] text-slate-600 hover:border-white/10 hover:text-slate-400"
+                          )}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                )}
+
+                  {/* Due Date */}
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Due Date</Label>
+                    <Popover>
+                      <PopoverTrigger
+                        className={cn(
+                          "flex items-center w-full justify-start text-left h-10 rounded-lg border px-3 text-sm bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]",
+                          !form.dueDate && "text-slate-600"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {form.dueDate ? format(form.dueDate, "EEEE, MMM d, yyyy") : "Pick a date..."}
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 bg-[#111827] border-white/10">
+                        <Calendar
+                          mode="single"
+                          selected={form.dueDate}
+                          onSelect={(date) => setForm({ ...form, dueDate: date })}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Script */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowScript(!showScript)}
+                      className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors w-full"
+                    >
+                      <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showScript && "rotate-180")} />
+                      Script
+                      {script.hooks.some((h) => h.eng || h.se) && (
+                        <span className="text-emerald-400 normal-case font-normal">({script.hooks.filter(h => h.eng || h.se).length} hooks)</span>
+                      )}
+                    </button>
+                    {showScript && (
+                      <div className="mt-3 rounded-xl border border-white/[0.04] bg-white/[0.015] p-4 space-y-3">
+                        {/* Headers */}
+                        <div className="grid grid-cols-[36px_1fr_32px] gap-2 text-[10px] font-medium text-slate-600 uppercase tracking-wider">
+                          <div />
+                          <div>Hook text</div>
+                          <div />
+                        </div>
+
+                        {/* Hooks */}
+                        {script.hooks.map((hook) => (
+                          <div key={hook.id} className="space-y-1.5">
+                            <div className="grid grid-cols-[36px_1fr_32px] gap-2 items-center">
+                              <span className="text-xs font-bold text-slate-500 text-center">{hook.label}</span>
+                              <Input
+                                value={hook.eng}
+                                onChange={(e) => updateHook(hook.id, "eng", e.target.value)}
+                                placeholder="English hook..."
+                                className="h-9 text-sm bg-white/[0.03] border-white/[0.06]"
+                              />
+                              <button
+                                type="button"
+                                className="h-9 w-8 flex items-center justify-center rounded text-slate-700 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                onClick={() => removeHook(hook.id)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-[36px_1fr_32px] gap-2 items-center">
+                              <div />
+                              <Input
+                                value={hook.se}
+                                onChange={(e) => updateHook(hook.id, "se", e.target.value)}
+                                placeholder="Svensk hook..."
+                                className="h-9 text-sm bg-white/[0.03] border-white/[0.06]"
+                              />
+                              <div />
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Add hook */}
+                        <button
+                          type="button"
+                          onClick={addHook}
+                          className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-cyan-400 transition-colors py-1"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add hook
+                        </button>
+
+                        {/* Body */}
+                        <div className="border-t border-white/[0.04] pt-3 space-y-1.5">
+                          <p className="text-xs font-bold text-slate-500 pl-1">Body</p>
+                          <Textarea
+                            value={script.body.eng}
+                            onChange={(e) => setScript({ ...script, body: { ...script.body, eng: e.target.value } })}
+                            placeholder="English body..."
+                            rows={3}
+                            className="text-sm bg-white/[0.03] border-white/[0.06] resize-none"
+                          />
+                          <Textarea
+                            value={script.body.se}
+                            onChange={(e) => setScript({ ...script, body: { ...script.body, se: e.target.value } })}
+                            placeholder="Svensk brodtext..."
+                            rows={3}
+                            className="text-sm bg-white/[0.03] border-white/[0.06] resize-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* ─── Submit ─── */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-white/[0.04]">
+              <div className="flex justify-end gap-3 pt-5 border-t border-white/[0.04]">
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   onClick={() => onOpenChange(false)}
-                  className="bg-white/[0.03] border-white/[0.06] text-slate-400 hover:bg-white/[0.06] text-xs h-8"
+                  className="bg-white/[0.03] border-white/[0.06] text-slate-400 hover:bg-white/[0.06] text-sm h-10 px-6"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  size="sm"
                   disabled={saving}
-                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs h-8 px-5"
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-sm h-10 px-8"
                 >
-                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-                  {saving ? "Saving..." : assignment ? "Update" : "Create Assignment"}
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {saving ? "Saving..." : assignment ? "Update Assignment" : "Create Assignment"}
                 </Button>
               </div>
             </form>
