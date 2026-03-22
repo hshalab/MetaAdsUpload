@@ -13,6 +13,7 @@ interface InsightSummary {
   purchases: number;
   purchaseValue: number;
   roas: number;
+  cpa: number;
 }
 
 interface CampaignRow {
@@ -30,7 +31,7 @@ interface CampaignRow {
   purchases: number;
   roas: number;
   hookRate: number;
-  holdRate: number;
+  cpa: number;
 }
 
 export function useMetaInsights(dateRange?: { from: string; to: string }) {
@@ -48,7 +49,10 @@ export function useMetaInsights(dateRange?: { from: string; to: string }) {
       if (dateRange?.to) params.set("to", dateRange.to);
 
       const res = await fetch(`/api/meta/insights?${params}`);
-      if (!res.ok) throw new Error("Failed to fetch insights");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to fetch insights");
+      }
       const data = await res.json();
       setSummary(data.summary);
       setCampaigns(data.campaigns);

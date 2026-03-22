@@ -22,7 +22,7 @@ interface CampaignRow {
   purchases: number;
   roas: number;
   hookRate: number;
-  holdRate: number;
+  cpa?: number;
 }
 
 interface PerformanceTableProps {
@@ -43,9 +43,14 @@ export function PerformanceTable({ campaigns, loading, onToggleStatus, onUpdateB
   const [editingBudget, setEditingBudget] = useState<string | null>(null);
   const [budgetValue, setBudgetValue] = useState("");
 
-  const filtered = campaigns.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter by search, sort ACTIVE first then by spend desc
+  const filtered = campaigns
+    .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (a.status === "ACTIVE" && b.status !== "ACTIVE") return -1;
+      if (a.status !== "ACTIVE" && b.status === "ACTIVE") return 1;
+      return b.spend - a.spend;
+    });
 
   const handleBudgetSave = (id: string) => {
     const val = parseFloat(budgetValue);
@@ -84,11 +89,11 @@ export function PerformanceTable({ campaigns, loading, onToggleStatus, onUpdateB
         <table className="w-full">
           <thead>
             <tr className="border-b border-white/5">
-              {["Campaign", "Status", "Budget", "Spend", "Impr.", "Clicks", "CTR", "CPC", "CPM", "Purch.", "ROAS", "Hook%"].map((h) => (
+              {["Campaign", "Status", "Budget", "Spend", "Purch.", "CPA", "ROAS", "CTR", "CPC", "CPM", "Hook%"].map((h) => (
                 <th
                   key={h}
                   className={cn(
-                    "px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider",
+                    "px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap",
                     h === "Campaign" ? "text-left" : "text-right"
                   )}
                 >
@@ -100,7 +105,7 @@ export function PerformanceTable({ campaigns, loading, onToggleStatus, onUpdateB
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={12} className="text-center text-slate-500 py-12">
+                <td colSpan={11} className="text-center text-slate-500 py-12">
                   No campaigns found
                 </td>
               </tr>
@@ -154,32 +159,34 @@ export function PerformanceTable({ campaigns, loading, onToggleStatus, onUpdateB
                           setBudgetValue(String(c.dailyBudget || 0));
                         }}
                       >
-                        {c.dailyBudget ? `${c.dailyBudget.toLocaleString()} SEK` : "-"}
+                        {c.dailyBudget ? `${c.dailyBudget.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK` : "-"}
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-slate-300">
                     {c.spend.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK
                   </td>
-                  <td className="px-4 py-3 text-sm text-right text-slate-400">
-                    {c.impressions.toLocaleString("sv-SE")}
+                  <td className="px-4 py-3 text-sm text-right text-slate-300 font-medium">
+                    {c.purchases}
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-slate-400">
-                    {c.linkClicks.toLocaleString("sv-SE")}
+                    {(c.cpa ?? (c.purchases > 0 ? c.spend / c.purchases : 0)) > 0
+                      ? `${((c.cpa ?? (c.purchases > 0 ? c.spend / c.purchases : 0))).toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK`
+                      : "-"
+                    }
                   </td>
-                  <td className="px-4 py-3 text-sm text-right text-slate-300">{c.ctr.toFixed(2)}%</td>
-                  <td className="px-4 py-3 text-sm text-right text-slate-400">{c.cpc.toFixed(2)} SEK</td>
-                  <td className="px-4 py-3 text-sm text-right text-slate-400">{c.cpm.toFixed(2)} SEK</td>
-                  <td className="px-4 py-3 text-sm text-right text-slate-300">{c.purchases}</td>
                   <td className="px-4 py-3 text-sm text-right font-semibold">
                     <span className={cn(
-                      c.roas >= 2 ? "text-emerald-400" : c.roas >= 1 ? "text-amber-400" : "text-red-400"
+                      c.roas >= 2 ? "text-emerald-400" : c.roas >= 1 ? "text-amber-400" : c.roas > 0 ? "text-red-400" : "text-slate-500"
                     )}>
-                      {c.roas.toFixed(2)}x
+                      {c.roas > 0 ? `${c.roas.toFixed(2)}x` : "-"}
                     </span>
-                    <RoasIndicator value={c.roas} />
+                    {c.roas > 0 && <RoasIndicator value={c.roas} />}
                   </td>
-                  <td className="px-4 py-3 text-sm text-right text-slate-400">{c.hookRate.toFixed(1)}%</td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-300">{c.ctr.toFixed(2)}%</td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">{c.cpc > 0 ? `${c.cpc.toFixed(2)} SEK` : "-"}</td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">{c.cpm > 0 ? `${c.cpm.toFixed(2)} SEK` : "-"}</td>
+                  <td className="px-4 py-3 text-sm text-right text-slate-400">{c.hookRate > 0 ? `${c.hookRate.toFixed(1)}%` : "-"}</td>
                 </tr>
               ))
             )}

@@ -6,7 +6,7 @@ import { KPICards } from "@/components/dashboard/kpi-cards";
 import { PerformanceTable } from "@/components/dashboard/performance-table";
 import { DateRangePicker } from "@/components/dashboard/date-range-picker";
 import { useMetaInsights } from "@/hooks/use-meta-insights";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, AlertTriangle } from "lucide-react";
 
 export default function DashboardPage() {
   const [dateRange, setDateRange] = useState({
@@ -14,7 +14,7 @@ export default function DashboardPage() {
     to: new Date(),
   });
 
-  const { summary, campaigns, loading, refresh } = useMetaInsights({
+  const { summary, campaigns, loading, error, refresh } = useMetaInsights({
     from: format(dateRange.from, "yyyy-MM-dd"),
     to: format(dateRange.to, "yyyy-MM-dd"),
   });
@@ -58,6 +58,17 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-400">Failed to load data</p>
+            <p className="text-xs text-slate-400 mt-1">{error}</p>
+            <button onClick={refresh} className="text-xs text-cyan-400 hover:underline mt-2">Try again</button>
+          </div>
+        </div>
+      )}
 
       <KPICards summary={summary} loading={loading} />
       <PerformanceTable

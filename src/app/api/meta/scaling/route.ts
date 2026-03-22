@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
 
     // Fetch campaigns, adsets, and insights in parallel
     const [campaigns, allAdsets, insightsData] = await Promise.all([
-      getCampaigns(),
-      getAdSets(),
+      getCampaigns(200),
+      getAdSets(undefined, 500),
       getInsights({
         level: "adset",
         dateRange: { since, until },

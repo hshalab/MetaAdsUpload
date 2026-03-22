@@ -1,6 +1,6 @@
 "use client";
 
-import { DollarSign, Eye, MousePointerClick, TrendingUp, Target } from "lucide-react";
+import { DollarSign, Eye, MousePointerClick, TrendingUp, Target, ShoppingCart, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface KPICardsProps {
@@ -10,6 +10,8 @@ interface KPICardsProps {
     linkClicks: number;
     ctr: number;
     roas: number;
+    purchases?: number;
+    cpa?: number;
   } | null;
   loading: boolean;
 }
@@ -23,7 +25,6 @@ export function KPICards({ summary, loading }: KPICardsProps) {
       glow: "glow-cyan",
       iconBg: "bg-cyan-500/10",
       iconColor: "text-cyan-400",
-      trend: "+12%",
     },
     {
       title: "Impressions",
@@ -32,25 +33,14 @@ export function KPICards({ summary, loading }: KPICardsProps) {
       glow: "glow-purple",
       iconBg: "bg-purple-500/10",
       iconColor: "text-purple-400",
-      trend: "+8%",
     },
     {
-      title: "Link Clicks",
-      value: summary ? summary.linkClicks.toLocaleString("sv-SE") : "-",
-      icon: MousePointerClick,
-      glow: "glow-blue",
-      iconBg: "bg-blue-500/10",
-      iconColor: "text-blue-400",
-      trend: "+5%",
-    },
-    {
-      title: "CTR",
-      value: summary ? `${summary.ctr.toFixed(2)}%` : "-",
-      icon: Target,
+      title: "Purchases",
+      value: summary ? (summary.purchases ?? 0).toLocaleString("sv-SE") : "-",
+      icon: ShoppingCart,
       glow: "glow-green",
       iconBg: "bg-emerald-500/10",
       iconColor: "text-emerald-400",
-      trend: "+2%",
     },
     {
       title: "ROAS",
@@ -59,12 +49,29 @@ export function KPICards({ summary, loading }: KPICardsProps) {
       glow: "glow-amber",
       iconBg: "bg-amber-500/10",
       iconColor: "text-amber-400",
-      trend: "+15%",
+    },
+    {
+      title: "CPA",
+      value: summary && (summary.cpa ?? 0) > 0
+        ? `${(summary.cpa ?? 0).toLocaleString("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} SEK`
+        : "-",
+      icon: Receipt,
+      glow: "glow-blue",
+      iconBg: "bg-blue-500/10",
+      iconColor: "text-blue-400",
+    },
+    {
+      title: "CTR",
+      value: summary ? `${summary.ctr.toFixed(2)}%` : "-",
+      icon: Target,
+      glow: "glow-cyan",
+      iconBg: "bg-cyan-500/10",
+      iconColor: "text-cyan-400",
     },
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+    <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
       {cards.map((card) => (
         <div
           key={card.title}
@@ -84,12 +91,6 @@ export function KPICards({ summary, loading }: KPICardsProps) {
           <div className={cn("text-2xl font-bold text-white", loading && "animate-pulse")}>
             {loading ? "..." : card.value}
           </div>
-          {summary && (
-            <div className="mt-1 flex items-center gap-1">
-              <TrendingUp className="h-3 w-3 text-emerald-400" />
-              <span className="text-xs text-emerald-400">{card.trend}</span>
-            </div>
-          )}
         </div>
       ))}
     </div>
