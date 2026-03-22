@@ -3,8 +3,7 @@ import { eq } from "drizzle-orm";
 
 /**
  * Generates an auto-name for assignments.
- * Format: "SE Fervin Mar12 #1 STATIC LP Evergreen GutHealth 122 Oskar"
- * Uses spaces as separators.
+ * Format: "SE Fervin Mar12 #1 STATIC LP Evergreen GutHealth PawLicking Hook>Problem>CTA 122 Oskar"
  */
 
 interface AutoNameParts {
@@ -16,6 +15,7 @@ interface AutoNameParts {
   landingPage: string | null;
   offerTypeName: string | null;
   angleName: string | null;
+  scriptStructureName: string | null;
   videoLengthSeconds: number | null;
   creativeStrategistName: string | null;
   createdAt: Date;
@@ -41,6 +41,7 @@ export function buildAutoName(data: AutoNameParts): string {
   if (data.offerTypeName) parts.push(data.offerTypeName);
   if (data.productCode) parts.push(data.productCode);
   if (data.angleName) parts.push(data.angleName);
+  if (data.scriptStructureName) parts.push(data.scriptStructureName);
 
   if (data.videoLengthSeconds && data.videoLengthSeconds > 0) {
     parts.push(String(data.videoLengthSeconds));
@@ -64,13 +65,14 @@ export async function generateAutoName(assignment: {
   productId: string | null;
   countryId: string | null;
   offerTypeId: string | null;
+  scriptStructureId: string | null;
   landingPage: string | null;
   assignedToId: string;
   creativeStrategistId: string | null;
   videoLengthSeconds: number | null;
   createdAt: Date;
 }): Promise<string> {
-  const [editor, angle, format, product, country, offerType, cs] = await Promise.all([
+  const [editor, angle, format, product, country, offerType, scriptStructure, cs] = await Promise.all([
     db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, assignment.assignedToId)).then(r => r[0]),
     assignment.angleId
       ? db.select({ name: schema.angles.name }).from(schema.angles).where(eq(schema.angles.id, assignment.angleId)).then(r => r[0])
@@ -87,6 +89,9 @@ export async function generateAutoName(assignment: {
     assignment.offerTypeId
       ? db.select({ name: schema.offerTypes.name }).from(schema.offerTypes).where(eq(schema.offerTypes.id, assignment.offerTypeId)).then(r => r[0])
       : null,
+    assignment.scriptStructureId
+      ? db.select({ name: schema.scriptStructures.name }).from(schema.scriptStructures).where(eq(schema.scriptStructures.id, assignment.scriptStructureId)).then(r => r[0])
+      : null,
     assignment.creativeStrategistId
       ? db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, assignment.creativeStrategistId)).then(r => r[0])
       : null,
@@ -101,6 +106,7 @@ export async function generateAutoName(assignment: {
     landingPage: assignment.landingPage,
     offerTypeName: offerType?.name || null,
     angleName: angle?.name || null,
+    scriptStructureName: scriptStructure?.name || null,
     videoLengthSeconds: assignment.videoLengthSeconds,
     creativeStrategistName: cs?.name || null,
     createdAt: assignment.createdAt,

@@ -63,6 +63,8 @@ export interface EditorAssignment {
   country: { id: string; name: string; code: string } | null;
   offerTypeId: string | null;
   offerType: { id: string; name: string } | null;
+  scriptStructureId: string | null;
+  scriptStructure: { id: string; name: string } | null;
   customerAvatars: string[];
   landingPage: string | null;
   assignedToId: string;

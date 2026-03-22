@@ -71,13 +71,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Look up related entity names for each assignment
-    const [allUsers, allAngles, allFormats, allProducts, allCountries, allOfferTypes] = await Promise.all([
+    const [allUsers, allAngles, allFormats, allProducts, allCountries, allOfferTypes, allScriptStructures] = await Promise.all([
       db.select({ id: schema.users.id, name: schema.users.name, email: schema.users.email }).from(schema.users),
       db.select({ id: schema.angles.id, name: schema.angles.name }).from(schema.angles),
       db.select({ id: schema.formats.id, name: schema.formats.name }).from(schema.formats),
       db.select({ id: schema.products.id, name: schema.products.name, code: schema.products.code }).from(schema.products),
       db.select({ id: schema.countries.id, name: schema.countries.name, code: schema.countries.code }).from(schema.countries),
       db.select({ id: schema.offerTypes.id, name: schema.offerTypes.name }).from(schema.offerTypes),
+      db.select({ id: schema.scriptStructures.id, name: schema.scriptStructures.name }).from(schema.scriptStructures),
     ]);
 
     const userMap = new Map(allUsers.map(u => [u.id, u]));
@@ -86,6 +87,7 @@ export async function GET(request: NextRequest) {
     const productMap = new Map(allProducts.map(p => [p.id, p]));
     const countryMap = new Map(allCountries.map(c => [c.id, c]));
     const offerTypeMap = new Map(allOfferTypes.map(o => [o.id, o]));
+    const scriptStructureMap = new Map(allScriptStructures.map(s => [s.id, s]));
 
     const enriched = assignments.map(a => ({
       ...a,
@@ -100,6 +102,7 @@ export async function GET(request: NextRequest) {
       product: a.productId ? productMap.get(a.productId) || null : null,
       country: a.countryId ? countryMap.get(a.countryId) || null : null,
       offerType: a.offerTypeId ? offerTypeMap.get(a.offerTypeId) || null : null,
+      scriptStructure: a.scriptStructureId ? scriptStructureMap.get(a.scriptStructureId) || null : null,
     }));
 
     return NextResponse.json(enriched);
@@ -131,6 +134,7 @@ export async function POST(request: NextRequest) {
       productId,
       countryId,
       offerTypeId,
+      scriptStructureId,
       customerAvatarIds = [],
       landingPage,
       assignedToId,
@@ -178,6 +182,7 @@ export async function POST(request: NextRequest) {
       productId: productId || null,
       countryId: countryId || null,
       offerTypeId: offerTypeId || null,
+      scriptStructureId: scriptStructureId || null,
       landingPage: landingPage || null,
       assignedToId,
       creativeStrategistId: creativeStrategistId || null,
@@ -197,6 +202,7 @@ export async function POST(request: NextRequest) {
         productId: productId || null,
         countryId: countryId || null,
         offerTypeId: offerTypeId || null,
+        scriptStructureId: scriptStructureId || null,
         customerAvatarIds,
         landingPage: landingPage || null,
         assignedToId,

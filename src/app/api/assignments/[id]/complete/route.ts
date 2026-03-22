@@ -64,6 +64,7 @@ export async function POST(
         productId: assignment.productId,
         countryId: assignment.countryId,
         offerTypeId: assignment.offerTypeId,
+        scriptStructureId: assignment.scriptStructureId,
         landingPage: assignment.landingPage,
         assignedToId: assignment.assignedToId,
         creativeStrategistId: assignment.creativeStrategistId,

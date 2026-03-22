@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { asc, sql } from "drizzle-orm";
 
-type OptionType = "angles" | "products" | "formats" | "countries" | "offer-types" | "customer-avatars";
+type OptionType = "angles" | "products" | "formats" | "countries" | "offer-types" | "customer-avatars" | "script-structures";
 
 function getTable(type: string) {
   switch (type) {
@@ -13,6 +13,7 @@ function getTable(type: string) {
     case "countries": return schema.countries;
     case "offer-types": return schema.offerTypes;
     case "customer-avatars": return schema.customerAvatars;
+    case "script-structures": return schema.scriptStructures;
     default: return null;
   }
 }

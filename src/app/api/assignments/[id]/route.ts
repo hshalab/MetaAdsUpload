@@ -41,7 +41,7 @@ export async function GET(
       .reduce((sum, te) => sum + (te.durationSeconds || 0), 0);
 
     // Look up related names
-    const [assignedTo, assignedBy, cs, angle, format, product, country, offerType] = await Promise.all([
+    const [assignedTo, assignedBy, cs, angle, format, product, country, offerType, scriptStructure] = await Promise.all([
       db.select({ id: schema.users.id, name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, assignment.assignedToId)).then(r => r[0]),
       db.select({ id: schema.users.id, name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, assignment.assignedById)).then(r => r[0]),
       assignment.creativeStrategistId
@@ -52,6 +52,7 @@ export async function GET(
       assignment.productId ? db.select().from(schema.products).where(eq(schema.products.id, assignment.productId)).then(r => r[0]) : null,
       assignment.countryId ? db.select().from(schema.countries).where(eq(schema.countries.id, assignment.countryId)).then(r => r[0]) : null,
       assignment.offerTypeId ? db.select().from(schema.offerTypes).where(eq(schema.offerTypes.id, assignment.offerTypeId)).then(r => r[0]) : null,
+      assignment.scriptStructureId ? db.select({ id: schema.scriptStructures.id, name: schema.scriptStructures.name }).from(schema.scriptStructures).where(eq(schema.scriptStructures.id, assignment.scriptStructureId)).then(r => r[0]) : null,
     ]);
 
     return NextResponse.json({
@@ -68,6 +69,7 @@ export async function GET(
       product,
       country,
       offerType,
+      scriptStructure,
     });
   } catch (error) {
     console.error("Assignment GET error:", error);
@@ -97,7 +99,7 @@ export async function PUT(
 
     const {
       batchNumber, version, formatId, angleId, productId, countryId,
-      offerTypeId, customerAvatarIds, landingPage, assignedToId,
+      offerTypeId, scriptStructureId, customerAvatarIds, landingPage, assignedToId,
       creativeStrategistId, priority, dueDate, estimatedMinutes,
       videoLengthSeconds, description, scriptContent, revisionFeedback,
     } = body;
@@ -136,6 +138,7 @@ export async function PUT(
     if (productId !== undefined) updateData.productId = productId;
     if (countryId !== undefined) updateData.countryId = countryId;
     if (offerTypeId !== undefined) updateData.offerTypeId = offerTypeId;
+    if (scriptStructureId !== undefined) updateData.scriptStructureId = scriptStructureId;
     if (customerAvatarIds !== undefined) updateData.customerAvatarIds = customerAvatarIds;
     if (landingPage !== undefined) updateData.landingPage = landingPage;
     if (assignedToId !== undefined) updateData.assignedToId = assignedToId;
@@ -156,6 +159,7 @@ export async function PUT(
       productId: productId !== undefined ? productId : current.productId,
       countryId: countryId !== undefined ? countryId : current.countryId,
       offerTypeId: offerTypeId !== undefined ? offerTypeId : current.offerTypeId,
+      scriptStructureId: scriptStructureId !== undefined ? scriptStructureId : current.scriptStructureId,
       landingPage: landingPage !== undefined ? landingPage : current.landingPage,
       assignedToId: assignedToId ?? current.assignedToId,
       creativeStrategistId: creativeStrategistId !== undefined ? creativeStrategistId : current.creativeStrategistId,

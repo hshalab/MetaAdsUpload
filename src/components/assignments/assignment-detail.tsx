@@ -234,6 +234,13 @@ export function AssignmentDetail({
                       <span className="font-medium">{assignment.angle.name}</span>
                     </div>
                   )}
+                  {assignment.scriptStructure && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Script Structure:</span>
+                      <span className="font-medium">{assignment.scriptStructure.name}</span>
+                    </div>
+                  )}
                   {assignment.offerType && (
                     <div className="flex items-center gap-3 text-sm">
                       <Globe className="h-4 w-4 text-muted-foreground" />

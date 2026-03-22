@@ -59,6 +59,14 @@ export const offerTypes = pgTable("offer_types", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const scriptStructures = pgTable("script_structures", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const customerAvatars = pgTable("customer_avatars", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull().unique(),
@@ -82,6 +90,7 @@ export const assignments = pgTable("assignments", {
   productId: text("product_id"),
   countryId: text("country_id"),
   offerTypeId: text("offer_type_id"),
+  scriptStructureId: text("script_structure_id"),
   customerAvatarIds: jsonb("customer_avatar_ids").$type<string[]>().default([]),
   landingPage: text("landing_page"),
   assignedToId: text("assigned_to_id").notNull(),
