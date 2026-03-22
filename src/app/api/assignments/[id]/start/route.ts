@@ -24,20 +24,21 @@ export async function POST(
       return NextResponse.json({ error: "This assignment is not assigned to you" }, { status: 403 });
     }
 
-    // Check for active time entry
+    // Check for active time entry on THIS assignment
     const activeEntries = await db
       .select({ id: schema.timeEntries.id })
       .from(schema.timeEntries)
       .where(
         and(
           eq(schema.timeEntries.userId, userId),
+          eq(schema.timeEntries.assignmentId, id),
           eq(schema.timeEntries.status, "in_progress")
         )
       );
 
     if (activeEntries.length > 0) {
       return NextResponse.json(
-        { error: "You already have an active task. Please finish it first." },
+        { error: "You already have an active session on this assignment." },
         { status: 400 }
       );
     }
