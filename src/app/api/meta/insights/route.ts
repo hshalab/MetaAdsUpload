@@ -15,14 +15,21 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get("to") || new Date().toISOString().split("T")[0];
 
     // Fetch campaigns and insights LIVE from Meta API in parallel
-    const [campaignsRaw, insightsData] = await Promise.all([
-      getCampaigns(200),
-      getInsights({
-        level: "campaign",
-        dateRange: { since: from, until: to },
-        limit: 500,
-      }),
-    ]);
+    let campaignsRaw, insightsData;
+    try {
+      [campaignsRaw, insightsData] = await Promise.all([
+        getCampaigns(200),
+        getInsights({
+          level: "campaign",
+          dateRange: { since: from, until: to },
+          limit: 500,
+        }),
+      ]);
+    } catch (fetchError) {
+      console.error("Meta API fetch failed:", fetchError);
+      throw fetchError;
+    }
+    console.log(`[insights] ${campaignsRaw.length} campaigns, ${insightsData.length} insight rows, range: ${from} to ${to}`);
 
     // Build insights lookup by campaign_id
     const insightsMap = new Map<string, {

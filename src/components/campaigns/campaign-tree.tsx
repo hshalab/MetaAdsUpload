@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, RefreshCw, Copy, Loader2, Search, Calendar } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, RefreshCw, Copy, Loader2, Search, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
@@ -61,16 +61,53 @@ const EMPTY_METRICS: Metrics = {
 
 type DatePreset = "today" | "3" | "7" | "14" | "30";
 
+type SortKey = "status" | "name" | "spend" | "purchases" | "cpa" | "roas" | "ctr" | "cpc" | "cpm" | "hookRate";
+type SortDir = "asc" | "desc";
+
+const STATUS_ORDER: Record<string, number> = { ACTIVE: 0, PAUSED: 1, ARCHIVED: 2, DELETED: 3 };
+
+function getStatusOrder(status: string) {
+  return STATUS_ORDER[status] ?? 99;
+}
+
+function sortItems<T extends { status: string }>(
+  items: T[],
+  getMetrics: (item: T) => Metrics,
+  sortKey: SortKey,
+  sortDir: SortDir,
+): T[] {
+  return [...items].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    if (sortKey === "status") {
+      const diff = getStatusOrder(a.status) - getStatusOrder(b.status);
+      return diff !== 0 ? diff * dir : a.status.localeCompare(b.status) * dir;
+    }
+    if (sortKey === "name") {
+      return ((a as unknown as { name: string }).name || "").localeCompare(
+        (b as unknown as { name: string }).name || ""
+      ) * dir;
+    }
+    const ma = getMetrics(a);
+    const mb = getMetrics(b);
+    return (ma[sortKey] - mb[sortKey]) * dir;
+  });
+}
+
 export function CampaignTree() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [adsets, setAdsets] = useState<Record<string, AdSet[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [editBudget, setEditBudget] = useState<{ id: string; type: "campaign" | "adset"; value: string } | null>(null);
 
   // Date range
   const [datePreset, setDatePreset] = useState<DatePreset>("7");
+
+  // Sorting — default: status ascending (ACTIVE first)
+  const [campaignSort, setCampaignSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "status", dir: "asc" });
+  const [adsetSort, setAdsetSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "status", dir: "asc" });
 
   // Metrics
   const [campaignMetrics, setCampaignMetrics] = useState<Map<string, Metrics>>(new Map());
@@ -92,44 +129,53 @@ export function CampaignTree() {
 
   const fetchCampaigns = useCallback(async () => {
     setLoading(true);
+    setInsightsError(null);
     try {
       const res = await fetch("/api/meta/campaigns");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Campaigns API returned ${res.status}`);
+      }
       const data = await res.json();
       const rawCampaigns: Campaign[] = data.data || [];
-
-      // Sort ACTIVE first, then by name
-      rawCampaigns.sort((a, b) => {
-        if (a.status === "ACTIVE" && b.status !== "ACTIVE") return -1;
-        if (a.status !== "ACTIVE" && b.status === "ACTIVE") return 1;
-        return a.name.localeCompare(b.name);
-      });
-
       setCampaigns(rawCampaigns);
 
       // Fetch campaign-level insights
       const { since, until } = getDateRange();
       const insightsRes = await fetch(`/api/meta/insights?from=${since}&to=${until}`);
-      const insightsData = await insightsRes.json();
-
-      const metricsMap = new Map<string, Metrics>();
-      for (const c of (insightsData.campaigns || [])) {
-        metricsMap.set(c.id, {
-          spend: c.spend || 0,
-          impressions: c.impressions || 0,
-          clicks: c.linkClicks || 0,
-          purchases: c.purchases || 0,
-          purchaseValue: c.purchaseValue || (c.roas && c.spend ? c.roas * c.spend : 0),
-          roas: c.roas || 0,
-          ctr: c.ctr || 0,
-          cpc: c.cpc || 0,
-          cpm: c.cpm || 0,
-          cpa: c.cpa || (c.purchases > 0 ? c.spend / c.purchases : 0),
-          hookRate: c.hookRate || 0,
+      if (!insightsRes.ok) {
+        const errData = await insightsRes.json().catch(() => ({}));
+        const errMsg = errData.error || `Insights API returned ${insightsRes.status}`;
+        console.error("Insights fetch failed:", errMsg);
+        setInsightsError(errMsg);
+        // Don't throw — still show campaigns without metrics
+      } else {
+        const insightsData = await insightsRes.json();
+        console.log("[CampaignTree] Insights response:", {
+          campaignCount: insightsData.campaigns?.length,
+          summarySpend: insightsData.summary?.spend,
         });
+
+        const metricsMap = new Map<string, Metrics>();
+        for (const c of (insightsData.campaigns || [])) {
+          metricsMap.set(c.id, {
+            spend: c.spend || 0,
+            impressions: c.impressions || 0,
+            clicks: c.linkClicks || 0,
+            purchases: c.purchases || 0,
+            purchaseValue: c.purchaseValue || (c.roas && c.spend ? c.roas * c.spend : 0),
+            roas: c.roas || 0,
+            ctr: c.ctr || 0,
+            cpc: c.cpc || 0,
+            cpm: c.cpm || 0,
+            cpa: c.cpa || (c.purchases > 0 ? c.spend / c.purchases : 0),
+            hookRate: c.hookRate || 0,
+          });
+        }
+        setCampaignMetrics(metricsMap);
       }
-      setCampaignMetrics(metricsMap);
-    } catch {
-      toast.error("Failed to fetch campaigns");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to fetch campaigns");
     } finally {
       setLoading(false);
     }
@@ -140,10 +186,8 @@ export function CampaignTree() {
   const fetchAdsetInsights = async (campaignId: string, adsetList: AdSet[]) => {
     try {
       const { since, until } = getDateRange();
-      // Fetch adset-level insights for this campaign
-      const res = await fetch(
-        `/api/meta/scaling?status=ALL&since=${since}&until=${until}`
-      );
+      const res = await fetch(`/api/meta/scaling?status=ALL&since=${since}&until=${until}`);
+      if (!res.ok) return;
       const data = await res.json();
       const metricsMap = new Map(adsetMetrics);
       for (const a of (data.adsets || [])) {
@@ -178,11 +222,7 @@ export function CampaignTree() {
       if (!adsets[campaignId]) {
         const res = await fetch(`/api/meta/adsets?campaign_id=${campaignId}`);
         const data = await res.json();
-        const adsetList: AdSet[] = (data.data || []).sort((a: AdSet, b: AdSet) => {
-          if (a.status === "ACTIVE" && b.status !== "ACTIVE") return -1;
-          if (a.status !== "ACTIVE" && b.status === "ACTIVE") return 1;
-          return a.name.localeCompare(b.name);
-        });
+        const adsetList: AdSet[] = data.data || [];
         setAdsets((prev) => ({ ...prev, [campaignId]: adsetList }));
         fetchAdsetInsights(campaignId, adsetList);
       }
@@ -258,8 +298,21 @@ export function CampaignTree() {
     }
   };
 
-  const filteredCampaigns = campaigns.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
+  // Sorted + filtered campaigns
+  const sortedCampaigns = useMemo(() => {
+    const filtered = campaigns.filter((c) =>
+      c.name.toLowerCase().includes(search.toLowerCase())
+    );
+    return sortItems(filtered, (c) => campaignMetrics.get(c.id) || EMPTY_METRICS, campaignSort.key, campaignSort.dir);
+  }, [campaigns, search, campaignSort, campaignMetrics]);
+
+  // Sorted ad sets per campaign
+  const getSortedAdsets = useCallback(
+    (campaignId: string) => {
+      const list = adsets[campaignId] || [];
+      return sortItems(list, (as) => adsetMetrics.get(as.id) || EMPTY_METRICS, adsetSort.key, adsetSort.dir);
+    },
+    [adsets, adsetSort, adsetMetrics],
   );
 
   const formatBudget = (daily?: string, lifetime?: string) => {
@@ -268,14 +321,64 @@ export function CampaignTree() {
     return "-";
   };
 
+  const toggleCampaignSort = (key: SortKey) => {
+    setCampaignSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "status" || key === "name" ? "asc" : "desc" }
+    );
+  };
+
+  const toggleAdsetSort = (key: SortKey) => {
+    setAdsetSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "status" || key === "name" ? "asc" : "desc" }
+    );
+  };
+
+  const SortIcon = ({ sortKey, current }: { sortKey: SortKey; current: { key: SortKey; dir: SortDir } }) => {
+    if (current.key !== sortKey) return null;
+    return current.dir === "asc"
+      ? <ChevronUp className="h-3 w-3 inline ml-0.5 text-cyan-400" />
+      : <ChevronDown className="h-3 w-3 inline ml-0.5 text-cyan-400" />;
+  };
+
   const MetricCell = ({ value, suffix = "", color }: { value: number; suffix?: string; color?: string }) => (
     <td className={cn("px-3 py-3 text-right text-sm tabular-nums", color || "text-slate-300")}>
       {value > 0 ? `${value.toLocaleString("sv-SE", { maximumFractionDigits: value < 10 ? 2 : 0 })}${suffix}` : "-"}
     </td>
   );
 
+  const columns: { key: SortKey; label: string; align: string }[] = [
+    { key: "name", label: "Name", align: "text-left" },
+    { key: "status", label: "Status", align: "text-center" },
+  ];
+  const metricColumns: { key: SortKey; label: string }[] = [
+    { key: "spend", label: "Spend" },
+    { key: "purchases", label: "Purch." },
+    { key: "cpa", label: "CPA" },
+    { key: "roas", label: "ROAS" },
+    { key: "ctr", label: "CTR" },
+    { key: "cpc", label: "CPC" },
+    { key: "cpm", label: "CPM" },
+    { key: "hookRate", label: "Hook%" },
+  ];
+
   return (
     <div className="space-y-4">
+      {/* Insights error banner */}
+      {insightsError && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-400">Failed to load metrics</p>
+            <p className="text-xs text-slate-400 mt-1">{insightsError}</p>
+            <button onClick={fetchCampaigns} className="text-xs text-cyan-400 hover:underline mt-2">Try again</button>
+          </div>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-xs">
@@ -316,148 +419,56 @@ export function CampaignTree() {
           <thead>
             <tr className="border-b border-white/5">
               <th className="w-10 px-3 py-3" />
-              <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3 min-w-[200px]">Name</th>
-              <th className="text-center text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">Status</th>
+              <th
+                className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3 min-w-[200px] cursor-pointer hover:text-slate-300 transition-colors select-none"
+                onClick={() => toggleCampaignSort("name")}
+              >
+                Name <SortIcon sortKey="name" current={campaignSort} />
+              </th>
+              <th
+                className="text-center text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3 cursor-pointer hover:text-slate-300 transition-colors select-none"
+                onClick={() => toggleCampaignSort("status")}
+              >
+                Status <SortIcon sortKey="status" current={campaignSort} />
+              </th>
               <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">Budget</th>
-              <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">Spend</th>
-              <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">Purch.</th>
-              <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">CPA</th>
-              <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">ROAS</th>
-              <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">CTR</th>
-              <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">CPC</th>
-              <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">CPM</th>
-              <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3">Hook%</th>
+              {metricColumns.map((col) => (
+                <th
+                  key={col.key}
+                  className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-3 py-3 cursor-pointer hover:text-slate-300 transition-colors select-none"
+                  onClick={() => toggleCampaignSort(col.key)}
+                >
+                  {col.label} <SortIcon sortKey={col.key} current={campaignSort} />
+                </th>
+              ))}
               <th className="w-12 px-3 py-3" />
             </tr>
           </thead>
           <tbody>
-            {filteredCampaigns.map((c) => {
+            {sortedCampaigns.map((c) => {
               const m = campaignMetrics.get(c.id) || EMPTY_METRICS;
+              const sortedAdsetList = getSortedAdsets(c.id);
               return (
-                <>
-                  <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                    <td className="px-3 py-3">
-                      <button
-                        onClick={() => toggleExpand(c.id)}
-                        className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-all"
-                      >
-                        {expanded.has(c.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      </button>
-                    </td>
-                    <td className="px-3 py-3 font-medium text-white truncate max-w-[250px]" title={c.name}>{c.name}</td>
-                    <td className="px-3 py-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <Switch checked={c.status === "ACTIVE"} onCheckedChange={() => toggleStatus(c.id, "campaign", c.status)} />
-                        <span className={cn(
-                          "text-[10px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap",
-                          c.status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-white/5 text-slate-400 border-white/10"
-                        )}>
-                          {c.status}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-right text-sm text-slate-300">
-                      {editBudget?.id === c.id ? (
-                        <Input
-                          className="ml-auto w-24 h-7 text-right bg-white/5 border-white/10"
-                          value={editBudget.value}
-                          onChange={(e) => setEditBudget({ ...editBudget, value: e.target.value })}
-                          onKeyDown={(e) => e.key === "Enter" && saveBudget()}
-                          onBlur={saveBudget}
-                          autoFocus
-                        />
-                      ) : (
-                        <span
-                          className="cursor-pointer hover:text-cyan-400 transition-colors whitespace-nowrap"
-                          onClick={() => setEditBudget({ id: c.id, type: "campaign", value: String(parseFloat(c.daily_budget || "0") / 100) })}
-                        >
-                          {formatBudget(c.daily_budget, c.lifetime_budget)}
-                        </span>
-                      )}
-                    </td>
-                    <MetricCell value={m.spend} suffix=" SEK" />
-                    <td className="px-3 py-3 text-right text-sm font-medium text-slate-200">{m.purchases || "-"}</td>
-                    <MetricCell value={m.cpa} suffix=" SEK" />
-                    <td className="px-3 py-3 text-right text-sm font-semibold">
-                      <span className={cn(
-                        m.roas >= 2 ? "text-emerald-400" : m.roas >= 1.42 ? "text-amber-400" : m.roas > 0 ? "text-red-400" : "text-slate-500"
-                      )}>
-                        {m.roas > 0 ? `${m.roas.toFixed(2)}x` : "-"}
-                      </span>
-                    </td>
-                    <MetricCell value={m.ctr} suffix="%" />
-                    <MetricCell value={m.cpc} suffix=" SEK" />
-                    <MetricCell value={m.cpm} suffix=" SEK" />
-                    <MetricCell value={m.hookRate} suffix="%" />
-                    <td className="px-3 py-3">
-                      <span className="font-mono text-[10px] text-slate-600">{c.id.slice(-6)}</span>
-                    </td>
-                  </tr>
-                  {expanded.has(c.id) && adsets[c.id]?.map((as) => {
-                    const am = adsetMetrics.get(as.id) || EMPTY_METRICS;
-                    return (
-                      <tr key={as.id} className="border-b border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-colors">
-                        <td className="px-3 py-2.5" />
-                        <td className="px-3 py-2.5 pl-10 text-slate-300 truncate max-w-[230px]" title={as.name}>
-                          <span className="text-slate-600 mr-1">└</span>{as.name}
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <Switch checked={as.status === "ACTIVE"} onCheckedChange={() => toggleStatus(as.id, "adset", as.status)} />
-                            <span className={cn(
-                              "text-[10px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap",
-                              as.status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-white/5 text-slate-400 border-white/10"
-                            )}>
-                              {as.status}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 text-right text-sm">
-                          {editBudget?.id === as.id ? (
-                            <Input
-                              className="ml-auto w-24 h-7 text-right bg-white/5 border-white/10"
-                              value={editBudget.value}
-                              onChange={(e) => setEditBudget({ ...editBudget, value: e.target.value })}
-                              onKeyDown={(e) => e.key === "Enter" && saveBudget()}
-                              onBlur={saveBudget}
-                              autoFocus
-                            />
-                          ) : (
-                            <span
-                              className="cursor-pointer text-slate-400 hover:text-cyan-400 transition-colors whitespace-nowrap"
-                              onClick={() => setEditBudget({ id: as.id, type: "adset", value: String(parseFloat(as.daily_budget || "0") / 100) })}
-                            >
-                              {formatBudget(as.daily_budget, as.lifetime_budget)}
-                            </span>
-                          )}
-                        </td>
-                        <MetricCell value={am.spend} suffix=" SEK" />
-                        <td className="px-3 py-2.5 text-right text-sm font-medium text-slate-300">{am.purchases || "-"}</td>
-                        <MetricCell value={am.cpa} suffix=" SEK" />
-                        <td className="px-3 py-2.5 text-right text-sm font-semibold">
-                          <span className={cn(
-                            am.roas >= 2 ? "text-emerald-400" : am.roas >= 1.42 ? "text-amber-400" : am.roas > 0 ? "text-red-400" : "text-slate-500"
-                          )}>
-                            {am.roas > 0 ? `${am.roas.toFixed(2)}x` : "-"}
-                          </span>
-                        </td>
-                        <MetricCell value={am.ctr} suffix="%" />
-                        <MetricCell value={am.cpc} suffix=" SEK" />
-                        <MetricCell value={am.cpm} suffix=" SEK" />
-                        <MetricCell value={am.hookRate} suffix="%" />
-                        <td className="px-3 py-2.5">
-                          <button
-                            onClick={() => handleDuplicate(as)}
-                            className="p-1.5 rounded hover:bg-cyan-500/10 text-slate-500 hover:text-cyan-400 transition-all"
-                            title="Duplicate to another campaign"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </>
+                <CampaignRows
+                  key={c.id}
+                  campaign={c}
+                  metrics={m}
+                  expanded={expanded.has(c.id)}
+                  adsets={sortedAdsetList}
+                  adsetMetrics={adsetMetrics}
+                  editBudget={editBudget}
+                  adsetSort={adsetSort}
+                  onToggleExpand={() => toggleExpand(c.id)}
+                  onToggleStatus={toggleStatus}
+                  onEditBudget={setEditBudget}
+                  onSaveBudget={saveBudget}
+                  onDuplicate={handleDuplicate}
+                  onToggleAdsetSort={toggleAdsetSort}
+                  formatBudget={formatBudget}
+                  MetricCell={MetricCell}
+                  SortIcon={SortIcon}
+                  metricColumns={metricColumns}
+                />
               );
             })}
             {campaigns.length === 0 && !loading && (
@@ -510,5 +521,202 @@ export function CampaignTree() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Extracted campaign + adset rows to keep the main component clean
+function CampaignRows({
+  campaign: c,
+  metrics: m,
+  expanded,
+  adsets,
+  adsetMetrics,
+  editBudget,
+  adsetSort,
+  onToggleExpand,
+  onToggleStatus,
+  onEditBudget,
+  onSaveBudget,
+  onDuplicate,
+  onToggleAdsetSort,
+  formatBudget,
+  MetricCell,
+  SortIcon,
+  metricColumns,
+}: {
+  campaign: Campaign;
+  metrics: Metrics;
+  expanded: boolean;
+  adsets: AdSet[];
+  adsetMetrics: Map<string, Metrics>;
+  editBudget: { id: string; type: string; value: string } | null;
+  adsetSort: { key: SortKey; dir: SortDir };
+  onToggleExpand: () => void;
+  onToggleStatus: (id: string, type: "campaign" | "adset", status: string) => void;
+  onEditBudget: (v: { id: string; type: "campaign" | "adset"; value: string } | null) => void;
+  onSaveBudget: () => void;
+  onDuplicate: (adset: AdSet) => void;
+  onToggleAdsetSort: (key: SortKey) => void;
+  formatBudget: (daily?: string, lifetime?: string) => string;
+  MetricCell: React.FC<{ value: number; suffix?: string; color?: string }>;
+  SortIcon: React.FC<{ sortKey: SortKey; current: { key: SortKey; dir: SortDir } }>;
+  metricColumns: { key: SortKey; label: string }[];
+}) {
+  return (
+    <>
+      <tr className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+        <td className="px-3 py-3">
+          <button
+            onClick={onToggleExpand}
+            className="p-1 rounded hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-all"
+          >
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+        </td>
+        <td className="px-3 py-3 font-medium text-white truncate max-w-[250px]" title={c.name}>{c.name}</td>
+        <td className="px-3 py-3 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <Switch checked={c.status === "ACTIVE"} onCheckedChange={() => onToggleStatus(c.id, "campaign", c.status)} />
+            <span className={cn(
+              "text-[10px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap",
+              c.status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-white/5 text-slate-400 border-white/10"
+            )}>
+              {c.status}
+            </span>
+          </div>
+        </td>
+        <td className="px-3 py-3 text-right text-sm text-slate-300">
+          {editBudget?.id === c.id ? (
+            <Input
+              className="ml-auto w-24 h-7 text-right bg-white/5 border-white/10"
+              value={editBudget.value}
+              onChange={(e) => onEditBudget({ ...editBudget, type: "campaign" as const, value: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && onSaveBudget()}
+              onBlur={onSaveBudget}
+              autoFocus
+            />
+          ) : (
+            <span
+              className="cursor-pointer hover:text-cyan-400 transition-colors whitespace-nowrap"
+              onClick={() => onEditBudget({ id: c.id, type: "campaign", value: String(parseFloat(c.daily_budget || "0") / 100) })}
+            >
+              {formatBudget(c.daily_budget, c.lifetime_budget)}
+            </span>
+          )}
+        </td>
+        <MetricCell value={m.spend} suffix=" SEK" />
+        <td className="px-3 py-3 text-right text-sm font-medium text-slate-200">{m.purchases || "-"}</td>
+        <MetricCell value={m.cpa} suffix=" SEK" />
+        <td className="px-3 py-3 text-right text-sm font-semibold">
+          <span className={cn(
+            m.roas >= 2 ? "text-emerald-400" : m.roas >= 1.42 ? "text-amber-400" : m.roas > 0 ? "text-red-400" : "text-slate-500"
+          )}>
+            {m.roas > 0 ? `${m.roas.toFixed(2)}x` : "-"}
+          </span>
+        </td>
+        <MetricCell value={m.ctr} suffix="%" />
+        <MetricCell value={m.cpc} suffix=" SEK" />
+        <MetricCell value={m.cpm} suffix=" SEK" />
+        <MetricCell value={m.hookRate} suffix="%" />
+        <td className="px-3 py-3">
+          <span className="font-mono text-[10px] text-slate-600">{c.id.slice(-6)}</span>
+        </td>
+      </tr>
+      {expanded && adsets.length > 0 && (
+        <>
+          {/* Adset sort header */}
+          <tr className="bg-white/[0.01] border-b border-white/5">
+            <td />
+            <td
+              className="pl-10 px-3 py-1.5 text-[9px] font-medium text-slate-600 uppercase tracking-wider cursor-pointer hover:text-slate-400 transition-colors select-none"
+              onClick={() => onToggleAdsetSort("name")}
+            >
+              Ad Set <SortIcon sortKey="name" current={adsetSort} />
+            </td>
+            <td
+              className="px-3 py-1.5 text-center text-[9px] font-medium text-slate-600 uppercase tracking-wider cursor-pointer hover:text-slate-400 transition-colors select-none"
+              onClick={() => onToggleAdsetSort("status")}
+            >
+              Status <SortIcon sortKey="status" current={adsetSort} />
+            </td>
+            <td className="px-3 py-1.5" />
+            {metricColumns.map((col) => (
+              <td
+                key={col.key}
+                className="px-3 py-1.5 text-right text-[9px] font-medium text-slate-600 uppercase tracking-wider cursor-pointer hover:text-slate-400 transition-colors select-none"
+                onClick={() => onToggleAdsetSort(col.key)}
+              >
+                {col.label} <SortIcon sortKey={col.key} current={adsetSort} />
+              </td>
+            ))}
+            <td />
+          </tr>
+          {adsets.map((as) => {
+            const am = adsetMetrics.get(as.id) || EMPTY_METRICS;
+            return (
+              <tr key={as.id} className="border-b border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-colors">
+                <td className="px-3 py-2.5" />
+                <td className="px-3 py-2.5 pl-10 text-slate-300 truncate max-w-[230px]" title={as.name}>
+                  <span className="text-slate-600 mr-1">{"\u2514"}</span>{as.name}
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  <div className="flex items-center justify-center gap-2">
+                    <Switch checked={as.status === "ACTIVE"} onCheckedChange={() => onToggleStatus(as.id, "adset", as.status)} />
+                    <span className={cn(
+                      "text-[10px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap",
+                      as.status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-white/5 text-slate-400 border-white/10"
+                    )}>
+                      {as.status}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-right text-sm">
+                  {editBudget?.id === as.id ? (
+                    <Input
+                      className="ml-auto w-24 h-7 text-right bg-white/5 border-white/10"
+                      value={editBudget.value}
+                      onChange={(e) => onEditBudget({ ...editBudget, type: "adset" as const, value: e.target.value })}
+                      onKeyDown={(e) => e.key === "Enter" && onSaveBudget()}
+                      onBlur={onSaveBudget}
+                      autoFocus
+                    />
+                  ) : (
+                    <span
+                      className="cursor-pointer text-slate-400 hover:text-cyan-400 transition-colors whitespace-nowrap"
+                      onClick={() => onEditBudget({ id: as.id, type: "adset", value: String(parseFloat(as.daily_budget || "0") / 100) })}
+                    >
+                      {formatBudget(as.daily_budget, as.lifetime_budget)}
+                    </span>
+                  )}
+                </td>
+                <MetricCell value={am.spend} suffix=" SEK" />
+                <td className="px-3 py-2.5 text-right text-sm font-medium text-slate-300">{am.purchases || "-"}</td>
+                <MetricCell value={am.cpa} suffix=" SEK" />
+                <td className="px-3 py-2.5 text-right text-sm font-semibold">
+                  <span className={cn(
+                    am.roas >= 2 ? "text-emerald-400" : am.roas >= 1.42 ? "text-amber-400" : am.roas > 0 ? "text-red-400" : "text-slate-500"
+                  )}>
+                    {am.roas > 0 ? `${am.roas.toFixed(2)}x` : "-"}
+                  </span>
+                </td>
+                <MetricCell value={am.ctr} suffix="%" />
+                <MetricCell value={am.cpc} suffix=" SEK" />
+                <MetricCell value={am.cpm} suffix=" SEK" />
+                <MetricCell value={am.hookRate} suffix="%" />
+                <td className="px-3 py-2.5">
+                  <button
+                    onClick={() => onDuplicate(as)}
+                    className="p-1.5 rounded hover:bg-cyan-500/10 text-slate-500 hover:text-cyan-400 transition-all"
+                    title="Duplicate to another campaign"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </>
+      )}
+    </>
   );
 }
