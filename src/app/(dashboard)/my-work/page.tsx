@@ -29,6 +29,8 @@ import {
   ShoppingCart,
   BarChart3,
   Loader2,
+  Undo2,
+  StickyNote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -77,9 +79,10 @@ export default function MyWorkPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"active" | "completed" | "posted" | "all">("active");
+  const [filter, setFilter] = useState<"active" | "review" | "all">("active");
   const [startingId, setStartingId] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [takingBackId, setTakingBackId] = useState<string | null>(null);
 
   // Upload state
   const [uploadingId, setUploadingId] = useState<string | null>(null);
@@ -136,6 +139,7 @@ export default function MyWorkPage() {
           filename: file.name,
           contentType: file.type,
           fileSize: file.size,
+          assignmentId,
         }),
       });
       if (!presignRes.ok) {
@@ -224,9 +228,8 @@ export default function MyWorkPage() {
   ].filter((a, i, self) => i === self.findIndex((t) => t.id === a.id));
 
   const filteredAssignments = allAssignments.filter((a) => {
-    if (filter === "active") return !["POSTED", "READY_FOR_POSTING"].includes(a.status);
-    if (filter === "completed") return a.status === "READY_FOR_POSTING";
-    if (filter === "posted") return a.status === "POSTED";
+    if (filter === "active") return a.status !== "READY_FOR_REVIEW";
+    if (filter === "review") return a.status === "READY_FOR_REVIEW";
     return true;
   });
 
@@ -241,10 +244,10 @@ export default function MyWorkPage() {
     return 0;
   });
 
-  const activeCount = allAssignments.filter((a) => !["POSTED", "READY_FOR_POSTING"].includes(a.status)).length;
+  const activeCount = allAssignments.filter((a) => a.status !== "READY_FOR_REVIEW").length;
   const inProgressCount = allAssignments.filter((a) => a.status === "EDITING_NOW").length;
   const revisionCount = allAssignments.filter((a) => a.status === "REVISION").length;
-  const postedCount = allAssignments.filter((a) => a.status === "POSTED").length;
+  const inReviewCount = allAssignments.filter((a) => a.status === "READY_FOR_REVIEW").length;
 
   const handleStartWorking = async (assignment: EditorAssignment) => {
     setStartingId(assignment.id);
@@ -272,6 +275,23 @@ export default function MyWorkPage() {
       console.error(err);
     } finally {
       setCompletingId(null);
+    }
+  };
+
+  const handleTakeBack = async (assignment: EditorAssignment) => {
+    setTakingBackId(assignment.id);
+    try {
+      const res = await fetch(`/api/assignments/${assignment.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "EDITING_NOW" }),
+      });
+      if (!res.ok) throw new Error("Failed to take back");
+      fetchAssignments();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTakingBackId(null);
     }
   };
 
@@ -304,7 +324,7 @@ export default function MyWorkPage() {
           { label: "Active Tasks", value: activeCount, icon: FileText, glow: "glow-cyan", iconBg: "bg-cyan-500/10", iconColor: "text-cyan-400" },
           { label: "In Progress", value: inProgressCount, icon: Timer, glow: "glow-amber", iconBg: "bg-amber-500/10", iconColor: "text-amber-400" },
           { label: "Need Revision", value: revisionCount, icon: AlertCircle, glow: "glow-purple", iconBg: "bg-orange-500/10", iconColor: "text-orange-400" },
-          { label: "Posted", value: postedCount, icon: BarChart3, glow: "glow-green", iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
+          { label: "In Review", value: inReviewCount, icon: CheckCircle, glow: "glow-green", iconBg: "bg-purple-500/10", iconColor: "text-purple-400" },
         ].map((stat) => (
           <div key={stat.label} className={cn("rounded-xl border bg-[#111827] p-4", stat.glow)}>
             <div className="flex items-center gap-3">
@@ -325,8 +345,7 @@ export default function MyWorkPage() {
         {(
           [
             { value: "active", label: "Active" },
-            { value: "posted", label: "Posted" },
-            { value: "completed", label: "Ready" },
+            { value: "review", label: "In Review" },
             { value: "all", label: "All" },
           ] as const
         ).map((tab) => (
@@ -369,11 +388,9 @@ export default function MyWorkPage() {
             <p className="text-slate-500 mt-1">
               {filter === "active"
                 ? "You don't have any active assignments right now"
-                : filter === "posted"
-                  ? "None of your videos have been posted yet"
-                  : filter === "completed"
-                    ? "No assignments ready for posting"
-                    : "No assignments found"}
+                : filter === "review"
+                  ? "No assignments waiting for review"
+                  : "No assignments found"}
             </p>
           </div>
         ) : (
@@ -385,8 +402,6 @@ export default function MyWorkPage() {
             const canStart = assignment.status === "READY_FOR_EDITING" || assignment.status === "REVISION";
             const canComplete = assignment.status === "EDITING_NOW";
             const canUpload = assignment.status === "EDITING_NOW" || assignment.status === "REVISION";
-            const isPosted = assignment.status === "POSTED";
-            const insight = isPosted ? getInsightForAssignment(assignment.id) : undefined;
 
             return (
               <div key={assignment.id} className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
@@ -422,19 +437,6 @@ export default function MyWorkPage() {
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
                               {new Date(assignment.dueDate).toLocaleDateString("sv-SE")}
-                            </span>
-                          </>
-                        )}
-                        {/* Show mini metrics for posted */}
-                        {isPosted && insight && insight.spend > 0 && (
-                          <>
-                            <span className="text-slate-700">|</span>
-                            <span className="text-emerald-400 font-medium">
-                              {insight.roas.toFixed(2)}x ROAS
-                            </span>
-                            <span className="text-slate-700">|</span>
-                            <span className="text-slate-300">
-                              {insight.spend.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK
                             </span>
                           </>
                         )}
@@ -493,6 +495,18 @@ export default function MyWorkPage() {
                             <h4 className="text-xs font-medium text-orange-400 uppercase tracking-wider mb-2">Revision Feedback</h4>
                             <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-3">
                               <p className="text-sm text-slate-300 whitespace-pre-wrap">{assignment.revisionFeedback}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {assignment.strategistNotes && (
+                          <div>
+                            <h4 className="text-xs font-medium text-cyan-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                              <StickyNote className="h-3.5 w-3.5" />
+                              Strategist Notes
+                            </h4>
+                            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                              <p className="text-sm text-slate-300 whitespace-pre-wrap">{assignment.strategistNotes}</p>
                             </div>
                           </div>
                         )}
@@ -587,54 +601,6 @@ export default function MyWorkPage() {
 
                       {/* Right — Script OR Performance */}
                       <div>
-                        {/* Performance metrics for posted assignments */}
-                        {isPosted && (
-                          <div className="mb-4">
-                            <h4 className="text-xs font-medium text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                              <BarChart3 className="h-3.5 w-3.5" />
-                              Performance (Last 7 days)
-                            </h4>
-                            {insightsLoading ? (
-                              <div className="rounded-lg border border-white/5 bg-[#0d1220] p-6 text-center">
-                                <Loader2 className="h-5 w-5 animate-spin text-slate-500 mx-auto" />
-                              </div>
-                            ) : insight && insight.spend > 0 ? (
-                              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
-                                <div className="grid grid-cols-2 gap-3">
-                                  {[
-                                    { label: "Spend", value: `${insight.spend.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK`, icon: DollarSign, color: "text-cyan-400" },
-                                    { label: "ROAS", value: `${insight.roas.toFixed(2)}x`, icon: TrendingUp, color: insight.roas >= 2 ? "text-emerald-400" : insight.roas >= 1 ? "text-amber-400" : "text-red-400" },
-                                    { label: "Purchases", value: insight.purchases.toString(), icon: ShoppingCart, color: "text-emerald-400" },
-                                    { label: "CPA", value: insight.cpa > 0 ? `${insight.cpa.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK` : "-", icon: Target, color: "text-blue-400" },
-                                    { label: "CTR", value: `${insight.ctr.toFixed(2)}%`, icon: Target, color: "text-slate-300" },
-                                    { label: "CPM", value: `${insight.cpm.toFixed(0)} SEK`, icon: DollarSign, color: "text-slate-300" },
-                                  ].map((metric) => (
-                                    <div key={metric.label} className="flex items-center gap-2">
-                                      <metric.icon className={cn("h-3.5 w-3.5", metric.color)} />
-                                      <div>
-                                        <p className="text-xs text-slate-500">{metric.label}</p>
-                                        <p className={cn("text-sm font-semibold", metric.color)}>{metric.value}</p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                                <div className="mt-3 pt-2 border-t border-emerald-500/10">
-                                  <p className="text-xs text-slate-500">
-                                    Revenue: <span className="text-emerald-400 font-medium">{insight.purchaseValue.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK</span>
-                                    {" | "}Impressions: <span className="text-slate-300">{insight.impressions.toLocaleString("sv-SE")}</span>
-                                  </p>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="rounded-lg border border-white/5 bg-[#0d1220] p-4 text-center">
-                                <p className="text-xs text-slate-500">
-                                  {insight ? "No spend data yet" : "Performance data unavailable"}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
                         {assignment.scriptContent && (
                           <div>
                             <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Script</h4>
@@ -690,6 +656,16 @@ export default function MyWorkPage() {
                         >
                           <CheckCircle className="h-4 w-4" />
                           Mark Ready for Review
+                        </button>
+                      )}
+                      {assignment.status === "READY_FOR_REVIEW" && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleTakeBack(assignment); }}
+                          disabled={takingBackId === assignment.id}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm font-medium text-amber-400 hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                        >
+                          <Undo2 className="h-4 w-4" />
+                          Take Back
                         </button>
                       )}
                       {assignment.status === "EDITING_NOW" && (

@@ -107,6 +107,7 @@ export const assignments = pgTable("assignments", {
   scriptContent: jsonb("script_content").$type<{ hooks: Array<{ id: string; label: string; eng: string; se: string }>; body: { eng: string; se: string } }>(),
   autoName: text("auto_name"),
   revisionFeedback: text("revision_feedback"),
+  strategistNotes: text("strategist_notes"),
   deliverableUrl: text("deliverable_url"),
   deliverableR2Key: text("deliverable_r2_key"),
   metaAdId: text("meta_ad_id"),

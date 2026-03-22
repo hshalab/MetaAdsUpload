@@ -43,6 +43,7 @@ import {
   CheckCircle2,
   ExternalLink,
   FolderOpen,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -70,6 +71,8 @@ interface AssignmentDetailProps {
   assignment: EditorAssignment;
   onEdit: () => void;
   onStatusChange: (status: AssignmentStatus, feedback?: string) => void;
+  onUpdateNotes?: (notes: string) => void;
+  onDelete?: () => void;
 }
 
 export function AssignmentDetail({
@@ -78,9 +81,15 @@ export function AssignmentDetail({
   assignment,
   onEdit,
   onStatusChange,
+  onUpdateNotes,
+  onDelete,
 }: AssignmentDetailProps) {
   const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [revisionFeedback, setRevisionFeedback] = useState("");
+  const [strategistNotes, setStrategistNotes] = useState(assignment.strategistNotes || "");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const status = STATUS_CONFIG[assignment.status];
   const StatusIcon = status.icon;
@@ -114,9 +123,16 @@ export function AssignmentDetail({
                   </p>
                 )}
               </div>
-              <Button variant="outline" size="icon" onClick={onEdit}>
-                <Edit2 className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={onEdit}>
+                  <Edit2 className="h-4 w-4" />
+                </Button>
+                {onDelete && (
+                  <Button variant="outline" size="icon" className="text-red-400 hover:text-red-300 hover:border-red-500/30" onClick={() => setShowDeleteConfirm(true)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           </DialogHeader>
 
@@ -206,6 +222,42 @@ export function AssignmentDetail({
                   </CardContent>
                 </Card>
               )}
+
+              {/* Strategist Notes */}
+              <Card className="border-cyan-500/20 bg-cyan-500/5">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-cyan-400 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Creative Strategist Notes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    value={strategistNotes}
+                    onChange={(e) => setStrategistNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Add notes, thoughts, or creative direction..."
+                    className="bg-transparent border-cyan-500/20 focus:border-cyan-500/40 resize-none"
+                  />
+                  {strategistNotes !== (assignment.strategistNotes || "") && (
+                    <Button
+                      size="sm"
+                      className="mt-2 bg-cyan-600 hover:bg-cyan-700"
+                      disabled={savingNotes}
+                      onClick={async () => {
+                        setSavingNotes(true);
+                        try {
+                          onUpdateNotes?.(strategistNotes);
+                        } finally {
+                          setSavingNotes(false);
+                        }
+                      }}
+                    >
+                      {savingNotes ? "Saving..." : "Save Notes"}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Properties Grid */}
               <div className="grid grid-cols-2 gap-6">
@@ -520,6 +572,42 @@ export function AssignmentDetail({
               disabled={!revisionFeedback.trim()}
             >
               Send to Revision
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-400" />
+              Delete Assignment
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete <span className="font-medium text-foreground">{assignment.autoName || assignment.title}</span>? This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true);
+                try {
+                  onDelete?.();
+                  setShowDeleteConfirm(false);
+                  onOpenChange(false);
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

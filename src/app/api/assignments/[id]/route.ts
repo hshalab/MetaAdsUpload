@@ -87,10 +87,26 @@ export async function PUT(
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
     const { id } = await params;
     const body = await request.json();
+
+    // Allow creative strategists to update only strategistNotes
+    if (session.user.role !== "admin") {
+      if (body.strategistNotes !== undefined && Object.keys(body).length === 1) {
+        const [current] = await db.select().from(schema.assignments).where(eq(schema.assignments.id, id));
+        if (!current) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+        if (current.creativeStrategistId !== session.user.id) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        const [updated] = await db
+          .update(schema.assignments)
+          .set({ strategistNotes: body.strategistNotes, updatedAt: new Date() })
+          .where(eq(schema.assignments.id, id))
+          .returning();
+        return NextResponse.json(updated);
+      }
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const [current] = await db.select().from(schema.assignments).where(eq(schema.assignments.id, id));
     if (!current) {
@@ -102,6 +118,7 @@ export async function PUT(
       offerTypeId, scriptStructureId, customerAvatarIds, landingPage, assignedToId,
       creativeStrategistId, priority, dueDate, estimatedMinutes,
       videoLengthSeconds, description, scriptContent, revisionFeedback,
+      strategistNotes,
     } = body;
 
     // H2: Input validation — normalize priority to lowercase for DB
@@ -150,6 +167,7 @@ export async function PUT(
     if (description !== undefined) updateData.description = description;
     if (scriptContent !== undefined) updateData.scriptContent = scriptContent;
     if (revisionFeedback !== undefined) updateData.revisionFeedback = revisionFeedback;
+    if (strategistNotes !== undefined) updateData.strategistNotes = strategistNotes;
 
     // Regenerate auto-name
     const autoName = await generateAutoName({

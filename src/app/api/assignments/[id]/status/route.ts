@@ -43,6 +43,7 @@ export async function PATCH(
       const allowedTransitions: Record<string, string[]> = {
         ready_for_editing: ["editing_now"],
         editing_now: ["ready_for_review"],
+        ready_for_review: ["editing_now"],
         revision: ["ready_for_review"],
       };
       if (!allowedTransitions[current.status]?.includes(dbStatus)) {

@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { db, schema } from "@/db";
+import { eq } from "drizzle-orm";
 
 function getR2Client() {
   const accountId = process.env.R2_ACCOUNT_ID;
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json();
-    const { filename, contentType, fileSize } = body;
+    const { filename, contentType, fileSize, assignmentId } = body;
 
     if (!filename || !contentType) {
       return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
@@ -71,7 +73,27 @@ export async function POST(request: NextRequest) {
     // Generate unique key
     const timestamp = Date.now();
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const key = `deliverables/${timestamp}-${sanitizedFilename}`;
+
+    let key = `deliverables/${timestamp}-${sanitizedFilename}`;
+
+    // If assignmentId provided, build folder structure: editor/Batch_N/file
+    if (assignmentId) {
+      const [assignment] = await db
+        .select({
+          batchNumber: schema.assignments.batchNumber,
+          editorName: schema.users.name,
+        })
+        .from(schema.assignments)
+        .innerJoin(schema.users, eq(schema.users.id, schema.assignments.assignedToId))
+        .where(eq(schema.assignments.id, assignmentId))
+        .limit(1);
+
+      if (assignment) {
+        const sanitizedEditorName = assignment.editorName.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const batchFolder = `Batch_${assignment.batchNumber}`;
+        key = `deliverables/${sanitizedEditorName}/${batchFolder}/${timestamp}-${sanitizedFilename}`;
+      }
+    }
 
     const client = getR2Client();
     const command = new PutObjectCommand({

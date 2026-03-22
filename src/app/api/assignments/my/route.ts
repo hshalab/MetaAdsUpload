@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { eq, and, sql, asc, inArray } from "drizzle-orm";
+import { eq, and, sql, asc, inArray, notInArray } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -13,7 +13,12 @@ export async function GET() {
     const assignments = await db
       .select()
       .from(schema.assignments)
-      .where(eq(schema.assignments.assignedToId, userId))
+      .where(
+        and(
+          eq(schema.assignments.assignedToId, userId),
+          notInArray(schema.assignments.status, ["ready_for_posting", "posted"])
+        )
+      )
       .orderBy(asc(schema.assignments.priority), asc(schema.assignments.dueDate));
 
     // Get time sums
@@ -75,15 +80,14 @@ export async function GET() {
     const needsAttention = enriched.filter(a => a.status === "REVISION");
     const active = enriched.filter(a => a.status === "EDITING_NOW");
     const pending = enriched.filter(a => a.status === "READY_FOR_EDITING");
-    const inReview = enriched.filter(a => ["READY_FOR_REVIEW", "READY_FOR_POSTING"].includes(a.status));
-    const posted = enriched.filter(a => a.status === "POSTED");
+    const inReview = enriched.filter(a => a.status === "READY_FOR_REVIEW");
 
     return NextResponse.json({
       needsAttention,
       active,
       pending,
       inReview,
-      posted,
+      posted: [],
       total: assignments.length,
     });
   } catch (error) {

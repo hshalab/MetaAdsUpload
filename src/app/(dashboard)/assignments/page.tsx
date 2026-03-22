@@ -414,6 +414,21 @@ export default function AssignmentsPage() {
               fetchBoard();
             });
           }}
+          onUpdateNotes={(notes) => {
+            fetch(`/api/assignments/${viewingAssignment.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ strategistNotes: notes }),
+            }).then(() => fetchBoard());
+          }}
+          onDelete={() => {
+            fetch(`/api/assignments/${viewingAssignment.id}`, {
+              method: "DELETE",
+            }).then(() => {
+              setViewingAssignment(null);
+              fetchBoard();
+            });
+          }}
         />
       )}
 

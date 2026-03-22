@@ -84,6 +84,7 @@ export interface EditorAssignment {
   scriptContent: ScriptContent | null;
   autoName: string | null;
   revisionFeedback: string | null;
+  strategistNotes: string | null;
   deliverableUrl: string | null;
   deliverableR2Key: string | null;
   metaAdId: string | null;
