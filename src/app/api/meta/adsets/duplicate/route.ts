@@ -4,6 +4,8 @@ import { metaApi, getAdAccountId } from "@/lib/meta/client";
 import { createAdSet } from "@/lib/meta/adsets";
 import { createAd } from "@/lib/meta/ads";
 
+export const dynamic = "force-dynamic";
+
 /**
  * POST /api/meta/adsets/duplicate
  *

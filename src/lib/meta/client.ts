@@ -130,7 +130,7 @@ export async function metaApi<T = unknown>(
     Authorization: `Bearer ${token}`,
   };
 
-  const fetchOptions: RequestInit = { method, headers };
+  const fetchOptions: RequestInit = { method, headers, cache: "no-store" };
   if (body) {
     if (body instanceof FormData) {
       fetchOptions.body = body;

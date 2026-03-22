@@ -3,6 +3,8 @@ import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { guardAdmin } from "@/lib/auth-helpers";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const { error } = await guardAdmin();
   if (error) return error;

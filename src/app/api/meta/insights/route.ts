@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { getInsights, extractPurchases, extractPurchaseValue, calculateROAS } from "@/lib/meta/insights";
 import { getCampaigns } from "@/lib/meta/campaigns";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();

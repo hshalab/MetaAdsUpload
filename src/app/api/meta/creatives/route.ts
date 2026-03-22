@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { uploadImage, uploadVideo } from "@/lib/meta/creatives";
 import { db, schema } from "@/db";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     // H8: Auth + admin check

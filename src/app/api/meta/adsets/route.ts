@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAdSets, createAdSet, updateAdSet } from "@/lib/meta/adsets";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     // H8: Auth + admin check

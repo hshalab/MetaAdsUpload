@@ -4,6 +4,8 @@ import { getCampaigns, createCampaign, updateCampaign } from "@/lib/meta/campaig
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     // H8: Auth + admin check

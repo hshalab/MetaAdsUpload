@@ -6,6 +6,8 @@ import { getCampaigns } from "@/lib/meta/campaigns";
 import { getInsights, extractPurchases, extractPurchaseValue, calculateROAS } from "@/lib/meta/insights";
 import { format, subDays } from "date-fns";
 
+export const dynamic = "force-dynamic";
+
 // ROAS thresholds
 const BREAKEVEN_ROAS = 1.42;
 const HOLD_ROAS = 1.7;
