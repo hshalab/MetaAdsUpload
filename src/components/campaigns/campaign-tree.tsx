@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import {
@@ -120,6 +120,10 @@ export function CampaignTree() {
   const [duplicateName, setDuplicateName] = useState("");
   const [duplicating, setDuplicating] = useState(false);
 
+  // Cache: insights keyed by "since_until", adset insights keyed by "campaignId_since_until"
+  const insightsCache = useRef<Map<string, Map<string, Metrics>>>(new Map());
+  const adsetInsightsCache = useRef<Map<string, Map<string, Metrics>>>(new Map());
+
   const getDateRange = useCallback(() => {
     const days = datePreset === "today" ? 0 : parseInt(datePreset);
     const since = format(days === 0 ? new Date() : subDays(new Date(), days), "yyyy-MM-dd");
@@ -127,86 +131,142 @@ export function CampaignTree() {
     return { since, until };
   }, [datePreset]);
 
-  const fetchCampaigns = useCallback(async () => {
+  const dateKey = useMemo(() => {
+    const { since, until } = getDateRange();
+    return `${since}_${until}`;
+  }, [getDateRange]);
+
+  const parseInsightsResponse = (insightsData: Record<string, unknown>): Map<string, Metrics> => {
+    const metricsMap = new Map<string, Metrics>();
+    for (const c of ((insightsData.campaigns || []) as Array<Record<string, number | string>>)) {
+      metricsMap.set(c.id as string, {
+        spend: (c.spend as number) || 0,
+        impressions: (c.impressions as number) || 0,
+        clicks: (c.linkClicks as number) || 0,
+        purchases: (c.purchases as number) || 0,
+        purchaseValue: (c.purchaseValue as number) || ((c.roas as number) && (c.spend as number) ? (c.roas as number) * (c.spend as number) : 0),
+        roas: (c.roas as number) || 0,
+        ctr: (c.ctr as number) || 0,
+        cpc: (c.cpc as number) || 0,
+        cpm: (c.cpm as number) || 0,
+        cpa: (c.cpa as number) || ((c.purchases as number) > 0 ? (c.spend as number) / (c.purchases as number) : 0),
+        hookRate: (c.hookRate as number) || 0,
+      });
+    }
+    return metricsMap;
+  };
+
+  const fetchInsights = useCallback(async (force: boolean) => {
+    const { since, until } = getDateRange();
+    const key = `${since}_${until}`;
+
+    // Use cache if available and not forcing refresh
+    if (!force && insightsCache.current.has(key)) {
+      setCampaignMetrics(insightsCache.current.get(key)!);
+      return;
+    }
+
+    const insightsRes = await fetch(`/api/meta/insights?from=${since}&to=${until}`);
+    if (!insightsRes.ok) {
+      const errData = await insightsRes.json().catch(() => ({}));
+      const errMsg = (errData as { error?: string }).error || `Insights API returned ${insightsRes.status}`;
+      console.error("Insights fetch failed:", errMsg);
+      setInsightsError(errMsg);
+      return;
+    }
+    const insightsData = await insightsRes.json();
+    const metricsMap = parseInsightsResponse(insightsData);
+    insightsCache.current.set(key, metricsMap);
+    setCampaignMetrics(metricsMap);
+  }, [getDateRange]);
+
+  const fetchAll = useCallback(async (force: boolean) => {
     setLoading(true);
     setInsightsError(null);
     try {
       const res = await fetch("/api/meta/campaigns");
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Campaigns API returned ${res.status}`);
+        throw new Error((err as { error?: string }).error || `Campaigns API returned ${res.status}`);
       }
       const data = await res.json();
       const rawCampaigns: Campaign[] = data.data || [];
       setCampaigns(rawCampaigns);
-
-      // Fetch campaign-level insights
-      const { since, until } = getDateRange();
-      const insightsRes = await fetch(`/api/meta/insights?from=${since}&to=${until}`);
-      if (!insightsRes.ok) {
-        const errData = await insightsRes.json().catch(() => ({}));
-        const errMsg = errData.error || `Insights API returned ${insightsRes.status}`;
-        console.error("Insights fetch failed:", errMsg);
-        setInsightsError(errMsg);
-        // Don't throw — still show campaigns without metrics
-      } else {
-        const insightsData = await insightsRes.json();
-        console.log("[CampaignTree] Insights response:", {
-          campaignCount: insightsData.campaigns?.length,
-          summarySpend: insightsData.summary?.spend,
-        });
-
-        const metricsMap = new Map<string, Metrics>();
-        for (const c of (insightsData.campaigns || [])) {
-          metricsMap.set(c.id, {
-            spend: c.spend || 0,
-            impressions: c.impressions || 0,
-            clicks: c.linkClicks || 0,
-            purchases: c.purchases || 0,
-            purchaseValue: c.purchaseValue || (c.roas && c.spend ? c.roas * c.spend : 0),
-            roas: c.roas || 0,
-            ctr: c.ctr || 0,
-            cpc: c.cpc || 0,
-            cpm: c.cpm || 0,
-            cpa: c.cpa || (c.purchases > 0 ? c.spend / c.purchases : 0),
-            hookRate: c.hookRate || 0,
-          });
-        }
-        setCampaignMetrics(metricsMap);
-      }
+      await fetchInsights(force);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to fetch campaigns");
     } finally {
       setLoading(false);
     }
-  }, [getDateRange]);
+  }, [fetchInsights]);
 
-  useEffect(() => { fetchCampaigns(); }, [fetchCampaigns]);
+  // Initial load
+  const didMount = useRef(false);
+  useEffect(() => {
+    if (!didMount.current) {
+      didMount.current = true;
+      fetchAll(true);
+    }
+  }, [fetchAll]);
 
-  const fetchAdsetInsights = async (campaignId: string, adsetList: AdSet[]) => {
+  // When date range changes, use cache or fetch
+  useEffect(() => {
+    if (!didMount.current) return;
+    fetchInsights(false);
+  }, [dateKey, fetchInsights]);
+
+  const handleRefresh = useCallback(() => {
+    // Clear all caches and re-fetch everything
+    insightsCache.current.clear();
+    adsetInsightsCache.current.clear();
+    setAdsets({});
+    setAdsetMetrics(new Map());
+    fetchAll(true);
+  }, [fetchAll]);
+
+  const fetchAdsetInsights = async (campaignId: string, adsetList: AdSet[], force: boolean = false) => {
     try {
       const { since, until } = getDateRange();
+      const cacheKey = `${since}_${until}`;
+
+      // Check cache first
+      if (!force && adsetInsightsCache.current.has(cacheKey)) {
+        const cached = adsetInsightsCache.current.get(cacheKey)!;
+        const metricsMap = new Map(adsetMetrics);
+        for (const as of adsetList) {
+          if (cached.has(as.id)) metricsMap.set(as.id, cached.get(as.id)!);
+        }
+        setAdsetMetrics(metricsMap);
+        return;
+      }
+
       const res = await fetch(`/api/meta/scaling?status=ALL&since=${since}&until=${until}`);
       if (!res.ok) return;
       const data = await res.json();
+
+      // Build full cache for this date range
+      const fullCache = new Map<string, Metrics>();
       const metricsMap = new Map(adsetMetrics);
       for (const a of (data.adsets || [])) {
+        const m: Metrics = {
+          spend: a.spend || 0,
+          impressions: a.impressions || 0,
+          clicks: a.clicks || 0,
+          purchases: a.purchases || 0,
+          purchaseValue: a.purchaseValue || 0,
+          roas: a.roas || 0,
+          ctr: a.ctr || 0,
+          cpc: a.cpc || 0,
+          cpm: a.cpm || 0,
+          cpa: a.cpa || 0,
+          hookRate: 0,
+        };
+        fullCache.set(a.id, m);
         if (adsetList.some(as => as.id === a.id)) {
-          metricsMap.set(a.id, {
-            spend: a.spend || 0,
-            impressions: a.impressions || 0,
-            clicks: a.clicks || 0,
-            purchases: a.purchases || 0,
-            purchaseValue: a.purchaseValue || 0,
-            roas: a.roas || 0,
-            ctr: a.ctr || 0,
-            cpc: a.cpc || 0,
-            cpm: a.cpm || 0,
-            cpa: a.cpa || 0,
-            hookRate: 0,
-          });
+          metricsMap.set(a.id, m);
         }
       }
+      adsetInsightsCache.current.set(cacheKey, fullCache);
       setAdsetMetrics(metricsMap);
     } catch {
       // Silently fail — metrics just won't show
@@ -240,7 +300,7 @@ export function CampaignTree() {
         body: JSON.stringify({ id, status: newStatus }),
       });
       toast.success(`${type === "campaign" ? "Campaign" : "Ad Set"} ${newStatus.toLowerCase()}`);
-      fetchCampaigns();
+      handleRefresh();
     } catch {
       toast.error("Failed to update status");
     }
@@ -258,7 +318,7 @@ export function CampaignTree() {
       });
       toast.success("Budget updated");
       setEditBudget(null);
-      fetchCampaigns();
+      handleRefresh();
     } catch {
       toast.error("Failed to update budget");
     }
@@ -374,7 +434,7 @@ export function CampaignTree() {
           <div>
             <p className="text-sm font-medium text-amber-400">Failed to load metrics</p>
             <p className="text-xs text-slate-400 mt-1">{insightsError}</p>
-            <button onClick={fetchCampaigns} className="text-xs text-cyan-400 hover:underline mt-2">Try again</button>
+            <button onClick={handleRefresh} className="text-xs text-cyan-400 hover:underline mt-2">Try again</button>
           </div>
         </div>
       )}
@@ -405,7 +465,7 @@ export function CampaignTree() {
           ))}
         </div>
         <button
-          onClick={fetchCampaigns}
+          onClick={handleRefresh}
           disabled={loading}
           className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all disabled:opacity-50"
         >
