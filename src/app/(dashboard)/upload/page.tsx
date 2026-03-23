@@ -492,9 +492,45 @@ export default function UploadPage() {
     setter((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
   };
 
-  // ─── Upload to R2 via server-side proxy (avoids CORS) ──────────────────
+  // ─── Upload to R2 (presigned URL for large files, proxy fallback for small) ─
 
-  const uploadFileToR2 = async (file: File): Promise<{ key: string; url: string }> => {
+  const PROXY_SIZE_LIMIT = 4 * 1024 * 1024; // 4MB — Vercel body limit is 4.5MB
+
+  const uploadViaPresignedUrl = async (file: File): Promise<{ key: string; url: string }> => {
+    // Step 1: Get presigned URL from server
+    const presignRes = await fetch("/api/upload/presign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        contentType: file.type,
+        fileSize: file.size,
+        purpose: "library",
+      }),
+    });
+
+    if (!presignRes.ok) {
+      const err = await presignRes.json();
+      throw new Error(err.error || "Kunde inte hämta presigned URL");
+    }
+
+    const { uploadUrl, publicUrl, key } = await presignRes.json();
+
+    // Step 2: PUT file directly to R2 via presigned URL
+    const putRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+
+    if (!putRes.ok) {
+      throw new Error(`R2 PUT misslyckades: ${putRes.status} ${putRes.statusText}`);
+    }
+
+    return { key, url: publicUrl };
+  };
+
+  const uploadViaProxy = async (file: File): Promise<{ key: string; url: string }> => {
     const formData = new FormData();
     formData.append("file", file);
 
@@ -510,6 +546,21 @@ export default function UploadPage() {
 
     const { key, publicUrl } = await res.json();
     return { key, url: publicUrl };
+  };
+
+  const uploadFileToR2 = async (file: File): Promise<{ key: string; url: string }> => {
+    // Large files MUST use presigned URLs (Vercel proxy has 4.5MB limit)
+    if (file.size > PROXY_SIZE_LIMIT) {
+      return uploadViaPresignedUrl(file);
+    }
+
+    // Small files: try presigned URL first, fall back to proxy
+    try {
+      return await uploadViaPresignedUrl(file);
+    } catch {
+      console.warn("Presigned URL upload failed, falling back to proxy");
+      return uploadViaProxy(file);
+    }
   };
 
   // ─── Build payload ──────────────────────────────────────────────────────
