@@ -5,8 +5,12 @@ import { uploadImage, uploadVideo, createAdCreative } from "@/lib/meta/creatives
 import { createAdSet } from "@/lib/meta/adsets";
 import { createAd } from "@/lib/meta/ads";
 import { getPageId, getPixelId, metaApi, getAdAccountId } from "@/lib/meta/client";
+import { db, schema } from "@/db";
+import { eq } from "drizzle-orm";
 
 export const maxDuration = 300; // 5 minutes for large video uploads
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getR2Client() {
   const accountId = process.env.R2_ACCOUNT_ID;
@@ -53,15 +57,7 @@ async function uploadVideoByUrl(url: string, filename: string): Promise<string> 
   return result.id;
 }
 
-// Determine if we should use Dynamic Creative (multiple headlines or texts)
-function isDynamicCreative(adCopy: AdCopyInput): boolean {
-  const headlineCount = Array.isArray(adCopy.headlines) ? adCopy.headlines.filter(Boolean).length : 0;
-  const textCount = Array.isArray(adCopy.primaryTexts) ? adCopy.primaryTexts.filter(Boolean).length : 0;
-  return headlineCount > 1 || textCount > 1;
-}
-
 interface AdCopyInput {
-  // Support both single values and arrays
   headline?: string;
   headlines?: string[];
   primaryText?: string;
@@ -70,7 +66,21 @@ interface AdCopyInput {
   ctaType: string;
 }
 
+async function updateJob(jobId: number, data: Record<string, unknown>) {
+  try {
+    await db
+      .update(schema.uploadJobs)
+      .set(data)
+      .where(eq(schema.uploadJobs.id, jobId));
+  } catch (e) {
+    console.error("Failed to update upload job:", e);
+  }
+}
+
+// ─── Main handler ────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
+  let jobId: number | undefined;
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -110,43 +120,65 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Normalize ad copy — support both single and array formats
-    const headlinesArr = (adCopy.headlines?.filter(Boolean) || (adCopy.headline ? [adCopy.headline] : []));
-    const textsArr = (adCopy.primaryTexts?.filter(Boolean) || (adCopy.primaryText ? [adCopy.primaryText] : []));
+    // Create upload job record
+    const [job] = await db
+      .insert(schema.uploadJobs)
+      .values({
+        filename: filename || "unknown",
+        mediaType: mediaType || "video",
+        status: "uploading_meta",
+        currentStep: 1,
+        totalSteps: 4,
+        stepLabel: "Uploading media to Meta...",
+        r2Key,
+        r2Url,
+        campaignId,
+        config: { adCopy, adsetConfig, adName: adNameValue },
+      })
+      .returning();
+
+    jobId = job.id;
+
+    // Normalize ad copy
+    const headlinesArr = adCopy.headlines?.filter(Boolean) || (adCopy.headline ? [adCopy.headline] : []);
+    const textsArr = adCopy.primaryTexts?.filter(Boolean) || (adCopy.primaryText ? [adCopy.primaryText] : []);
     const useDynamic = headlinesArr.length > 1 || textsArr.length > 1;
 
     const results: Record<string, string> = {};
 
-    // Step 1: Upload media to Meta
+    // ─── Step 1: Upload media to Meta ─────────────────────────────────────
+    await updateJob(jobId, { currentStep: 1, stepLabel: `Uploading ${mediaType} to Meta...` });
+
     let videoId: string | undefined;
     let imageHash: string | undefined;
 
     if (mediaType === "video") {
-      // Try file_url first (Meta downloads directly from R2 — faster)
       try {
         videoId = await uploadVideoByUrl(r2Url, filename);
       } catch {
-        // Fallback: download from R2 and upload buffer
         const { buffer } = await downloadFromR2(r2Key);
         const result = await uploadVideo(buffer, filename);
         videoId = result.id;
       }
       results.videoId = videoId;
+      await updateJob(jobId, { videoId });
     } else {
       const { buffer } = await downloadFromR2(r2Key);
       const result = await uploadImage(buffer, filename);
       imageHash = result.hash;
       results.imageHash = imageHash;
+      await updateJob(jobId, { imageHash });
     }
 
-    // Step 2: Create Ad Creative
+    // ─── Step 2: Create Ad Creative ───────────────────────────────────────
+    await updateJob(jobId, { currentStep: 2, stepLabel: "Creating ad creative..." });
+
     const pageId = await getPageId();
     const creativeName = `${filename.replace(/\.[^.]+$/, "")} ${new Date().toISOString().split("T")[0]}`;
 
     let creativePayload: Record<string, unknown>;
 
     if (useDynamic) {
-      // Dynamic Creative — uses asset_feed_spec for A/B testing multiple headlines/texts
       creativePayload = {
         name: creativeName,
         object_story_spec: { page_id: pageId },
@@ -163,7 +195,6 @@ export async function POST(request: NextRequest) {
         },
       };
     } else {
-      // Standard Creative — single headline/text
       const firstHeadline = headlinesArr[0] || "";
       const firstText = textsArr[0] || "";
 
@@ -198,8 +229,11 @@ export async function POST(request: NextRequest) {
     );
     results.creativeId = adCreative.id;
     if (useDynamic) results.dynamicCreative = "true";
+    await updateJob(jobId, { creativeId: adCreative.id });
 
-    // Step 3: Use existing or create new ad set
+    // ─── Step 3: Create or reuse ad set ───────────────────────────────────
+    await updateJob(jobId, { currentStep: 3, stepLabel: "Setting up ad set..." });
+
     let adsetId = existingAdsetId;
 
     if (!adsetId && adsetConfig) {
@@ -218,7 +252,6 @@ export async function POST(request: NextRequest) {
           : undefined,
       };
 
-      // If dynamic creative, tell Meta this ad set uses it
       if (useDynamic) {
         adsetParams.is_dynamic_creative = true;
       }
@@ -231,10 +264,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (!adsetId) {
+      await updateJob(jobId, {
+        status: "failed",
+        error: "No ad set ID and no ad set config provided",
+        stepLabel: "Failed — no ad set",
+      });
       return NextResponse.json({ error: "No ad set ID and no ad set config provided" }, { status: 400 });
     }
 
-    // Step 4: Create Ad
+    await updateJob(jobId, { adsetId });
+
+    // ─── Step 4: Create Ad ────────────────────────────────────────────────
+    await updateJob(jobId, { currentStep: 4, stepLabel: "Creating ad..." });
+
     const ad = await createAd({
       adset_id: adsetId,
       name: adNameValue || creativeName,
@@ -243,12 +285,28 @@ export async function POST(request: NextRequest) {
     });
     results.adId = ad.id;
 
-    return NextResponse.json({ success: true, ...results });
+    // Mark completed
+    await updateJob(jobId, {
+      status: "completed",
+      currentStep: 4,
+      stepLabel: "Done!",
+      adId: ad.id,
+      completedAt: new Date(),
+    });
+
+    return NextResponse.json({ success: true, jobId, ...results });
   } catch (error) {
     console.error("Upload from R2 error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Upload failed" },
-      { status: 500 }
-    );
+    const errMsg = error instanceof Error ? error.message : "Upload failed";
+
+    if (jobId) {
+      await updateJob(jobId, {
+        status: "failed",
+        error: errMsg,
+        stepLabel: "Failed",
+      });
+    }
+
+    return NextResponse.json({ error: errMsg, jobId }, { status: 500 });
   }
 }

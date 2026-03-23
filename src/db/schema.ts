@@ -310,14 +310,20 @@ export const ruleExecutions = pgTable("rule_executions", {
 
 export const uploadJobs = pgTable("upload_jobs", {
   id: serial("id").primaryKey(),
-  status: text("status").notNull().default("pending"), // "pending" | "uploading" | "completed" | "failed"
-  totalSteps: integer("total_steps").default(5),
+  filename: text("filename").notNull().default(""),
+  mediaType: text("media_type").default("video"), // "video" | "image"
+  status: text("status").notNull().default("pending"), // "pending" | "uploading_r2" | "uploading_meta" | "completed" | "failed"
+  totalSteps: integer("total_steps").default(4),
   currentStep: integer("current_step").default(0),
   stepLabel: text("step_label"),
+  r2Key: text("r2_key"),
+  r2Url: text("r2_url"),
   campaignId: text("campaign_id"),
   adsetId: text("adset_id"),
   adId: text("ad_id"),
   creativeId: text("creative_id"),
+  videoId: text("video_id"),
+  imageHash: text("image_hash"),
   config: jsonb("config").$type<Record<string, unknown>>().default({}),
   error: text("error"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -23,6 +23,9 @@ import {
   Minus,
   LayoutTemplate,
   Zap,
+  History,
+  ExternalLink,
+  Clock,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -94,9 +97,38 @@ interface UploadJob {
   mediaType: "video" | "image";
   file?: File;
   result?: Record<string, string>;
+  dbJobId?: number; // DB job ID for polling
+}
+
+interface DbJob {
+  id: number;
+  filename: string;
+  mediaType: string;
+  status: string;
+  totalSteps: number;
+  currentStep: number;
+  stepLabel: string;
+  r2Key?: string;
+  r2Url?: string;
+  campaignId?: string;
+  adsetId?: string;
+  adId?: string;
+  creativeId?: string;
+  videoId?: string;
+  imageHash?: string;
+  error?: string;
+  createdAt: string;
+  completedAt?: string;
 }
 
 const PREFS_KEY = "meta-upload-prefs";
+
+const STEP_LABELS = [
+  "Uploading media to Meta",
+  "Creating ad creative",
+  "Setting up ad set",
+  "Creating ad",
+];
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
@@ -135,6 +167,11 @@ export default function UploadPage() {
   const [jobs, setJobs] = useState<UploadJob[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Upload history
+  const [history, setHistory] = useState<DbJob[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   // Computer upload
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -147,6 +184,9 @@ export default function UploadPage() {
   const [r2Loading, setR2Loading] = useState(false);
   const [r2Selected, setR2Selected] = useState<R2File[]>([]);
   const [r2PathStack, setR2PathStack] = useState<string[]>([""]);
+
+  // Polling ref
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ─── Load saved preferences ─────────────────────────────────────────────
 
@@ -185,7 +225,6 @@ export default function UploadPage() {
           const tplData = await tplRes.json();
           const tpls: Template[] = tplData.data || tplData || [];
           setTemplates(tpls);
-          // Auto-select default template if none saved
           const saved = localStorage.getItem(PREFS_KEY);
           const savedId = saved ? JSON.parse(saved).templateId : null;
           if (savedId && tpls.some((t) => t.id === savedId)) {
@@ -259,6 +298,85 @@ export default function UploadPage() {
       }
     })();
   }, [selectedCampaignId]);
+
+  // ─── Poll for active job status ─────────────────────────────────────────
+
+  useEffect(() => {
+    const activeDbJobs = jobs.filter(
+      (j) => j.dbJobId && (j.status === "uploading_meta" || j.status === "uploading_r2")
+    );
+
+    if (activeDbJobs.length === 0) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    if (pollingRef.current) return; // already polling
+
+    pollingRef.current = setInterval(async () => {
+      for (const job of activeDbJobs) {
+        if (!job.dbJobId) continue;
+        try {
+          const res = await fetch(`/api/upload-jobs?id=${job.dbJobId}`);
+          if (!res.ok) continue;
+          const dbJob: DbJob = await res.json();
+
+          setJobs((prev) =>
+            prev.map((j) => {
+              if (j.id !== job.id) return j;
+              if (dbJob.status === "completed") {
+                return {
+                  ...j,
+                  status: "completed",
+                  step: "Done!",
+                  result: {
+                    adId: dbJob.adId || "",
+                    creativeId: dbJob.creativeId || "",
+                    adsetId: dbJob.adsetId || "",
+                    videoId: dbJob.videoId || "",
+                  },
+                };
+              }
+              if (dbJob.status === "failed") {
+                return { ...j, status: "failed", step: "Failed", error: dbJob.error };
+              }
+              return {
+                ...j,
+                step: dbJob.stepLabel || `Step ${dbJob.currentStep}/${dbJob.totalSteps}`,
+              };
+            })
+          );
+        } catch { /* ignore polling errors */ }
+      }
+    }, 2000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [jobs]);
+
+  // ─── Fetch upload history ───────────────────────────────────────────────
+
+  const fetchHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const res = await fetch("/api/upload-jobs");
+      if (res.ok) {
+        const { data } = await res.json();
+        setHistory(data || []);
+      }
+    } catch {
+      toast.error("Failed to load upload history");
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   // ─── R2 Browse ──────────────────────────────────────────────────────────
 
@@ -475,10 +593,11 @@ export default function UploadPage() {
 
     for (const job of pending) {
       try {
+        // Step 1: Upload to R2 if file is from computer
         if (job.file && !job.r2Key) {
           setJobs((prev) =>
             prev.map((j) =>
-              j.id === job.id ? { ...j, status: "uploading_r2", step: "Uploading to R2..." } : j
+              j.id === job.id ? { ...j, status: "uploading_r2", step: "Uploading to Cloudflare R2..." } : j
             )
           );
           const { key, url } = await uploadFileToR2(job.file);
@@ -486,9 +605,10 @@ export default function UploadPage() {
           job.r2Url = url;
         }
 
+        // Step 2: Upload to Meta (API handles all 4 steps with DB tracking)
         setJobs((prev) =>
           prev.map((j) =>
-            j.id === job.id ? { ...j, status: "uploading_meta", step: "Uploading to Meta..." } : j
+            j.id === job.id ? { ...j, status: "uploading_meta", step: "Step 1/4: Uploading media to Meta..." } : j
           )
         );
 
@@ -506,19 +626,33 @@ export default function UploadPage() {
           body: JSON.stringify(payload),
         });
 
+        const result = await res.json();
+
         if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Meta upload failed");
+          throw new Error(result.error || "Meta upload failed");
         }
 
-        const result = await res.json();
         if (result.adsetId && adsetMode === "new" && !createdAdsetId) {
           createdAdsetId = result.adsetId;
         }
 
         setJobs((prev) =>
           prev.map((j) =>
-            j.id === job.id ? { ...j, status: "completed", step: "Done!", result } : j
+            j.id === job.id
+              ? {
+                  ...j,
+                  status: "completed",
+                  step: "Done!",
+                  dbJobId: result.jobId,
+                  result: {
+                    adId: result.adId,
+                    creativeId: result.creativeId,
+                    adsetId: result.adsetId,
+                    videoId: result.videoId,
+                    imageHash: result.imageHash,
+                  },
+                }
+              : j
           )
         );
       } catch (error) {
@@ -533,7 +667,8 @@ export default function UploadPage() {
     }
 
     setIsUploading(false);
-    if (pending.length > 0) toast.success(`Processed ${pending.length} file(s)`);
+    const completedCount = pending.length;
+    if (completedCount > 0) toast.success(`Processed ${completedCount} file(s)`);
   };
 
   const clearCompleted = () => {
@@ -553,6 +688,16 @@ export default function UploadPage() {
     return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
   };
 
+  const timeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  };
+
   const hasPending = jobs.some((j) => j.status === "pending");
   const hasCompleted = jobs.some((j) => j.status === "completed" || j.status === "failed");
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
@@ -568,15 +713,113 @@ export default function UploadPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-          <Upload className="h-6 w-6 text-cyan-400" />
-          Upload Ads
-        </h1>
-        <p className="text-sm text-slate-500 mt-0.5">
-          Select template, pick files, upload to Meta
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Upload className="h-6 w-6 text-cyan-400" />
+            Upload Ads
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Select template, pick files, upload to Meta
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            setShowHistory(!showHistory);
+            if (!showHistory) fetchHistory();
+          }}
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all border",
+            showHistory
+              ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
+              : "text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 border-white/[0.06]"
+          )}
+        >
+          <History className="h-3.5 w-3.5" />
+          Upload History
+        </button>
       </div>
+
+      {/* ─── Upload History ─── */}
+      {showHistory && (
+        <div className="rounded-xl border border-white/[0.06] bg-[#111827] overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.04]">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <History className="h-4 w-4 text-cyan-400" />
+              Recent Uploads
+            </h3>
+            <button onClick={fetchHistory} className="text-slate-500 hover:text-white p-1 rounded hover:bg-white/5">
+              <RefreshCw className={cn("h-3.5 w-3.5", loadingHistory && "animate-spin")} />
+            </button>
+          </div>
+          {loadingHistory ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+            </div>
+          ) : history.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-500">No upload history yet</div>
+          ) : (
+            <div className="divide-y divide-white/[0.03] max-h-[300px] overflow-y-auto">
+              {history.map((h) => (
+                <div key={h.id} className="flex items-center gap-3 px-5 py-3">
+                  {h.status === "completed" ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  ) : h.status === "failed" ? (
+                    <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                  ) : (
+                    <Loader2 className="h-4 w-4 animate-spin text-cyan-400 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-white truncate font-medium">{h.filename}</p>
+                      <span className={cn(
+                        "text-[9px] px-1.5 py-0.5 rounded font-medium",
+                        h.mediaType === "video"
+                          ? "bg-cyan-500/10 text-cyan-400"
+                          : "bg-purple-500/10 text-purple-400"
+                      )}>
+                        {h.mediaType}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {h.status === "completed" && (
+                        <>
+                          <span className="text-[10px] text-emerald-400">Ad: {h.adId}</span>
+                          {h.creativeId && <span className="text-[10px] text-slate-500">Creative: {h.creativeId}</span>}
+                        </>
+                      )}
+                      {h.status === "failed" && (
+                        <span className="text-[10px] text-red-400">{h.error}</span>
+                      )}
+                      {h.status !== "completed" && h.status !== "failed" && (
+                        <span className="text-[10px] text-slate-500">
+                          Step {h.currentStep}/{h.totalSteps}: {h.stepLabel}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                      <Clock className="h-3 w-3" />
+                      {timeAgo(h.createdAt)}
+                    </div>
+                    {h.status === "completed" && h.adId && (
+                      <a
+                        href={`https://business.facebook.com/adsmanager/manage/ads?act=261297039993717&selected_ad_ids=${h.adId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 mt-0.5"
+                      >
+                        View in Meta <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ─── Template + Campaign Row ─── */}
       <div className="grid gap-3 md:grid-cols-2">
@@ -1037,30 +1280,76 @@ export default function UploadPage() {
           </div>
           <div className="divide-y divide-white/[0.03]">
             {jobs.map((job) => (
-              <div key={job.id} className="flex items-center gap-3 px-5 py-3">
-                {job.status === "completed" ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                ) : job.status === "failed" ? (
-                  <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-                ) : job.status === "uploading_r2" || job.status === "uploading_meta" ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-cyan-400 shrink-0" />
-                ) : (
-                  <div className="h-4 w-4 rounded-full border border-white/[0.1] shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-white truncate">{job.filename}</p>
-                  <p className="text-[10px] text-slate-500">
-                    {job.status === "pending" && "Waiting..."}
-                    {job.status === "uploading_r2" && "Uploading to Cloudflare R2..."}
-                    {job.status === "uploading_meta" && "Uploading to Meta..."}
-                    {job.status === "completed" && <span className="text-emerald-400">Done! Ad ID: {job.result?.adId}</span>}
-                    {job.status === "failed" && <span className="text-red-400">{job.error}</span>}
-                  </p>
+              <div key={job.id} className="px-5 py-3">
+                <div className="flex items-center gap-3">
+                  {job.status === "completed" ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  ) : job.status === "failed" ? (
+                    <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                  ) : job.status === "uploading_r2" || job.status === "uploading_meta" ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-cyan-400 shrink-0" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border border-white/[0.1] shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white truncate font-medium">{job.filename}</p>
+                    <p className="text-[10px] text-slate-500">
+                      {job.status === "pending" && "Waiting..."}
+                      {job.status === "uploading_r2" && "Uploading to Cloudflare R2..."}
+                      {job.status === "uploading_meta" && job.step}
+                      {job.status === "completed" && (
+                        <span className="text-emerald-400">
+                          Done! Ad ID: {job.result?.adId}
+                          {job.result?.adId && (
+                            <a
+                              href={`https://business.facebook.com/adsmanager/manage/ads?act=261297039993717&selected_ad_ids=${job.result.adId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-2 inline-flex items-center gap-0.5 text-cyan-400 hover:text-cyan-300"
+                            >
+                              View <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                          )}
+                        </span>
+                      )}
+                      {job.status === "failed" && <span className="text-red-400">{job.error}</span>}
+                    </p>
+                  </div>
+                  {job.status === "pending" && (
+                    <button onClick={() => removeJob(job.id)} className="text-slate-600 hover:text-red-400">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
-                {job.status === "pending" && (
-                  <button onClick={() => removeJob(job.id)} className="text-slate-600 hover:text-red-400">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                {/* Progress bar for active uploads */}
+                {(job.status === "uploading_r2" || job.status === "uploading_meta") && (
+                  <div className="mt-2 ml-7">
+                    <div className="flex gap-1">
+                      {STEP_LABELS.map((label, i) => {
+                        const stepNum = i + 1;
+                        const currentStepMatch = job.step.match(/Step (\d+)/);
+                        const currentStep = currentStepMatch ? parseInt(currentStepMatch[1]) : (job.status === "uploading_r2" ? 0 : 1);
+                        const isActive = stepNum === currentStep;
+                        const isDone = stepNum < currentStep;
+                        return (
+                          <div key={i} className="flex-1">
+                            <div
+                              className={cn(
+                                "h-1 rounded-full transition-all",
+                                isDone ? "bg-emerald-400" : isActive ? "bg-cyan-400 animate-pulse" : "bg-white/[0.06]"
+                              )}
+                            />
+                            <p className={cn(
+                              "text-[9px] mt-0.5 truncate",
+                              isDone ? "text-emerald-400/60" : isActive ? "text-cyan-400" : "text-slate-600"
+                            )}>
+                              {label}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
