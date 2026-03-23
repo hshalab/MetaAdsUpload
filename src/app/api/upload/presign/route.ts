@@ -66,9 +66,9 @@ export async function POST(request: NextRequest) {
     }
 
     // H5: Validate file size (max 500MB)
-    const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+    const MAX_FILE_SIZE = 999 * 1024 * 1024; // 999MB
     if (fileSize !== undefined && (typeof fileSize !== "number" || fileSize <= 0 || fileSize > MAX_FILE_SIZE)) {
-      return NextResponse.json({ error: "File size must be between 1 byte and 500MB" }, { status: 400 });
+      return NextResponse.json({ error: "File size must be between 1 byte and 999MB" }, { status: 400 });
     }
 
     const bucketName = process.env.R2_BUCKET_NAME;
