@@ -1,22 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { getR2Client } from "@/lib/r2";
 
 export const dynamic = "force-dynamic";
-
-function getR2Client() {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error("R2 credentials not configured");
-  }
-  return new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId, secretAccessKey },
-  });
-}
 
 export async function GET(request: NextRequest) {
   try {

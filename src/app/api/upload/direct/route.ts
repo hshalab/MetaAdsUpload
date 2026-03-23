@@ -1,22 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getR2Client, getR2PublicUrl } from "@/lib/r2";
 
 export const maxDuration = 60; // allow up to 60s for large images
-
-function getR2Client() {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error("R2 credentials not configured");
-  }
-  return new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId, secretAccessKey },
-  });
-}
 
 // POST /api/upload/direct — server-side proxy upload to R2 (no CORS issues)
 export async function POST(request: NextRequest) {
@@ -43,8 +30,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const bucketName = process.env.R2_BUCKET_NAME;
-    const publicUrl = process.env.R2_PUBLIC_URL;
+    const bucketName = process.env.R2_BUCKET_NAME?.trim();
+    const publicUrl = getR2PublicUrl();
     if (!bucketName) {
       return NextResponse.json({ error: "R2_BUCKET_NAME not configured" }, { status: 500 });
     }

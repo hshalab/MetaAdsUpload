@@ -1,30 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { uploadImage, uploadVideo, createAdCreative } from "@/lib/meta/creatives";
 import { createAdSet } from "@/lib/meta/adsets";
 import { createAd } from "@/lib/meta/ads";
 import { getPageId, getPixelId, metaApi, getAdAccountId, MetaApiError } from "@/lib/meta/client";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
+import { getR2Client } from "@/lib/r2";
 
 export const maxDuration = 300; // 5 minutes for large video uploads
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getR2Client() {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error("R2 credentials not configured");
-  }
-  return new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId, secretAccessKey },
-  });
-}
 
 async function downloadFromR2(key: string): Promise<{ buffer: Buffer; contentType: string }> {
   const client = getR2Client();

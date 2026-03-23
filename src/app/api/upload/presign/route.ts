@@ -1,29 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
-
-function getR2Client() {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error("R2 credentials not configured");
-  }
-
-  return new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
-  });
-}
+import { getR2Client, getR2PublicUrl } from "@/lib/r2";
 
 export async function POST(request: NextRequest) {
   const rateLimitResponse = checkRateLimit(request, 10, 60_000);
@@ -71,8 +53,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File size must be between 1 byte and 999MB" }, { status: 400 });
     }
 
-    const bucketName = process.env.R2_BUCKET_NAME;
-    const publicUrl = process.env.R2_PUBLIC_URL;
+    const bucketName = process.env.R2_BUCKET_NAME?.trim();
+    const publicUrl = getR2PublicUrl();
 
     if (!bucketName) {
       return NextResponse.json({ error: "R2_BUCKET_NAME not configured" }, { status: 500 });

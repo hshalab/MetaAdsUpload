@@ -1,22 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { eq, and, ilike, or, desc, sql } from "drizzle-orm";
-import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
-
-function getR2Client() {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    throw new Error("R2 credentials not configured");
-  }
-  return new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId, secretAccessKey },
-  });
-}
+import { eq, and, ilike, or, desc, asc, sql } from "drizzle-orm";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getR2Client } from "@/lib/r2";
 
 // GET — List library assets with filters & pagination
 export async function GET(request: NextRequest) {
@@ -59,8 +46,20 @@ export async function GET(request: NextRequest) {
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
+    // Sort
+    const sort = searchParams.get("sort") || "date_desc";
+    const sortMap: Record<string, ReturnType<typeof desc>> = {
+      date_desc: desc(schema.creatives.createdAt),
+      date_asc: asc(schema.creatives.createdAt),
+      name_asc: asc(schema.creatives.name),
+      name_desc: desc(schema.creatives.name),
+      size_desc: desc(schema.creatives.fileSize),
+      size_asc: asc(schema.creatives.fileSize),
+    };
+    const orderClause = sortMap[sort] || sortMap.date_desc;
+
     const [data, countResult] = await Promise.all([
-      db.select().from(schema.creatives).where(where).orderBy(desc(schema.creatives.createdAt)).limit(limit).offset(offset),
+      db.select().from(schema.creatives).where(where).orderBy(orderClause).limit(limit).offset(offset),
       db.select({ count: sql<number>`count(*)` }).from(schema.creatives).where(where),
     ]);
 
