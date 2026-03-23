@@ -1,12 +1,12 @@
 import { metaApi, getAdAccountId } from "./client";
 
 export async function uploadImage(imageFile: Buffer, filename: string) {
-  const form = new FormData();
-  form.append("filename", filename);
-  form.append("bytes", new Blob([new Uint8Array(imageFile)]), filename);
+  const accountId = await getAdAccountId();
+
+  // Meta /adimages expects "bytes" as base64-encoded string
   const result = await metaApi<{ images?: Record<string, { hash: string }> }>(
-    `/${await getAdAccountId()}/adimages`,
-    { method: "POST", body: form }
+    `/${accountId}/adimages`,
+    { method: "POST", body: { bytes: imageFile.toString("base64"), filename } }
   );
 
   const images = result.images;
