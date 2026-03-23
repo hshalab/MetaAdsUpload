@@ -189,6 +189,7 @@ export default function UploadPage() {
   // Upload queue
   const [jobs, setJobs] = useState<UploadJob[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [shouldAutoStart, setShouldAutoStart] = useState(false);
 
   // Upload history
   const [history, setHistory] = useState<DbJob[]>([]);
@@ -427,6 +428,15 @@ export default function UploadPage() {
     if (activeTab === "cloudflare") browseR2("");
   }, [activeTab, browseR2]);
 
+  // Auto-start queue processing when new jobs are added
+  useEffect(() => {
+    if (shouldAutoStart && !isUploading && jobs.some((j) => j.status === "pending")) {
+      setShouldAutoStart(false);
+      processQueue();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldAutoStart, isUploading, jobs]);
+
   const navigateR2 = (prefix: string) => {
     setR2PathStack((prev) => [...prev, prefix]);
     setR2Selected([]);
@@ -654,7 +664,8 @@ export default function UploadPage() {
     }
 
     setJobs((prev) => [...prev, ...newJobs]);
-    toast.success(`${newJobs.length} file(s) added to queue`);
+    toast.success(`${newJobs.length} fil(er) tillagda i kön`);
+    setShouldAutoStart(true);
   };
 
   // Helper: create a DB job record immediately
@@ -861,6 +872,11 @@ export default function UploadPage() {
 
   const clearCompleted = () => {
     setJobs((prev) => prev.filter((j) => j.status !== "completed" && j.status !== "failed"));
+  };
+
+  const clearAll = () => {
+    setJobs([]);
+    setIsUploading(false);
   };
 
   const removeJob = (id: string) => {
@@ -1560,9 +1576,12 @@ export default function UploadPage() {
           <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.04]">
             <h3 className="text-sm font-semibold text-white">Upload Queue ({jobs.length})</h3>
             <div className="flex gap-2">
+              <button onClick={clearAll} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/[0.06] transition-all">
+                <Trash2 className="h-3 w-3" /> Rensa allt
+              </button>
               {hasCompleted && (
                 <button onClick={clearCompleted} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/[0.06] transition-all">
-                  <Trash2 className="h-3 w-3" /> Clear Done
+                  <Trash2 className="h-3 w-3" /> Rensa klara
                 </button>
               )}
               {hasPending && (
@@ -1572,7 +1591,7 @@ export default function UploadPage() {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-white bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 transition-all disabled:opacity-50"
                 >
                   {isUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                  {isUploading ? "Uploading..." : "Upload All"}
+                  {isUploading ? "Laddar upp..." : "Ladda upp alla"}
                 </button>
               )}
             </div>
