@@ -369,15 +369,26 @@ export async function POST(request: NextRequest) {
     if (!adsetId && adsetConfig) {
       const pixelId = await getPixelId();
       const optGoal = adsetConfig.optimizationGoal || "OFFSITE_CONVERSIONS";
+
+      // Check if campaign uses CBO — if so, budget is at campaign level, not ad set
+      let isCBO = false;
+      try {
+        const campaign = await metaApi<{ daily_budget?: string; lifetime_budget?: string }>(`/${campaignId}`, {
+          params: { fields: "daily_budget,lifetime_budget" },
+        });
+        isCBO = !!(campaign.daily_budget || campaign.lifetime_budget);
+      } catch { /* if check fails, try with budget anyway */ }
+
       const adsetParams: Record<string, unknown> = {
         campaign_id: campaignId,
         name: adsetConfig.name,
-        daily_budget: adsetConfig.dailyBudget ? adsetConfig.dailyBudget * 100 : undefined,
+        // CBO campaigns: budget is on campaign level, skip on ad set
+        daily_budget: isCBO ? undefined : (adsetConfig.dailyBudget ? adsetConfig.dailyBudget * 100 : undefined),
         targeting: adsetConfig.targeting || { geo_locations: { countries: ["SE"] } },
         optimization_goal: optGoal,
         billing_event: "IMPRESSIONS",
-        bid_strategy: adsetConfig.bidStrategy || "LOWEST_COST_WITHOUT_CAP",
-        status: "PAUSED",
+        bid_strategy: isCBO ? undefined : (adsetConfig.bidStrategy || "LOWEST_COST_WITHOUT_CAP"),
+        status: "ACTIVE",
         promoted_object: pixelId
           ? { pixel_id: pixelId, custom_event_type: adsetConfig.conversionEvent || "PURCHASE" }
           : undefined,
@@ -433,7 +444,7 @@ export async function POST(request: NextRequest) {
       adset_id: adsetId,
       name: adNameValue || creativeName,
       creative: { creative_id: adCreative.id },
-      status: "PAUSED" as const,
+      status: "ACTIVE" as const,
     };
 
     let ad: { id: string };
