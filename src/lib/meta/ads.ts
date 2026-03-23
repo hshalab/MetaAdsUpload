@@ -73,6 +73,25 @@ export async function createAdWithTextOptions(params: {
     group.videos = [{ video_id: params.videoId }];
   }
 
+  // Build creative with object_story_spec that matches the asset group.
+  // Meta requires the first image/video in creative_asset_groups_spec to match
+  // the image/video in the object_story_spec.
+  const ctaType = params.ctaType || "SHOP_NOW";
+  const storySpec: Record<string, unknown> = { page_id: params.page_id };
+
+  if (params.imageHash) {
+    storySpec.link_data = {
+      link: params.linkUrl,
+      image_hash: params.imageHash,
+      call_to_action: { type: ctaType },
+    };
+  } else if (params.videoId) {
+    storySpec.video_data = {
+      video_id: params.videoId,
+      call_to_action: { type: ctaType, value: { link: params.linkUrl } },
+    };
+  }
+
   // Meta API requires complex nested objects as stringified JSON in FormData
   const form = new FormData();
   form.append("adset_id", params.adset_id);
@@ -80,7 +99,7 @@ export async function createAdWithTextOptions(params: {
   form.append("status", params.status || "PAUSED");
   form.append("creative", JSON.stringify({
     name: params.name,
-    object_story_spec: { page_id: params.page_id },
+    object_story_spec: storySpec,
   }));
   form.append("creative_asset_groups_spec", JSON.stringify({
     groups: [group],
