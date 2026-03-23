@@ -181,6 +181,7 @@ export async function POST(request: NextRequest) {
       adsetConfig,
       adCopy,
       adName: adNameValue,
+      existingJobId,
     } = body as {
       r2Key: string;
       r2Url: string;
@@ -198,30 +199,42 @@ export async function POST(request: NextRequest) {
       };
       adCopy: AdCopyInput;
       adName: string;
+      existingJobId?: number;
     };
 
     if (!r2Key || !campaignId || !adCopy) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Create upload job record
-    const [job] = await db
-      .insert(schema.uploadJobs)
-      .values({
-        filename: filename || "unknown",
-        mediaType: mediaType || "video",
+    // Use existing job record if provided, otherwise create new one
+    if (existingJobId) {
+      jobId = existingJobId;
+      await updateJob(jobId, {
         status: "uploading_meta",
         currentStep: 1,
-        totalSteps: 4,
-        stepLabel: "Uploading media to Meta...",
+        stepLabel: "Laddar upp media till Meta...",
         r2Key,
         r2Url,
-        campaignId,
         config: { adCopy, adsetConfig, adName: adNameValue },
-      })
-      .returning();
-
-    jobId = job.id;
+      });
+    } else {
+      const [job] = await db
+        .insert(schema.uploadJobs)
+        .values({
+          filename: filename || "unknown",
+          mediaType: mediaType || "video",
+          status: "uploading_meta",
+          currentStep: 1,
+          totalSteps: 4,
+          stepLabel: "Laddar upp media till Meta...",
+          r2Key,
+          r2Url,
+          campaignId,
+          config: { adCopy, adsetConfig, adName: adNameValue },
+        })
+        .returning();
+      jobId = job.id;
+    }
 
     // Normalize ad copy
     const headlinesArr = adCopy.headlines?.filter(Boolean) || (adCopy.headline ? [adCopy.headline] : []);

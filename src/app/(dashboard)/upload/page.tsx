@@ -613,29 +613,110 @@ export default function UploadPage() {
     toast.success(`${newJobs.length} file(s) added to queue`);
   };
 
+  // Helper: create a DB job record immediately
+  const createDbJob = async (filename: string, mediaType: string, campaignId: string): Promise<number | undefined> => {
+    try {
+      const res = await fetch("/api/upload-jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, mediaType, campaignId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.id;
+      }
+    } catch { /* best effort */ }
+    return undefined;
+  };
+
+  // Helper: update a DB job record
+  const updateDbJob = async (dbJobId: number, updates: Record<string, unknown>) => {
+    try {
+      await fetch("/api/upload-jobs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: dbJobId, ...updates }),
+      });
+    } catch { /* best effort */ }
+  };
+
   const processQueue = async () => {
     setIsUploading(true);
     const pending = jobs.filter((j) => j.status === "pending");
     let createdAdsetId: string | undefined;
 
     for (const job of pending) {
+      let dbJobId: number | undefined;
+
       try {
-        // Step 1: Upload to R2 if file is from computer
+        // Immediately create a DB record so it shows in Upload Log
+        dbJobId = await createDbJob(job.filename, job.mediaType, selectedCampaignId);
+
+        // Step 0: Upload to R2 if file is from computer
         if (job.file && !job.r2Key) {
           setJobs((prev) =>
             prev.map((j) =>
-              j.id === job.id ? { ...j, status: "uploading_r2", step: "Uploading to Cloudflare R2..." } : j
+              j.id === job.id ? { ...j, status: "uploading_r2", step: "Laddar upp till Cloudflare R2...", dbJobId } : j
             )
           );
-          const { key, url } = await uploadFileToR2(job.file);
-          job.r2Key = key;
-          job.r2Url = url;
+          if (dbJobId) await updateDbJob(dbJobId, { status: "uploading_r2", stepLabel: "Laddar upp till R2..." });
+
+          try {
+            const { key, url } = await uploadFileToR2(job.file);
+            job.r2Key = key;
+            job.r2Url = url;
+            if (dbJobId) await updateDbJob(dbJobId, { r2Key: key, r2Url: url });
+          } catch (r2Error) {
+            const errMsg = r2Error instanceof Error ? r2Error.message : "R2 upload failed";
+            if (dbJobId) {
+              await updateDbJob(dbJobId, {
+                status: "failed",
+                error: errMsg,
+                stepLabel: "Misslyckades: R2-uppladdning",
+                config: {
+                  errorDetails: {
+                    message: errMsg,
+                    failedStep: 0,
+                    failedStepName: "Ladda upp till R2",
+                    suggestion: errMsg.includes("presign")
+                      ? "Kunde inte hämta presigned URL. Kontrollera R2-konfigurationen i miljövariabler."
+                      : "Uppladdning till Cloudflare R2 misslyckades. Kontrollera filstorlek och internetanslutning.",
+                    timestamp: new Date().toISOString(),
+                  },
+                },
+              });
+            }
+            setJobs((prev) =>
+              prev.map((j) =>
+                j.id === job.id
+                  ? {
+                      ...j,
+                      status: "failed" as const,
+                      step: "Failed",
+                      error: errMsg,
+                      dbJobId,
+                      errorDetails: {
+                        message: errMsg,
+                        failedStep: 0,
+                        failedStepName: "Ladda upp till R2",
+                        suggestion: "Uppladdning till Cloudflare R2 misslyckades. Kontrollera filstorlek och internetanslutning.",
+                        timestamp: new Date().toISOString(),
+                      },
+                    }
+                  : j
+              )
+            );
+            continue;
+          }
+        } else if (dbJobId && job.r2Key) {
+          // R2 file already exists, save the keys
+          await updateDbJob(dbJobId, { r2Key: job.r2Key, r2Url: job.r2Url });
         }
 
-        // Step 2: Upload to Meta (API handles all 4 steps with DB tracking)
+        // Step 1-4: Upload to Meta (API handles steps with DB tracking)
         setJobs((prev) =>
           prev.map((j) =>
-            j.id === job.id ? { ...j, status: "uploading_meta", step: "Step 1/4: Uploading media to Meta..." } : j
+            j.id === job.id ? { ...j, status: "uploading_meta", step: "Step 1/4: Laddar upp media till Meta...", dbJobId } : j
           )
         );
 
@@ -647,6 +728,11 @@ export default function UploadPage() {
           createdAdsetId
         );
 
+        // Pass the DB job ID so the API updates the same record
+        if (dbJobId) {
+          (payload as Record<string, unknown>).existingJobId = dbJobId;
+        }
+
         const res = await fetch("/api/meta/upload-from-r2", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -656,7 +742,6 @@ export default function UploadPage() {
         const result = await res.json();
 
         if (!res.ok) {
-          // Capture rich error details from API
           const errDetails: ErrorDetails | undefined = result.errorDetails;
           setJobs((prev) =>
             prev.map((j) =>
@@ -667,12 +752,12 @@ export default function UploadPage() {
                     step: "Failed",
                     error: result.error || "Meta upload failed",
                     errorDetails: errDetails,
-                    dbJobId: result.jobId,
+                    dbJobId: dbJobId || result.jobId,
                   }
                 : j
             )
           );
-          continue; // skip to next job
+          continue;
         }
 
         if (result.adsetId && adsetMode === "new" && !createdAdsetId) {
@@ -686,7 +771,7 @@ export default function UploadPage() {
                   ...j,
                   status: "completed",
                   step: "Done!",
-                  dbJobId: result.jobId,
+                  dbJobId: dbJobId || result.jobId,
                   result: {
                     adId: result.adId,
                     creativeId: result.creativeId,
@@ -699,10 +784,27 @@ export default function UploadPage() {
           )
         );
       } catch (error) {
+        const errMsg = error instanceof Error ? error.message : "Unknown error";
+        if (dbJobId) {
+          await updateDbJob(dbJobId, {
+            status: "failed",
+            error: errMsg,
+            stepLabel: "Oväntat fel",
+            config: {
+              errorDetails: {
+                message: errMsg,
+                failedStep: 0,
+                failedStepName: "Okänt",
+                suggestion: "Ett oväntat fel uppstod. Försök igen eller kontrollera webbläsarens konsol.",
+                timestamp: new Date().toISOString(),
+              },
+            },
+          });
+        }
         setJobs((prev) =>
           prev.map((j) =>
             j.id === job.id
-              ? { ...j, status: "failed", step: "Failed", error: error instanceof Error ? error.message : "Unknown error" }
+              ? { ...j, status: "failed", step: "Failed", error: errMsg, dbJobId }
               : j
           )
         );
@@ -710,8 +812,7 @@ export default function UploadPage() {
     }
 
     setIsUploading(false);
-    const completedCount = pending.length;
-    if (completedCount > 0) toast.success(`Processed ${completedCount} file(s)`);
+    if (pending.length > 0) toast.success(`Bearbetade ${pending.length} fil(er)`);
   };
 
   const clearCompleted = () => {

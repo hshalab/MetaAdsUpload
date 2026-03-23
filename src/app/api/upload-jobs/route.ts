@@ -28,3 +28,51 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ data: jobs });
 }
+
+// POST /api/upload-jobs — create a new job record (called at start of upload)
+export async function POST(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+  const { filename, mediaType, campaignId, config } = body as {
+    filename: string;
+    mediaType: string;
+    campaignId?: string;
+    config?: Record<string, unknown>;
+  };
+
+  const [job] = await db
+    .insert(schema.uploadJobs)
+    .values({
+      filename: filename || "unknown",
+      mediaType: mediaType || "image",
+      status: "pending",
+      currentStep: 0,
+      totalSteps: 4,
+      stepLabel: "Väntar...",
+      campaignId,
+      config: config || {},
+    })
+    .returning();
+
+  return NextResponse.json(job);
+}
+
+// PATCH /api/upload-jobs — update an existing job
+export async function PATCH(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+  const { id, ...updates } = body as { id: number } & Record<string, unknown>;
+
+  if (!id) return NextResponse.json({ error: "Missing job id" }, { status: 400 });
+
+  await db
+    .update(schema.uploadJobs)
+    .set(updates)
+    .where(eq(schema.uploadJobs.id, id));
+
+  return NextResponse.json({ success: true });
+}
