@@ -492,30 +492,23 @@ export default function UploadPage() {
     setter((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
   };
 
-  // ─── Upload to R2 via presigned URL ─────────────────────────────────────
+  // ─── Upload to R2 via server-side proxy (avoids CORS) ──────────────────
 
   const uploadFileToR2 = async (file: File): Promise<{ key: string; url: string }> => {
-    const presignRes = await fetch("/api/upload/presign", {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch("/api/upload/direct", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filename: file.name,
-        contentType: file.type,
-        fileSize: file.size,
-        purpose: "library",
-      }),
+      body: formData,
     });
-    if (!presignRes.ok) {
-      const err = await presignRes.json();
-      throw new Error(err.error || "Failed to get presigned URL");
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Kunde inte ladda upp till R2");
     }
-    const { uploadUrl, publicUrl, key } = await presignRes.json();
-    const uploadRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: file,
-    });
-    if (!uploadRes.ok) throw new Error("Failed to upload to R2");
+
+    const { key, publicUrl } = await res.json();
     return { key, url: publicUrl };
   };
 
