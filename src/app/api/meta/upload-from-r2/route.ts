@@ -368,18 +368,20 @@ export async function POST(request: NextRequest) {
 
     if (!adsetId && adsetConfig) {
       const pixelId = await getPixelId();
+      const optGoal = adsetConfig.optimizationGoal || "OFFSITE_CONVERSIONS";
       const adsetParams: Record<string, unknown> = {
         campaign_id: campaignId,
         name: adsetConfig.name,
         daily_budget: adsetConfig.dailyBudget ? adsetConfig.dailyBudget * 100 : undefined,
         targeting: adsetConfig.targeting || { geo_locations: { countries: ["SE"] } },
-        optimization_goal: adsetConfig.optimizationGoal || "OFFSITE_CONVERSIONS",
+        optimization_goal: optGoal,
         billing_event: "IMPRESSIONS",
         bid_strategy: adsetConfig.bidStrategy || "LOWEST_COST_WITHOUT_CAP",
         status: "PAUSED",
         promoted_object: pixelId
           ? { pixel_id: pixelId, custom_event_type: adsetConfig.conversionEvent || "PURCHASE" }
           : undefined,
+        destination_type: optGoal === "OFFSITE_CONVERSIONS" ? "WEBSITE" : undefined,
       };
 
       if (useDynamic) {
