@@ -815,9 +815,8 @@ export default function UploadPage() {
           continue;
         }
 
-        // For non-dynamic ads, reuse the ad set for all files in the batch.
-        // Dynamic creative ad sets only allow 1 ad each, so always create new.
-        if (result.adsetId && adsetMode === "new" && !createdAdsetId && !isDynamic) {
+        // Reuse the ad set for all files in the batch
+        if (result.adsetId && adsetMode === "new" && !createdAdsetId) {
           createdAdsetId = result.adsetId;
         }
 

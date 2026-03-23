@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
     // Normalize ad copy
     const headlinesArr = adCopy.headlines?.filter(Boolean) || (adCopy.headline ? [adCopy.headline] : []);
     const textsArr = adCopy.primaryTexts?.filter(Boolean) || (adCopy.primaryText ? [adCopy.primaryText] : []);
-    const useDynamic = headlinesArr.length > 1 || textsArr.length > 1;
+    const hasMultipleTexts = headlinesArr.length > 1 || textsArr.length > 1;
 
     const results: Record<string, string> = {};
     let currentStep = 1;
@@ -294,7 +294,8 @@ export async function POST(request: NextRequest) {
 
     let creativePayload: Record<string, unknown>;
 
-    if (useDynamic) {
+    if (hasMultipleTexts) {
+      // Multiple headlines/texts: use asset_feed_spec for text variations (standard ad, NOT dynamic creative)
       creativePayload = {
         name: creativeName,
         object_story_spec: { page_id: pageId },
@@ -311,6 +312,7 @@ export async function POST(request: NextRequest) {
         },
       };
     } else {
+      // Single headline/text: standard object_story_spec
       const firstHeadline = headlinesArr[0] || "";
       const firstText = textsArr[0] || "";
 
@@ -357,7 +359,6 @@ export async function POST(request: NextRequest) {
     }
 
     results.creativeId = adCreative.id;
-    if (useDynamic) results.dynamicCreative = "true";
     await updateJob(jobId, { creativeId: adCreative.id });
 
     // ─── Step 3: Create or reuse ad set ───────────────────────────────────
@@ -394,10 +395,6 @@ export async function POST(request: NextRequest) {
           : undefined,
         destination_type: optGoal === "OFFSITE_CONVERSIONS" ? "WEBSITE" : undefined,
       };
-
-      if (useDynamic) {
-        adsetParams.is_dynamic_creative = true;
-      }
 
       try {
         const adset = await createAdSet(adsetParams as Parameters<typeof createAdSet>[0]);
