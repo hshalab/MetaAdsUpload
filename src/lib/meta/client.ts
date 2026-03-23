@@ -1,7 +1,7 @@
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 
-const META_API_VERSION = "v21.0";
+const META_API_VERSION = "v25.0";
 const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 // Refresh token when within 7 days of expiry

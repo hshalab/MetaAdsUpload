@@ -36,6 +36,7 @@ export async function createAd(params: {
  * Create an ad with multiple text options using creative_asset_groups_spec.
  * This is the "Flexible Ads" approach — works on standard ad sets,
  * supports multiple headlines/primary texts per ad, no dynamic creative needed.
+ * Meta API requires these complex fields as stringified JSON in FormData.
  */
 export async function createAdWithTextOptions(params: {
   adset_id: string;
@@ -49,6 +50,10 @@ export async function createAdWithTextOptions(params: {
   linkUrl: string;
   ctaType?: string;
 }) {
+  if (!params.linkUrl) {
+    throw new Error("linkUrl is required for Flexible Ads (creative_asset_groups_spec)");
+  }
+
   const texts = [
     ...params.primaryTexts.map((text) => ({ text, text_type: "primary_text" })),
     ...params.headlines.map((text) => ({ text, text_type: "headline" })),
@@ -68,20 +73,22 @@ export async function createAdWithTextOptions(params: {
     group.videos = [{ video_id: params.videoId }];
   }
 
+  // Meta API requires complex nested objects as stringified JSON in FormData
+  const form = new FormData();
+  form.append("adset_id", params.adset_id);
+  form.append("name", params.name);
+  form.append("status", params.status || "PAUSED");
+  form.append("creative", JSON.stringify({
+    name: params.name,
+    object_story_spec: { page_id: params.page_id },
+  }));
+  form.append("creative_asset_groups_spec", JSON.stringify({
+    groups: [group],
+  }));
+
   return metaApi<{ id: string }>(`/${await getAdAccountId()}/ads`, {
     method: "POST",
-    body: {
-      adset_id: params.adset_id,
-      name: params.name,
-      status: params.status || "PAUSED",
-      creative: {
-        name: params.name,
-        object_story_spec: { page_id: params.page_id },
-      },
-      creative_asset_groups_spec: {
-        groups: [group],
-      },
-    },
+    body: form,
   });
 }
 
