@@ -23,6 +23,7 @@ import {
   Menu,
   X,
   Eye,
+  History,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -37,6 +38,7 @@ const navSections = [
     label: "MANAGE",
     items: [
       { href: "/upload", label: "Upload", icon: Upload },
+      { href: "/upload-log", label: "Upload Log", icon: History },
       { href: "/templates", label: "Templates", icon: FileText },
       { href: "/creatives", label: "Creatives", icon: Image },
       { href: "/campaigns", label: "Campaigns", icon: Megaphone },
