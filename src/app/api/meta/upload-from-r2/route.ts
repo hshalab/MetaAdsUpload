@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { uploadImage, uploadVideo, createAdCreative } from "@/lib/meta/creatives";
 import { createAdSet } from "@/lib/meta/adsets";
-import { createAd } from "@/lib/meta/ads";
+import { createAd, createAdWithTextOptions } from "@/lib/meta/ads";
 import { getPageId, getPixelId, metaApi, getAdAccountId, MetaApiError } from "@/lib/meta/client";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
@@ -285,38 +285,20 @@ export async function POST(request: NextRequest) {
       await updateJob(jobId, { imageHash });
     }
 
-    // ─── Step 2: Create Ad Creative ───────────────────────────────────────
+    // ─── Step 2: Create Ad Creative (skip if multiple texts — handled at ad level) ───
     currentStep = 2;
-    await updateJob(jobId, { currentStep, stepLabel: "Creating ad creative..." });
-
     const pageId = await getPageId();
     const creativeName = `${filename.replace(/\.[^.]+$/, "")} ${new Date().toISOString().split("T")[0]}`;
 
-    let creativePayload: Record<string, unknown>;
+    let creativeId: string | undefined;
 
-    if (hasMultipleTexts) {
-      // Multiple headlines/texts: use asset_feed_spec for text variations (standard ad, NOT dynamic creative)
-      creativePayload = {
-        name: creativeName,
-        object_story_spec: { page_id: pageId },
-        asset_feed_spec: {
-          bodies: textsArr.map((text) => ({ text })),
-          titles: headlinesArr.map((text) => ({ text })),
-          link_urls: [{ website_url: adCopy.linkUrl }],
-          call_to_action_types: [adCopy.ctaType || "SHOP_NOW"],
-          ...(videoId
-            ? { videos: [{ video_id: videoId }], ad_formats: ["SINGLE_VIDEO"] }
-            : imageHash
-            ? { images: [{ hash: imageHash }], ad_formats: ["SINGLE_IMAGE"] }
-            : {}),
-        },
-      };
-    } else {
-      // Single headline/text: standard object_story_spec
+    if (!hasMultipleTexts) {
+      await updateJob(jobId, { currentStep, stepLabel: "Creating ad creative..." });
+
       const firstHeadline = headlinesArr[0] || "";
       const firstText = textsArr[0] || "";
 
-      creativePayload = {
+      const creativePayload: Record<string, unknown> = {
         name: creativeName,
         object_story_spec: { page_id: pageId },
       };
@@ -340,26 +322,30 @@ export async function POST(request: NextRequest) {
           call_to_action: { type: adCopy.ctaType || "SHOP_NOW" },
         };
       }
-    }
 
-    let adCreative: { id: string };
-    try {
-      adCreative = await createAdCreative(
-        creativePayload as Parameters<typeof createAdCreative>[0]
-      );
-    } catch (e) {
-      const details = buildErrorDetails(e, currentStep, creativePayload);
-      await updateJob(jobId, {
-        status: "failed",
-        error: details.message,
-        stepLabel: `Misslyckades: ${details.failedStepName}`,
-        config: { ...body, errorDetails: details },
-      });
-      return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
-    }
+      let adCreative: { id: string };
+      try {
+        adCreative = await createAdCreative(
+          creativePayload as Parameters<typeof createAdCreative>[0]
+        );
+      } catch (e) {
+        const details = buildErrorDetails(e, currentStep, creativePayload);
+        await updateJob(jobId, {
+          status: "failed",
+          error: details.message,
+          stepLabel: `Misslyckades: ${details.failedStepName}`,
+          config: { ...body, errorDetails: details },
+        });
+        return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+      }
 
-    results.creativeId = adCreative.id;
-    await updateJob(jobId, { creativeId: adCreative.id });
+      creativeId = adCreative.id;
+      results.creativeId = adCreative.id;
+      await updateJob(jobId, { creativeId: adCreative.id });
+    } else {
+      // Multiple texts: creative will be created inline at ad level (step 4)
+      await updateJob(jobId, { currentStep, stepLabel: "Hoppar över (creative skapas med ad)..." });
+    }
 
     // ─── Step 3: Create or reuse ad set ───────────────────────────────────
     currentStep = 3;
@@ -437,25 +423,57 @@ export async function POST(request: NextRequest) {
     currentStep = 4;
     await updateJob(jobId, { currentStep, stepLabel: "Creating ad..." });
 
-    const adParams = {
-      adset_id: adsetId,
-      name: adNameValue || creativeName,
-      creative: { creative_id: adCreative.id },
-      status: "ACTIVE" as const,
-    };
-
     let ad: { id: string };
-    try {
-      ad = await createAd(adParams);
-    } catch (e) {
-      const details = buildErrorDetails(e, currentStep, adParams as unknown as Record<string, unknown>);
-      await updateJob(jobId, {
-        status: "failed",
-        error: details.message,
-        stepLabel: `Misslyckades: ${details.failedStepName}`,
-        config: { ...body, errorDetails: details },
-      });
-      return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+    let adPayloadForError: Record<string, unknown>;
+
+    if (hasMultipleTexts) {
+      // Multiple headlines/texts: use creative_asset_groups_spec (Flexible Ads)
+      const flexParams = {
+        adset_id: adsetId,
+        name: adNameValue || creativeName,
+        page_id: pageId,
+        status: "ACTIVE",
+        headlines: headlinesArr,
+        primaryTexts: textsArr,
+        imageHash,
+        videoId,
+        linkUrl: adCopy.linkUrl,
+        ctaType: adCopy.ctaType,
+      };
+      adPayloadForError = flexParams as unknown as Record<string, unknown>;
+      try {
+        ad = await createAdWithTextOptions(flexParams);
+      } catch (e) {
+        const details = buildErrorDetails(e, currentStep, adPayloadForError);
+        await updateJob(jobId, {
+          status: "failed",
+          error: details.message,
+          stepLabel: `Misslyckades: ${details.failedStepName}`,
+          config: { ...body, errorDetails: details },
+        });
+        return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+      }
+    } else {
+      // Single headline/text: standard ad with creative_id
+      const adParams = {
+        adset_id: adsetId,
+        name: adNameValue || creativeName,
+        creative: { creative_id: creativeId! },
+        status: "ACTIVE" as const,
+      };
+      adPayloadForError = adParams as unknown as Record<string, unknown>;
+      try {
+        ad = await createAd(adParams);
+      } catch (e) {
+        const details = buildErrorDetails(e, currentStep, adPayloadForError);
+        await updateJob(jobId, {
+          status: "failed",
+          error: details.message,
+          stepLabel: `Misslyckades: ${details.failedStepName}`,
+          config: { ...body, errorDetails: details },
+        });
+        return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+      }
     }
 
     results.adId = ad.id;

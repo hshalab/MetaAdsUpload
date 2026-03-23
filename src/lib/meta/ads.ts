@@ -32,6 +32,59 @@ export async function createAd(params: {
   });
 }
 
+/**
+ * Create an ad with multiple text options using creative_asset_groups_spec.
+ * This is the "Flexible Ads" approach — works on standard ad sets,
+ * supports multiple headlines/primary texts per ad, no dynamic creative needed.
+ */
+export async function createAdWithTextOptions(params: {
+  adset_id: string;
+  name: string;
+  page_id: string;
+  status?: string;
+  headlines: string[];
+  primaryTexts: string[];
+  imageHash?: string;
+  videoId?: string;
+  linkUrl: string;
+  ctaType?: string;
+}) {
+  const texts = [
+    ...params.primaryTexts.map((text) => ({ text, text_type: "primary_text" })),
+    ...params.headlines.map((text) => ({ text, text_type: "headline" })),
+  ];
+
+  const group: Record<string, unknown> = {
+    texts,
+    call_to_action: {
+      type: params.ctaType || "SHOP_NOW",
+      value: { link: params.linkUrl },
+    },
+  };
+
+  if (params.imageHash) {
+    group.images = [{ hash: params.imageHash }];
+  } else if (params.videoId) {
+    group.videos = [{ video_id: params.videoId }];
+  }
+
+  return metaApi<{ id: string }>(`/${await getAdAccountId()}/ads`, {
+    method: "POST",
+    body: {
+      adset_id: params.adset_id,
+      name: params.name,
+      status: params.status || "PAUSED",
+      creative: {
+        name: params.name,
+        object_story_spec: { page_id: params.page_id },
+      },
+      creative_asset_groups_spec: {
+        groups: [group],
+      },
+    },
+  });
+}
+
 export async function updateAd(adId: string, params: Record<string, unknown>) {
   return metaApi(`/${adId}`, { method: "POST", body: params });
 }

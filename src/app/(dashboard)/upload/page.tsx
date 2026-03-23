@@ -1145,8 +1145,8 @@ export default function UploadPage() {
             <LayoutTemplate className="h-4 w-4 text-cyan-400" />
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Template</h3>
             {isDynamic && (
-              <span className="ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                Dynamic Creative
+              <span className="ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                Flera textvarianter
               </span>
             )}
           </div>
