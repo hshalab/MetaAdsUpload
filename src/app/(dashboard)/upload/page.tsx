@@ -26,6 +26,13 @@ import {
   History,
   ExternalLink,
   Clock,
+  ChevronDown,
+  AlertTriangle,
+  Copy,
+  Bug,
+  ShieldAlert,
+  Timer,
+  WifiOff,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -86,18 +93,33 @@ interface R2File {
   mediaType: "video" | "image";
 }
 
+interface ErrorDetails {
+  message: string;
+  failedStep: number;
+  failedStepName: string;
+  metaErrorCode?: number;
+  metaErrorSubcode?: number;
+  httpStatus?: number;
+  isAuthError?: boolean;
+  isRateLimitError?: boolean;
+  suggestion?: string;
+  payload?: Record<string, unknown>;
+  timestamp: string;
+}
+
 interface UploadJob {
   id: string;
   filename: string;
   status: "pending" | "uploading_r2" | "uploading_meta" | "completed" | "failed";
   step: string;
   error?: string;
+  errorDetails?: ErrorDetails;
   r2Key?: string;
   r2Url?: string;
   mediaType: "video" | "image";
   file?: File;
   result?: Record<string, string>;
-  dbJobId?: number; // DB job ID for polling
+  dbJobId?: number;
 }
 
 interface DbJob {
@@ -116,6 +138,7 @@ interface DbJob {
   creativeId?: string;
   videoId?: string;
   imageHash?: string;
+  config?: Record<string, unknown>;
   error?: string;
   createdAt: string;
   completedAt?: string;
@@ -184,6 +207,10 @@ export default function UploadPage() {
   const [r2Loading, setR2Loading] = useState(false);
   const [r2Selected, setR2Selected] = useState<R2File[]>([]);
   const [r2PathStack, setR2PathStack] = useState<string[]>([""]);
+
+  // Error detail expansion
+  const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
+  const [expandedHistoryErrors, setExpandedHistoryErrors] = useState<Set<number>>(new Set());
 
   // Polling ref
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -629,7 +656,23 @@ export default function UploadPage() {
         const result = await res.json();
 
         if (!res.ok) {
-          throw new Error(result.error || "Meta upload failed");
+          // Capture rich error details from API
+          const errDetails: ErrorDetails | undefined = result.errorDetails;
+          setJobs((prev) =>
+            prev.map((j) =>
+              j.id === job.id
+                ? {
+                    ...j,
+                    status: "failed" as const,
+                    step: "Failed",
+                    error: result.error || "Meta upload failed",
+                    errorDetails: errDetails,
+                    dbJobId: result.jobId,
+                  }
+                : j
+            )
+          );
+          continue; // skip to next job
         }
 
         if (result.adsetId && adsetMode === "new" && !createdAdsetId) {
@@ -698,6 +741,27 @@ export default function UploadPage() {
     return `${Math.floor(hours / 24)}d ago`;
   };
 
+  const toggleError = (id: string) => {
+    setExpandedErrors((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleHistoryError = (id: number) => {
+    setExpandedHistoryErrors((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const copyError = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Felinfo kopierat!");
+  };
+
   const hasPending = jobs.some((j) => j.status === "pending");
   const hasCompleted = jobs.some((j) => j.status === "completed" || j.status === "failed");
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
@@ -759,63 +823,153 @@ export default function UploadPage() {
           ) : history.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-500">No upload history yet</div>
           ) : (
-            <div className="divide-y divide-white/[0.03] max-h-[300px] overflow-y-auto">
-              {history.map((h) => (
-                <div key={h.id} className="flex items-center gap-3 px-5 py-3">
-                  {h.status === "completed" ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  ) : h.status === "failed" ? (
-                    <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-                  ) : (
-                    <Loader2 className="h-4 w-4 animate-spin text-cyan-400 shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-white truncate font-medium">{h.filename}</p>
-                      <span className={cn(
-                        "text-[9px] px-1.5 py-0.5 rounded font-medium",
-                        h.mediaType === "video"
-                          ? "bg-cyan-500/10 text-cyan-400"
-                          : "bg-purple-500/10 text-purple-400"
-                      )}>
-                        {h.mediaType}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {h.status === "completed" && (
-                        <>
-                          <span className="text-[10px] text-emerald-400">Ad: {h.adId}</span>
-                          {h.creativeId && <span className="text-[10px] text-slate-500">Creative: {h.creativeId}</span>}
-                        </>
+            <div className="divide-y divide-white/[0.03] max-h-[400px] overflow-y-auto">
+              {history.map((h) => {
+                const hExpanded = expandedHistoryErrors.has(h.id);
+                const hConfig = h.config as Record<string, unknown> | null;
+                const hEd = hConfig?.errorDetails as ErrorDetails | undefined;
+                return (
+                  <div key={h.id} className="px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      {h.status === "completed" ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                      ) : h.status === "failed" ? (
+                        <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                      ) : (
+                        <Loader2 className="h-4 w-4 animate-spin text-cyan-400 shrink-0" />
                       )}
-                      {h.status === "failed" && (
-                        <span className="text-[10px] text-red-400">{h.error}</span>
-                      )}
-                      {h.status !== "completed" && h.status !== "failed" && (
-                        <span className="text-[10px] text-slate-500">
-                          Step {h.currentStep}/{h.totalSteps}: {h.stepLabel}
-                        </span>
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-white truncate font-medium">{h.filename}</p>
+                          <span className={cn(
+                            "text-[9px] px-1.5 py-0.5 rounded font-medium",
+                            h.mediaType === "video"
+                              ? "bg-cyan-500/10 text-cyan-400"
+                              : "bg-purple-500/10 text-purple-400"
+                          )}>
+                            {h.mediaType}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {h.status === "completed" && (
+                            <>
+                              <span className="text-[10px] text-emerald-400">Ad: {h.adId}</span>
+                              {h.creativeId && <span className="text-[10px] text-slate-500">Creative: {h.creativeId}</span>}
+                            </>
+                          )}
+                          {h.status === "failed" && (
+                            <span className="text-[10px] text-red-400 truncate">{h.error}</span>
+                          )}
+                          {h.status !== "completed" && h.status !== "failed" && (
+                            <span className="text-[10px] text-slate-500">
+                              Step {h.currentStep}/{h.totalSteps}: {h.stepLabel}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {h.status === "failed" && (
+                          <button
+                            onClick={() => toggleHistoryError(h.id)}
+                            className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 px-1.5 py-1 rounded bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-all"
+                          >
+                            <Bug className="h-3 w-3" />
+                            <ChevronDown className={cn("h-3 w-3 transition-transform", hExpanded && "rotate-180")} />
+                          </button>
+                        )}
+                        <div className="text-right">
+                          <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                            <Clock className="h-3 w-3" />
+                            {timeAgo(h.createdAt)}
+                          </div>
+                          {h.status === "completed" && h.adId && (
+                            <a
+                              href={`https://business.facebook.com/adsmanager/manage/ads?act=261297039993717&selected_ad_ids=${h.adId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 mt-0.5"
+                            >
+                              View in Meta <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="flex items-center gap-1 text-[10px] text-slate-500">
-                      <Clock className="h-3 w-3" />
-                      {timeAgo(h.createdAt)}
-                    </div>
-                    {h.status === "completed" && h.adId && (
-                      <a
-                        href={`https://business.facebook.com/adsmanager/manage/ads?act=261297039993717&selected_ad_ids=${h.adId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 mt-0.5"
-                      >
-                        View in Meta <ExternalLink className="h-2.5 w-2.5" />
-                      </a>
+
+                    {/* Expanded error details for history */}
+                    {h.status === "failed" && hExpanded && (
+                      <div className="mt-3 ml-7 rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-2.5">
+                        {hEd?.suggestion && (
+                          <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20">
+                            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-[11px] font-medium text-amber-400 mb-0.5">Förslag</p>
+                              <p className="text-[11px] text-amber-300/80 leading-relaxed">{hEd.suggestion}</p>
+                            </div>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                          {hEd?.failedStepName && (
+                            <div className="p-2 rounded-md bg-white/[0.02]">
+                              <p className="text-[9px] text-slate-500 mb-0.5">Steg</p>
+                              <p className="text-[11px] text-red-400 font-medium">{hEd.failedStep}/4: {hEd.failedStepName}</p>
+                            </div>
+                          )}
+                          {hEd?.metaErrorCode && (
+                            <div className="p-2 rounded-md bg-white/[0.02]">
+                              <p className="text-[9px] text-slate-500 mb-0.5">Meta felkod</p>
+                              <p className="text-[11px] text-white font-mono">{hEd.metaErrorCode}{hEd.metaErrorSubcode ? ` / ${hEd.metaErrorSubcode}` : ""}</p>
+                            </div>
+                          )}
+                          {hEd?.httpStatus && (
+                            <div className="p-2 rounded-md bg-white/[0.02]">
+                              <p className="text-[9px] text-slate-500 mb-0.5">HTTP</p>
+                              <p className="text-[11px] text-white font-mono">{hEd.httpStatus}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-500 mb-1">Felmeddelande</p>
+                          <div className="p-2 rounded-md bg-black/30 border border-white/[0.04]">
+                            <p className="text-[11px] text-red-300 font-mono break-all leading-relaxed">{h.error}</p>
+                          </div>
+                        </div>
+                        {hEd?.payload && (
+                          <div>
+                            <p className="text-[9px] text-slate-500 mb-1">Payload</p>
+                            <div className="p-2 rounded-md bg-black/30 border border-white/[0.04] max-h-[120px] overflow-y-auto">
+                              <pre className="text-[10px] text-slate-400 font-mono break-all whitespace-pre-wrap">
+                                {JSON.stringify(hEd.payload, null, 2)}
+                              </pre>
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          onClick={() =>
+                            copyError(
+                              [
+                                `File: ${h.filename}`,
+                                `Error: ${h.error}`,
+                                hEd?.failedStepName ? `Step: ${hEd.failedStep}/4 — ${hEd.failedStepName}` : "",
+                                hEd?.metaErrorCode ? `Meta code: ${hEd.metaErrorCode}${hEd.metaErrorSubcode ? ` / ${hEd.metaErrorSubcode}` : ""}` : "",
+                                hEd?.httpStatus ? `HTTP: ${hEd.httpStatus}` : "",
+                                hEd?.suggestion ? `Suggestion: ${hEd.suggestion}` : "",
+                                hEd?.payload ? `Payload: ${JSON.stringify(hEd.payload, null, 2)}` : "",
+                              ]
+                                .filter(Boolean)
+                                .join("\n")
+                            )
+                          }
+                          className="flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-white transition-colors"
+                        >
+                          <Copy className="h-3 w-3" />
+                          Kopiera all felinformation
+                        </button>
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1279,80 +1433,195 @@ export default function UploadPage() {
             </div>
           </div>
           <div className="divide-y divide-white/[0.03]">
-            {jobs.map((job) => (
-              <div key={job.id} className="px-5 py-3">
-                <div className="flex items-center gap-3">
-                  {job.status === "completed" ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  ) : job.status === "failed" ? (
-                    <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-                  ) : job.status === "uploading_r2" || job.status === "uploading_meta" ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-cyan-400 shrink-0" />
-                  ) : (
-                    <div className="h-4 w-4 rounded-full border border-white/[0.1] shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-white truncate font-medium">{job.filename}</p>
-                    <p className="text-[10px] text-slate-500">
-                      {job.status === "pending" && "Waiting..."}
-                      {job.status === "uploading_r2" && "Uploading to Cloudflare R2..."}
-                      {job.status === "uploading_meta" && job.step}
-                      {job.status === "completed" && (
-                        <span className="text-emerald-400">
-                          Done! Ad ID: {job.result?.adId}
-                          {job.result?.adId && (
-                            <a
-                              href={`https://business.facebook.com/adsmanager/manage/ads?act=261297039993717&selected_ad_ids=${job.result.adId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="ml-2 inline-flex items-center gap-0.5 text-cyan-400 hover:text-cyan-300"
-                            >
-                              View <ExternalLink className="h-2.5 w-2.5" />
-                            </a>
-                          )}
-                        </span>
-                      )}
-                      {job.status === "failed" && <span className="text-red-400">{job.error}</span>}
-                    </p>
+            {jobs.map((job) => {
+              const isExpanded = expandedErrors.has(job.id);
+              const ed = job.errorDetails;
+              return (
+                <div key={job.id} className="px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    {job.status === "completed" ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    ) : job.status === "failed" ? (
+                      <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                    ) : job.status === "uploading_r2" || job.status === "uploading_meta" ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-cyan-400 shrink-0" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border border-white/[0.1] shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white truncate font-medium">{job.filename}</p>
+                      <p className="text-[10px] text-slate-500">
+                        {job.status === "pending" && "Waiting..."}
+                        {job.status === "uploading_r2" && "Uploading to Cloudflare R2..."}
+                        {job.status === "uploading_meta" && job.step}
+                        {job.status === "completed" && (
+                          <span className="text-emerald-400">
+                            Done! Ad ID: {job.result?.adId}
+                            {job.result?.adId && (
+                              <a
+                                href={`https://business.facebook.com/adsmanager/manage/ads?act=261297039993717&selected_ad_ids=${job.result.adId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-2 inline-flex items-center gap-0.5 text-cyan-400 hover:text-cyan-300"
+                              >
+                                View <ExternalLink className="h-2.5 w-2.5" />
+                              </a>
+                            )}
+                          </span>
+                        )}
+                        {job.status === "failed" && (
+                          <span className="text-red-400">{job.error}</span>
+                        )}
+                      </p>
+                    </div>
+                    {job.status === "pending" && (
+                      <button onClick={() => removeJob(job.id)} className="text-slate-600 hover:text-red-400">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {job.status === "failed" && (
+                      <button
+                        onClick={() => toggleError(job.id)}
+                        className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 px-2 py-1 rounded-md bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-all"
+                      >
+                        <Bug className="h-3 w-3" />
+                        Detaljer
+                        <ChevronDown className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-180")} />
+                      </button>
+                    )}
                   </div>
-                  {job.status === "pending" && (
-                    <button onClick={() => removeJob(job.id)} className="text-slate-600 hover:text-red-400">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+
+                  {/* Progress bar for active uploads */}
+                  {(job.status === "uploading_r2" || job.status === "uploading_meta") && (
+                    <div className="mt-2 ml-7">
+                      <div className="flex gap-1">
+                        {STEP_LABELS.map((label, i) => {
+                          const stepNum = i + 1;
+                          const currentStepMatch = job.step.match(/Step (\d+)/);
+                          const currentStep = currentStepMatch ? parseInt(currentStepMatch[1]) : (job.status === "uploading_r2" ? 0 : 1);
+                          const isActive = stepNum === currentStep;
+                          const isDone = stepNum < currentStep;
+                          return (
+                            <div key={i} className="flex-1">
+                              <div
+                                className={cn(
+                                  "h-1 rounded-full transition-all",
+                                  isDone ? "bg-emerald-400" : isActive ? "bg-cyan-400 animate-pulse" : "bg-white/[0.06]"
+                                )}
+                              />
+                              <p className={cn(
+                                "text-[9px] mt-0.5 truncate",
+                                isDone ? "text-emerald-400/60" : isActive ? "text-cyan-400" : "text-slate-600"
+                              )}>
+                                {label}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
-                </div>
-                {/* Progress bar for active uploads */}
-                {(job.status === "uploading_r2" || job.status === "uploading_meta") && (
-                  <div className="mt-2 ml-7">
-                    <div className="flex gap-1">
-                      {STEP_LABELS.map((label, i) => {
-                        const stepNum = i + 1;
-                        const currentStepMatch = job.step.match(/Step (\d+)/);
-                        const currentStep = currentStepMatch ? parseInt(currentStepMatch[1]) : (job.status === "uploading_r2" ? 0 : 1);
-                        const isActive = stepNum === currentStep;
-                        const isDone = stepNum < currentStep;
-                        return (
-                          <div key={i} className="flex-1">
-                            <div
-                              className={cn(
-                                "h-1 rounded-full transition-all",
-                                isDone ? "bg-emerald-400" : isActive ? "bg-cyan-400 animate-pulse" : "bg-white/[0.06]"
-                              )}
-                            />
-                            <p className={cn(
-                              "text-[9px] mt-0.5 truncate",
-                              isDone ? "text-emerald-400/60" : isActive ? "text-cyan-400" : "text-slate-600"
-                            )}>
-                              {label}
+
+                  {/* Expandable error details */}
+                  {job.status === "failed" && isExpanded && (
+                    <div className="mt-3 ml-7 rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-2.5">
+                      {/* Suggestion banner */}
+                      {ed?.suggestion && (
+                        <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20">
+                          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-[11px] font-medium text-amber-400 mb-0.5">Förslag</p>
+                            <p className="text-[11px] text-amber-300/80 leading-relaxed">{ed.suggestion}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Error info grid */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {ed?.failedStepName && (
+                          <div className="p-2 rounded-md bg-white/[0.02]">
+                            <p className="text-[9px] text-slate-500 mb-0.5">Steg som misslyckades</p>
+                            <p className="text-[11px] text-red-400 font-medium">
+                              {ed.failedStep}/4: {ed.failedStepName}
                             </p>
                           </div>
-                        );
-                      })}
+                        )}
+                        {ed?.metaErrorCode && (
+                          <div className="p-2 rounded-md bg-white/[0.02]">
+                            <p className="text-[9px] text-slate-500 mb-0.5">Meta felkod</p>
+                            <p className="text-[11px] text-white font-mono">
+                              {ed.metaErrorCode}
+                              {ed.metaErrorSubcode ? ` / ${ed.metaErrorSubcode}` : ""}
+                            </p>
+                          </div>
+                        )}
+                        {ed?.httpStatus && (
+                          <div className="p-2 rounded-md bg-white/[0.02]">
+                            <p className="text-[9px] text-slate-500 mb-0.5">HTTP Status</p>
+                            <p className="text-[11px] text-white font-mono">{ed.httpStatus}</p>
+                          </div>
+                        )}
+                        {ed?.isAuthError && (
+                          <div className="p-2 rounded-md bg-white/[0.02] flex items-center gap-1.5">
+                            <ShieldAlert className="h-3.5 w-3.5 text-red-400" />
+                            <p className="text-[11px] text-red-400 font-medium">Auth-fel</p>
+                          </div>
+                        )}
+                        {ed?.isRateLimitError && (
+                          <div className="p-2 rounded-md bg-white/[0.02] flex items-center gap-1.5">
+                            <Timer className="h-3.5 w-3.5 text-amber-400" />
+                            <p className="text-[11px] text-amber-400 font-medium">Rate limit</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Full error message */}
+                      <div>
+                        <p className="text-[9px] text-slate-500 mb-1">Felmeddelande</p>
+                        <div className="p-2 rounded-md bg-black/30 border border-white/[0.04]">
+                          <p className="text-[11px] text-red-300 font-mono break-all leading-relaxed">{job.error}</p>
+                        </div>
+                      </div>
+
+                      {/* Payload that was sent */}
+                      {ed?.payload && (
+                        <div>
+                          <p className="text-[9px] text-slate-500 mb-1">Data som skickades till Meta</p>
+                          <div className="p-2 rounded-md bg-black/30 border border-white/[0.04] max-h-[150px] overflow-y-auto">
+                            <pre className="text-[10px] text-slate-400 font-mono break-all whitespace-pre-wrap">
+                              {JSON.stringify(ed.payload, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Copy all error info */}
+                      <button
+                        onClick={() =>
+                          copyError(
+                            [
+                              `File: ${job.filename}`,
+                              `Error: ${job.error}`,
+                              ed?.failedStepName ? `Failed step: ${ed.failedStep}/4 — ${ed.failedStepName}` : "",
+                              ed?.metaErrorCode ? `Meta error code: ${ed.metaErrorCode}${ed.metaErrorSubcode ? ` / ${ed.metaErrorSubcode}` : ""}` : "",
+                              ed?.httpStatus ? `HTTP: ${ed.httpStatus}` : "",
+                              ed?.suggestion ? `Suggestion: ${ed.suggestion}` : "",
+                              ed?.payload ? `Payload: ${JSON.stringify(ed.payload, null, 2)}` : "",
+                            ]
+                              .filter(Boolean)
+                              .join("\n")
+                          )
+                        }
+                        className="flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-white transition-colors"
+                      >
+                        <Copy className="h-3 w-3" />
+                        Kopiera all felinformation
+                      </button>
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

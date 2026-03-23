@@ -4,7 +4,7 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { uploadImage, uploadVideo, createAdCreative } from "@/lib/meta/creatives";
 import { createAdSet } from "@/lib/meta/adsets";
 import { createAd } from "@/lib/meta/ads";
-import { getPageId, getPixelId, metaApi, getAdAccountId } from "@/lib/meta/client";
+import { getPageId, getPixelId, metaApi, getAdAccountId, MetaApiError } from "@/lib/meta/client";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 
@@ -77,6 +77,90 @@ async function updateJob(jobId: number, data: Record<string, unknown>) {
   }
 }
 
+interface ErrorDetails {
+  message: string;
+  failedStep: number;
+  failedStepName: string;
+  metaErrorCode?: number;
+  metaErrorSubcode?: number;
+  httpStatus?: number;
+  isAuthError?: boolean;
+  isRateLimitError?: boolean;
+  suggestion?: string;
+  payload?: Record<string, unknown>;
+  timestamp: string;
+}
+
+const STEP_NAMES = [
+  "Upload media to Meta",
+  "Create ad creative",
+  "Set up ad set",
+  "Create ad",
+];
+
+function buildErrorDetails(error: unknown, step: number, payload?: Record<string, unknown>): ErrorDetails {
+  const details: ErrorDetails = {
+    message: error instanceof Error ? error.message : String(error),
+    failedStep: step,
+    failedStepName: STEP_NAMES[step - 1] || `Step ${step}`,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (payload) {
+    // Sanitize — don't store the access token
+    details.payload = payload;
+  }
+
+  if (error instanceof MetaApiError) {
+    details.metaErrorCode = error.metaErrorCode;
+    details.metaErrorSubcode = error.metaErrorSubcode;
+    details.httpStatus = error.statusCode;
+    details.isAuthError = error.isAuthError;
+    details.isRateLimitError = error.isRateLimitError;
+
+    // Provide actionable suggestions for common errors
+    if (error.isAuthError) {
+      details.suggestion = "Din Meta-token har gått ut. Gå till Inställningar och koppla om ditt Meta-konto.";
+    } else if (error.isRateLimitError) {
+      details.suggestion = "Meta API rate limit nådd. Vänta några minuter och försök igen.";
+    } else if (error.metaErrorCode === 100) {
+      if (error.metaErrorSubcode === 1487851) {
+        details.suggestion = "Ogiltig video. Kontrollera att videon är minst 1 sekund lång och i ett format som Meta stödjer (MP4, MOV).";
+      } else if (error.metaErrorSubcode === 1487390) {
+        details.suggestion = "Ogiltig bild. Kontrollera att bilden är minst 600x600px och i JPG/PNG-format.";
+      } else {
+        details.suggestion = "Ogiltiga parametrar skickades till Meta. Kontrollera att alla fält är korrekt ifyllda. Se 'payload' för detaljer.";
+      }
+    } else if (error.metaErrorCode === 2) {
+      details.suggestion = "Tillfälligt Meta API-fel. Försök igen om några sekunder.";
+    } else if (error.metaErrorCode === 1) {
+      details.suggestion = "Okänt Meta API-fel. Det kan vara ett tillfälligt problem. Försök igen. Om det kvarstår, kontrollera Meta Ads Manager.";
+    } else if (error.metaErrorCode === 10 || error.metaErrorCode === 200) {
+      details.suggestion = "Behörighetsproblem. Din Meta-token saknar nödvändiga rättigheter (ads_management). Koppla om kontot i Inställningar.";
+    } else if (error.metaErrorCode === 2635) {
+      details.suggestion = "Dynamic Creative-fel. Kontrollera att ad set:et har is_dynamic_creative=true, eller skicka bara en headline/text.";
+    } else if (error.message.includes("pixel")) {
+      details.suggestion = "Pixel-relaterat fel. Kontrollera att din Pixel ID är korrekt i Inställningar.";
+    } else if (error.message.includes("page")) {
+      details.suggestion = "Page-relaterat fel. Kontrollera att rätt Facebook-sida är vald i Inställningar.";
+    }
+  } else if (error instanceof Error) {
+    if (error.message.includes("R2") || error.message.includes("S3")) {
+      details.suggestion = "Cloudflare R2-fel. Kontrollera att R2-credentials är korrekt konfigurerade i miljövariabler.";
+    } else if (error.message.includes("network") || error.message.includes("fetch")) {
+      details.suggestion = "Nätverksfel. Kontrollera internetanslutningen och försök igen.";
+    } else if (error.message.includes("timeout")) {
+      details.suggestion = "Timeout. Filen kan vara för stor. Försök med en mindre fil eller komprimera videon.";
+    }
+  }
+
+  if (!details.suggestion) {
+    details.suggestion = "Oväntat fel. Kopiera felmeddelandet och sök i Meta Business Help Center.";
+  }
+
+  return details;
+}
+
 // ─── Main handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
@@ -145,33 +229,66 @@ export async function POST(request: NextRequest) {
     const useDynamic = headlinesArr.length > 1 || textsArr.length > 1;
 
     const results: Record<string, string> = {};
+    let currentStep = 1;
 
     // ─── Step 1: Upload media to Meta ─────────────────────────────────────
-    await updateJob(jobId, { currentStep: 1, stepLabel: `Uploading ${mediaType} to Meta...` });
+    currentStep = 1;
+    await updateJob(jobId, { currentStep, stepLabel: `Uploading ${mediaType} to Meta...` });
 
     let videoId: string | undefined;
     let imageHash: string | undefined;
 
     if (mediaType === "video") {
+      let urlError: unknown;
       try {
         videoId = await uploadVideoByUrl(r2Url, filename);
-      } catch {
-        const { buffer } = await downloadFromR2(r2Key);
-        const result = await uploadVideo(buffer, filename);
-        videoId = result.id;
+      } catch (e) {
+        urlError = e;
+      }
+      if (!videoId) {
+        try {
+          const { buffer } = await downloadFromR2(r2Key);
+          const result = await uploadVideo(buffer, filename);
+          videoId = result.id;
+        } catch (e) {
+          // Both methods failed — report error with context
+          const details = buildErrorDetails(e, currentStep, {
+            r2Key, r2Url, filename, mediaType,
+            urlUploadError: urlError instanceof Error ? urlError.message : String(urlError),
+          });
+          await updateJob(jobId, {
+            status: "failed",
+            error: details.message,
+            stepLabel: `Misslyckades: ${details.failedStepName}`,
+            config: { ...body, errorDetails: details },
+          });
+          return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+        }
       }
       results.videoId = videoId;
       await updateJob(jobId, { videoId });
     } else {
-      const { buffer } = await downloadFromR2(r2Key);
-      const result = await uploadImage(buffer, filename);
-      imageHash = result.hash;
-      results.imageHash = imageHash;
+      try {
+        const { buffer } = await downloadFromR2(r2Key);
+        const result = await uploadImage(buffer, filename);
+        imageHash = result.hash;
+      } catch (e) {
+        const details = buildErrorDetails(e, currentStep, { r2Key, filename, mediaType });
+        await updateJob(jobId, {
+          status: "failed",
+          error: details.message,
+          stepLabel: `Misslyckades: ${details.failedStepName}`,
+          config: { ...body, errorDetails: details },
+        });
+        return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+      }
+      results.imageHash = imageHash!;
       await updateJob(jobId, { imageHash });
     }
 
     // ─── Step 2: Create Ad Creative ───────────────────────────────────────
-    await updateJob(jobId, { currentStep: 2, stepLabel: "Creating ad creative..." });
+    currentStep = 2;
+    await updateJob(jobId, { currentStep, stepLabel: "Creating ad creative..." });
 
     const pageId = await getPageId();
     const creativeName = `${filename.replace(/\.[^.]+$/, "")} ${new Date().toISOString().split("T")[0]}`;
@@ -224,15 +341,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const adCreative = await createAdCreative(
-      creativePayload as Parameters<typeof createAdCreative>[0]
-    );
+    let adCreative: { id: string };
+    try {
+      adCreative = await createAdCreative(
+        creativePayload as Parameters<typeof createAdCreative>[0]
+      );
+    } catch (e) {
+      const details = buildErrorDetails(e, currentStep, creativePayload);
+      await updateJob(jobId, {
+        status: "failed",
+        error: details.message,
+        stepLabel: `Misslyckades: ${details.failedStepName}`,
+        config: { ...body, errorDetails: details },
+      });
+      return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+    }
+
     results.creativeId = adCreative.id;
     if (useDynamic) results.dynamicCreative = "true";
     await updateJob(jobId, { creativeId: adCreative.id });
 
     // ─── Step 3: Create or reuse ad set ───────────────────────────────────
-    await updateJob(jobId, { currentStep: 3, stepLabel: "Setting up ad set..." });
+    currentStep = 3;
+    await updateJob(jobId, { currentStep, stepLabel: "Setting up ad set..." });
 
     let adsetId = existingAdsetId;
 
@@ -256,33 +387,68 @@ export async function POST(request: NextRequest) {
         adsetParams.is_dynamic_creative = true;
       }
 
-      const adset = await createAdSet(adsetParams as Parameters<typeof createAdSet>[0]);
-      adsetId = adset.id;
-      results.adsetId = adset.id;
+      try {
+        const adset = await createAdSet(adsetParams as Parameters<typeof createAdSet>[0]);
+        adsetId = adset.id;
+        results.adsetId = adset.id;
+      } catch (e) {
+        const details = buildErrorDetails(e, currentStep, adsetParams);
+        await updateJob(jobId, {
+          status: "failed",
+          error: details.message,
+          stepLabel: `Misslyckades: ${details.failedStepName}`,
+          config: { ...body, errorDetails: details },
+        });
+        return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+      }
     } else if (adsetId) {
       results.adsetId = adsetId;
     }
 
     if (!adsetId) {
+      const details: ErrorDetails = {
+        message: "Inget ad set valt och ingen ad set-konfiguration angiven",
+        failedStep: currentStep,
+        failedStepName: STEP_NAMES[currentStep - 1],
+        suggestion: "Välj ett befintligt ad set eller fyll i 'Create New' med budget och targeting.",
+        timestamp: new Date().toISOString(),
+      };
       await updateJob(jobId, {
         status: "failed",
-        error: "No ad set ID and no ad set config provided",
-        stepLabel: "Failed — no ad set",
+        error: details.message,
+        stepLabel: `Misslyckades: ${details.failedStepName}`,
+        config: { ...body, errorDetails: details },
       });
-      return NextResponse.json({ error: "No ad set ID and no ad set config provided" }, { status: 400 });
+      return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 400 });
     }
 
     await updateJob(jobId, { adsetId });
 
     // ─── Step 4: Create Ad ────────────────────────────────────────────────
-    await updateJob(jobId, { currentStep: 4, stepLabel: "Creating ad..." });
+    currentStep = 4;
+    await updateJob(jobId, { currentStep, stepLabel: "Creating ad..." });
 
-    const ad = await createAd({
+    const adParams = {
       adset_id: adsetId,
       name: adNameValue || creativeName,
       creative: { creative_id: adCreative.id },
-      status: "PAUSED",
-    });
+      status: "PAUSED" as const,
+    };
+
+    let ad: { id: string };
+    try {
+      ad = await createAd(adParams);
+    } catch (e) {
+      const details = buildErrorDetails(e, currentStep, adParams as unknown as Record<string, unknown>);
+      await updateJob(jobId, {
+        status: "failed",
+        error: details.message,
+        stepLabel: `Misslyckades: ${details.failedStepName}`,
+        config: { ...body, errorDetails: details },
+      });
+      return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+    }
+
     results.adId = ad.id;
 
     // Mark completed
@@ -296,17 +462,19 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, jobId, ...results });
   } catch (error) {
+    // Catch-all for unexpected errors (auth, DB, etc.)
     console.error("Upload from R2 error:", error);
-    const errMsg = error instanceof Error ? error.message : "Upload failed";
+    const details = buildErrorDetails(error, 0, undefined);
 
     if (jobId) {
       await updateJob(jobId, {
         status: "failed",
-        error: errMsg,
-        stepLabel: "Failed",
+        error: details.message,
+        stepLabel: "Misslyckades",
+        config: { errorDetails: details },
       });
     }
 
-    return NextResponse.json({ error: errMsg, jobId }, { status: 500 });
+    return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
   }
 }
