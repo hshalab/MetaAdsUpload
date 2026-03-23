@@ -132,7 +132,7 @@ export async function DELETE(request: NextRequest) {
       // Hard delete: remove from R2 + DB
       const [creative] = await db.select().from(schema.creatives).where(eq(schema.creatives.id, id));
       if (creative?.r2Key) {
-        const bucketName = process.env.R2_BUCKET_NAME;
+        const bucketName = process.env.R2_BUCKET_NAME?.trim();
         if (bucketName) {
           const client = getR2Client();
           await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: creative.r2Key }));

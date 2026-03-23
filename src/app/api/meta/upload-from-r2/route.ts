@@ -7,7 +7,7 @@ import { createAd } from "@/lib/meta/ads";
 import { getPageId, getPixelId, metaApi, getAdAccountId, MetaApiError } from "@/lib/meta/client";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
-import { getR2Client } from "@/lib/r2";
+import { getR2Client, getR2Bucket } from "@/lib/r2";
 
 export const maxDuration = 300; // 5 minutes for large video uploads
 
@@ -15,8 +15,7 @@ export const maxDuration = 300; // 5 minutes for large video uploads
 
 async function downloadFromR2(key: string): Promise<{ buffer: Buffer; contentType: string }> {
   const client = getR2Client();
-  const bucketName = process.env.R2_BUCKET_NAME;
-  if (!bucketName) throw new Error("R2_BUCKET_NAME not configured");
+  const bucketName = getR2Bucket();
 
   const command = new GetObjectCommand({ Bucket: bucketName, Key: key });
   const result = await client.send(command);

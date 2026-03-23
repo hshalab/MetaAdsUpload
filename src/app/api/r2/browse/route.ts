@@ -11,8 +11,8 @@ export async function GET(request: NextRequest) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const bucketName = process.env.R2_BUCKET_NAME;
-    const publicUrl = process.env.R2_PUBLIC_URL;
+    const bucketName = process.env.R2_BUCKET_NAME?.trim();
+    const publicUrl = process.env.R2_PUBLIC_URL?.trim();
     if (!bucketName) return NextResponse.json({ error: "R2_BUCKET_NAME not configured" }, { status: 500 });
 
     const prefix = request.nextUrl.searchParams.get("prefix") || "";
