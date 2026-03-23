@@ -39,6 +39,7 @@ export async function createAdSet(params: {
   end_time?: string;
   status?: string;
   promoted_object?: Record<string, unknown>;
+  is_dynamic_creative?: boolean;
 }) {
   return metaApi<{ id: string }>(`/${await getAdAccountId()}/adsets`, {
     method: "POST",

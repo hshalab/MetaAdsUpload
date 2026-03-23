@@ -19,6 +19,10 @@ import {
   RefreshCw,
   Trash2,
   Play,
+  Plus,
+  Minus,
+  LayoutTemplate,
+  Zap,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -37,6 +41,30 @@ interface AdSetItem {
   status: string;
   daily_budget?: string;
   optimization_goal?: string;
+}
+
+interface Template {
+  id: number;
+  name: string;
+  isDefault: boolean;
+  objective?: string;
+  budgetType?: string;
+  dailyBudget?: number;
+  headlines?: string[];
+  primaryTexts?: string[];
+  descriptions?: string[];
+  ctaType?: string;
+  landingPages?: string[];
+  targetCountries?: string[];
+  ageMin?: number;
+  ageMax?: number;
+  genders?: number[];
+  optimizationGoal?: string;
+  conversionEvent?: string;
+  bidStrategy?: string;
+  productName?: string;
+  angleName?: string;
+  pixelId?: string;
 }
 
 interface R2Folder {
@@ -68,17 +96,24 @@ interface UploadJob {
   result?: Record<string, string>;
 }
 
+const PREFS_KEY = "meta-upload-prefs";
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function UploadPage() {
   const [activeTab, setActiveTab] = useState<"computer" | "cloudflare">("computer");
+
+  // Templates
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
 
   // Campaigns & Adsets
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [adsets, setAdsets] = useState<AdSetItem[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [selectedAdsetId, setSelectedAdsetId] = useState("");
-  const [adsetMode, setAdsetMode] = useState<"existing" | "new">("existing");
+  const [adsetMode, setAdsetMode] = useState<"existing" | "new">("new");
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingAdsets, setLoadingAdsets] = useState(false);
 
@@ -88,10 +123,11 @@ export default function UploadPage() {
   const [newAdsetCountry, setNewAdsetCountry] = useState("SE");
   const [newAdsetOptGoal, setNewAdsetOptGoal] = useState("OFFSITE_CONVERSIONS");
   const [newAdsetBidStrategy, setNewAdsetBidStrategy] = useState("LOWEST_COST_WITHOUT_CAP");
+  const [newAdsetConvEvent, setNewAdsetConvEvent] = useState("PURCHASE");
 
-  // Ad copy
-  const [headline, setHeadline] = useState("");
-  const [primaryText, setPrimaryText] = useState("");
+  // Ad copy — arrays for multi-variant
+  const [headlines, setHeadlines] = useState<string[]>(["", ""]);
+  const [primaryTexts, setPrimaryTexts] = useState<string[]>(["", ""]);
   const [linkUrl, setLinkUrl] = useState("");
   const [ctaType, setCtaType] = useState("SHOP_NOW");
 
@@ -112,23 +148,94 @@ export default function UploadPage() {
   const [r2Selected, setR2Selected] = useState<R2File[]>([]);
   const [r2PathStack, setR2PathStack] = useState<string[]>([""]);
 
-  // ─── Fetch campaigns ───────────────────────────────────────────────────
+  // ─── Load saved preferences ─────────────────────────────────────────────
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PREFS_KEY);
+      if (saved) {
+        const prefs = JSON.parse(saved);
+        if (prefs.templateId) setSelectedTemplateId(prefs.templateId);
+        if (prefs.campaignId) setSelectedCampaignId(prefs.campaignId);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const savePrefs = useCallback(() => {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({
+        templateId: selectedTemplateId,
+        campaignId: selectedCampaignId,
+      }));
+    } catch { /* ignore */ }
+  }, [selectedTemplateId, selectedCampaignId]);
+
+  useEffect(() => { savePrefs(); }, [savePrefs]);
+
+  // ─── Fetch templates + campaigns ────────────────────────────────────────
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/meta/campaigns");
-        if (res.ok) {
-          const { data } = await res.json();
+        const [tplRes, campRes] = await Promise.all([
+          fetch("/api/templates"),
+          fetch("/api/meta/campaigns"),
+        ]);
+        if (tplRes.ok) {
+          const tplData = await tplRes.json();
+          const tpls: Template[] = tplData.data || tplData || [];
+          setTemplates(tpls);
+          // Auto-select default template if none saved
+          const saved = localStorage.getItem(PREFS_KEY);
+          const savedId = saved ? JSON.parse(saved).templateId : null;
+          if (savedId && tpls.some((t) => t.id === savedId)) {
+            // Will be set from saved prefs
+          } else {
+            const def = tpls.find((t) => t.isDefault);
+            if (def) setSelectedTemplateId(def.id);
+          }
+        }
+        if (campRes.ok) {
+          const { data } = await campRes.json();
           setCampaigns(data || []);
         }
       } catch {
-        toast.error("Failed to load campaigns");
+        toast.error("Failed to load data");
       } finally {
+        setLoadingTemplates(false);
         setLoadingCampaigns(false);
       }
     })();
   }, []);
+
+  // ─── Apply template when selected ───────────────────────────────────────
+
+  const applyTemplate = useCallback((tpl: Template) => {
+    setHeadlines(
+      tpl.headlines && tpl.headlines.length > 0
+        ? [...tpl.headlines]
+        : ["", ""]
+    );
+    setPrimaryTexts(
+      tpl.primaryTexts && tpl.primaryTexts.length > 0
+        ? [...tpl.primaryTexts]
+        : ["", ""]
+    );
+    setLinkUrl(tpl.landingPages?.[0] || "");
+    setCtaType(tpl.ctaType || "SHOP_NOW");
+    setNewAdsetBudget(tpl.dailyBudget || 50);
+    setNewAdsetCountry(tpl.targetCountries?.[0] || "SE");
+    setNewAdsetOptGoal(tpl.optimizationGoal || "OFFSITE_CONVERSIONS");
+    setNewAdsetBidStrategy(tpl.bidStrategy || "LOWEST_COST_WITHOUT_CAP");
+    setNewAdsetConvEvent(tpl.conversionEvent || "PURCHASE");
+  }, []);
+
+  useEffect(() => {
+    if (selectedTemplateId) {
+      const tpl = templates.find((t) => t.id === selectedTemplateId);
+      if (tpl) applyTemplate(tpl);
+    }
+  }, [selectedTemplateId, templates, applyTemplate]);
 
   // ─── Fetch adsets when campaign changes ─────────────────────────────────
 
@@ -172,9 +279,7 @@ export default function UploadPage() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "cloudflare") {
-      browseR2("");
-    }
+    if (activeTab === "cloudflare") browseR2("");
   }, [activeTab, browseR2]);
 
   const navigateR2 = (prefix: string) => {
@@ -186,8 +291,7 @@ export default function UploadPage() {
   const goBackR2 = () => {
     setR2PathStack((prev) => {
       const next = prev.slice(0, -1);
-      const prefix = next[next.length - 1] || "";
-      browseR2(prefix);
+      browseR2(next[next.length - 1] || "");
       return next;
     });
     setR2Selected([]);
@@ -222,10 +326,30 @@ export default function UploadPage() {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // ─── List helpers ───────────────────────────────────────────────────────
+
+  const updateListItem = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    index: number,
+    value: string
+  ) => {
+    setter((prev) => prev.map((v, i) => (i === index ? value : v)));
+  };
+
+  const addListItem = (setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+    setter((prev) => (prev.length < 5 ? [...prev, ""] : prev));
+  };
+
+  const removeListItem = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    index: number
+  ) => {
+    setter((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+  };
+
   // ─── Upload to R2 via presigned URL ─────────────────────────────────────
 
   const uploadFileToR2 = async (file: File): Promise<{ key: string; url: string }> => {
-    // Get presigned URL
     const presignRes = await fetch("/api/upload/presign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -236,45 +360,44 @@ export default function UploadPage() {
         purpose: "library",
       }),
     });
-
     if (!presignRes.ok) {
       const err = await presignRes.json();
       throw new Error(err.error || "Failed to get presigned URL");
     }
-
     const { uploadUrl, publicUrl, key } = await presignRes.json();
-
-    // Upload directly to R2
     const uploadRes = await fetch(uploadUrl, {
       method: "PUT",
       headers: { "Content-Type": file.type },
       body: file,
     });
-
     if (!uploadRes.ok) throw new Error("Failed to upload to R2");
-
     return { key, url: publicUrl };
   };
 
-  // ─── Upload to Meta from R2 ────────────────────────────────────────────
+  // ─── Build payload ──────────────────────────────────────────────────────
 
-  const uploadToMeta = async (
-    r2Key: string,
-    r2Url: string,
-    filename: string,
-    mediaType: "video" | "image"
-  ): Promise<Record<string, string>> => {
+  const buildPayload = (r2Key: string, r2Url: string, filename: string, mediaType: "video" | "image", overrideAdsetId?: string) => {
+    const filteredHeadlines = headlines.filter(Boolean);
+    const filteredTexts = primaryTexts.filter(Boolean);
+
     const payload: Record<string, unknown> = {
       r2Key,
       r2Url,
       filename,
       mediaType,
       campaignId: selectedCampaignId,
-      adCopy: { headline, primaryText, linkUrl, ctaType },
+      adCopy: {
+        headlines: filteredHeadlines,
+        primaryTexts: filteredTexts,
+        linkUrl,
+        ctaType,
+      },
       adName: filename.replace(/\.[^.]+$/, ""),
     };
 
-    if (adsetMode === "existing" && selectedAdsetId) {
+    if (overrideAdsetId) {
+      payload.adsetId = overrideAdsetId;
+    } else if (adsetMode === "existing" && selectedAdsetId) {
       payload.adsetId = selectedAdsetId;
     } else if (adsetMode === "new") {
       payload.adsetConfig = {
@@ -283,21 +406,11 @@ export default function UploadPage() {
         targeting: { geo_locations: { countries: [newAdsetCountry] } },
         optimizationGoal: newAdsetOptGoal,
         bidStrategy: newAdsetBidStrategy,
+        conversionEvent: newAdsetConvEvent,
       };
     }
 
-    const res = await fetch("/api/meta/upload-from-r2", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Meta upload failed");
-    }
-
-    return await res.json();
+    return payload;
   };
 
   // ─── Process queue ──────────────────────────────────────────────────────
@@ -311,14 +424,19 @@ export default function UploadPage() {
       toast.error("Select an ad set or switch to 'Create New'");
       return;
     }
+    if (headlines.filter(Boolean).length === 0) {
+      toast.error("Add at least one headline");
+      return;
+    }
+    if (primaryTexts.filter(Boolean).length === 0) {
+      toast.error("Add at least one primary text");
+      return;
+    }
 
     const newJobs: UploadJob[] = [];
 
     if (activeTab === "computer") {
-      if (selectedFiles.length === 0) {
-        toast.error("Select files to upload");
-        return;
-      }
+      if (selectedFiles.length === 0) { toast.error("Select files"); return; }
       for (const file of selectedFiles) {
         newJobs.push({
           id: crypto.randomUUID(),
@@ -331,10 +449,7 @@ export default function UploadPage() {
       }
       setSelectedFiles([]);
     } else {
-      if (r2Selected.length === 0) {
-        toast.error("Select files from R2");
-        return;
-      }
+      if (r2Selected.length === 0) { toast.error("Select files from R2"); return; }
       for (const f of r2Selected) {
         newJobs.push({
           id: crypto.randomUUID(),
@@ -356,14 +471,10 @@ export default function UploadPage() {
   const processQueue = async () => {
     setIsUploading(true);
     const pending = jobs.filter((j) => j.status === "pending");
-
-    // For "new adset" mode, we create the adset with the first file
-    // and reuse it for subsequent files
     let createdAdsetId: string | undefined;
 
     for (const job of pending) {
       try {
-        // Step 1: Upload to R2 if from computer
         if (job.file && !job.r2Key) {
           setJobs((prev) =>
             prev.map((j) =>
@@ -375,38 +486,19 @@ export default function UploadPage() {
           job.r2Url = url;
         }
 
-        // Step 2: Upload to Meta
         setJobs((prev) =>
           prev.map((j) =>
             j.id === job.id ? { ...j, status: "uploading_meta", step: "Uploading to Meta..." } : j
           )
         );
 
-        // If we created an adset from a previous file in this batch, reuse it
-        const overrideAdsetId = createdAdsetId || undefined;
-        const payload: Record<string, unknown> = {
-          r2Key: job.r2Key,
-          r2Url: job.r2Url,
-          filename: job.filename,
-          mediaType: job.mediaType,
-          campaignId: selectedCampaignId,
-          adCopy: { headline, primaryText, linkUrl, ctaType },
-          adName: job.filename.replace(/\.[^.]+$/, ""),
-        };
-
-        if (overrideAdsetId) {
-          payload.adsetId = overrideAdsetId;
-        } else if (adsetMode === "existing" && selectedAdsetId) {
-          payload.adsetId = selectedAdsetId;
-        } else if (adsetMode === "new") {
-          payload.adsetConfig = {
-            name: newAdsetName || `AdSet ${new Date().toLocaleDateString("sv")}`,
-            dailyBudget: newAdsetBudget,
-            targeting: { geo_locations: { countries: [newAdsetCountry] } },
-            optimizationGoal: newAdsetOptGoal,
-            bidStrategy: newAdsetBidStrategy,
-          };
-        }
+        const payload = buildPayload(
+          job.r2Key!,
+          job.r2Url!,
+          job.filename,
+          job.mediaType,
+          createdAdsetId
+        );
 
         const res = await fetch("/api/meta/upload-from-r2", {
           method: "POST",
@@ -420,29 +512,20 @@ export default function UploadPage() {
         }
 
         const result = await res.json();
-
-        // Save created adset for subsequent files
         if (result.adsetId && adsetMode === "new" && !createdAdsetId) {
           createdAdsetId = result.adsetId;
         }
 
         setJobs((prev) =>
           prev.map((j) =>
-            j.id === job.id
-              ? { ...j, status: "completed", step: "Done!", result }
-              : j
+            j.id === job.id ? { ...j, status: "completed", step: "Done!", result } : j
           )
         );
       } catch (error) {
         setJobs((prev) =>
           prev.map((j) =>
             j.id === job.id
-              ? {
-                  ...j,
-                  status: "failed",
-                  step: "Failed",
-                  error: error instanceof Error ? error.message : "Unknown error",
-                }
+              ? { ...j, status: "failed", step: "Failed", error: error instanceof Error ? error.message : "Unknown error" }
               : j
           )
         );
@@ -450,8 +533,7 @@ export default function UploadPage() {
     }
 
     setIsUploading(false);
-    const completed = pending.length;
-    if (completed > 0) toast.success(`Processed ${completed} file(s)`);
+    if (pending.length > 0) toast.success(`Processed ${pending.length} file(s)`);
   };
 
   const clearCompleted = () => {
@@ -473,11 +555,18 @@ export default function UploadPage() {
 
   const hasPending = jobs.some((j) => j.status === "pending");
   const hasCompleted = jobs.some((j) => j.status === "completed" || j.status === "failed");
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
+  const isDynamic = headlines.filter(Boolean).length > 1 || primaryTexts.filter(Boolean).length > 1;
+
+  // ─── Input class ────────────────────────────────────────────────────────
+  const inputCls = "w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none";
+  const inputSmCls = "w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-1.5 focus:border-cyan-500/50 focus:outline-none";
+  const labelCls = "text-[10px] text-slate-500 mb-0.5 block";
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -485,11 +574,94 @@ export default function UploadPage() {
           Upload Ads
         </h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          Upload videos/images to Meta Ads from your computer or Cloudflare R2
+          Select template, pick files, upload to Meta
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr,380px]">
+      {/* ─── Template + Campaign Row ─── */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {/* Template */}
+        <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+          <div className="flex items-center gap-2 mb-2.5">
+            <LayoutTemplate className="h-4 w-4 text-cyan-400" />
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Template</h3>
+            {isDynamic && (
+              <span className="ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                Dynamic Creative
+              </span>
+            )}
+          </div>
+          {loadingTemplates ? (
+            <div className="flex items-center gap-2 py-2">
+              <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+              <span className="text-xs text-slate-500">Loading...</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <select
+                value={selectedTemplateId || ""}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  setSelectedTemplateId(id);
+                }}
+                className={inputCls}
+              >
+                <option value="">No template (manual)</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {t.isDefault ? "(Default)" : ""}
+                  </option>
+                ))}
+              </select>
+              {selectedTemplate && (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedTemplate.targetCountries?.map((c) => (
+                    <span key={c} className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/[0.06] text-slate-400">{c}</span>
+                  ))}
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/[0.06] text-slate-400">
+                    {selectedTemplate.dailyBudget || 50} SEK/day
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/[0.06] text-slate-400">
+                    {selectedTemplate.ctaType || "SHOP_NOW"}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Campaign */}
+        <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Zap className="h-4 w-4 text-emerald-400" />
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Campaign</h3>
+          </div>
+          {loadingCampaigns ? (
+            <div className="flex items-center gap-2 py-2">
+              <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+              <span className="text-xs text-slate-500">Loading...</span>
+            </div>
+          ) : (
+            <select
+              value={selectedCampaignId}
+              onChange={(e) => {
+                setSelectedCampaignId(e.target.value);
+                setSelectedAdsetId("");
+              }}
+              className={inputCls}
+            >
+              <option value="">Select campaign...</option>
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.status})
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[1fr,400px]">
         {/* ─── Left: File Selection ─── */}
         <div className="space-y-4">
           {/* Tab switcher */}
@@ -536,12 +708,8 @@ export default function UploadPage() {
               >
                 <div className="flex flex-col items-center text-center">
                   <Upload className="h-10 w-10 text-slate-500 mb-3" />
-                  <p className="text-sm font-medium text-white mb-1">
-                    Drag & drop files here
-                  </p>
-                  <p className="text-xs text-slate-500 mb-4">
-                    MP4, MOV, WebM, JPG, PNG (max 500MB per file)
-                  </p>
+                  <p className="text-sm font-medium text-white mb-1">Drag & drop files here</p>
+                  <p className="text-xs text-slate-500 mb-4">MP4, MOV, WebM, JPG, PNG (max 500MB)</p>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="px-4 py-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-sm font-medium hover:bg-cyan-500/20 transition-all"
@@ -559,35 +727,23 @@ export default function UploadPage() {
                 </div>
               </div>
 
-              {/* Selected files list */}
               {selectedFiles.length > 0 && (
                 <div className="rounded-xl border border-white/[0.06] bg-[#111827] divide-y divide-white/[0.04]">
                   <div className="px-4 py-2.5 flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-400">
-                      {selectedFiles.length} file(s) selected
-                    </span>
-                    <button
-                      onClick={() => setSelectedFiles([])}
-                      className="text-[10px] text-slate-500 hover:text-red-400 transition-colors"
-                    >
-                      Clear all
-                    </button>
+                    <span className="text-xs font-medium text-slate-400">{selectedFiles.length} file(s)</span>
+                    <button onClick={() => setSelectedFiles([])} className="text-[10px] text-slate-500 hover:text-red-400">Clear all</button>
                   </div>
                   {selectedFiles.map((file, i) => (
                     <div key={i} className="flex items-center gap-3 px-4 py-2">
-                      {file.type.startsWith("video/") ? (
-                        <FileVideo className="h-4 w-4 text-cyan-400 shrink-0" />
-                      ) : (
-                        <ImageIcon className="h-4 w-4 text-purple-400 shrink-0" />
-                      )}
+                      {file.type.startsWith("video/")
+                        ? <FileVideo className="h-4 w-4 text-cyan-400 shrink-0" />
+                        : <ImageIcon className="h-4 w-4 text-purple-400 shrink-0" />
+                      }
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-white truncate">{file.name}</p>
                         <p className="text-[10px] text-slate-500">{formatSize(file.size)}</p>
                       </div>
-                      <button
-                        onClick={() => removeFile(i)}
-                        className="text-slate-600 hover:text-red-400 transition-colors"
-                      >
+                      <button onClick={() => removeFile(i)} className="text-slate-600 hover:text-red-400">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -600,24 +756,15 @@ export default function UploadPage() {
           {/* Cloudflare R2 Browse */}
           {activeTab === "cloudflare" && (
             <div className="rounded-xl border border-white/[0.06] bg-[#111827] overflow-hidden">
-              {/* Breadcrumb */}
               <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/[0.04]">
                 {r2PathStack.length > 1 && (
-                  <button
-                    onClick={goBackR2}
-                    className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
-                  >
+                  <button onClick={goBackR2} className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white">
                     <ArrowLeft className="h-4 w-4" />
                   </button>
                 )}
                 <Cloud className="h-4 w-4 text-orange-400" />
-                <span className="text-xs text-slate-400 truncate">
-                  {r2Prefix || "/ (root)"}
-                </span>
-                <button
-                  onClick={() => browseR2(r2Prefix)}
-                  className="ml-auto p-1 rounded hover:bg-white/5 text-slate-500 hover:text-white transition-colors"
-                >
+                <span className="text-xs text-slate-400 truncate">{r2Prefix || "/ (root)"}</span>
+                <button onClick={() => browseR2(r2Prefix)} className="ml-auto p-1 rounded hover:bg-white/5 text-slate-500 hover:text-white">
                   <RefreshCw className={cn("h-3.5 w-3.5", r2Loading && "animate-spin")} />
                 </button>
               </div>
@@ -647,16 +794,13 @@ export default function UploadPage() {
                         onClick={() => toggleR2Select(file)}
                         className={cn(
                           "w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left",
-                          isSelected
-                            ? "bg-orange-500/5 border-l-2 border-orange-400"
-                            : "hover:bg-white/[0.02]"
+                          isSelected ? "bg-orange-500/5 border-l-2 border-orange-400" : "hover:bg-white/[0.02]"
                         )}
                       >
-                        {file.mediaType === "video" ? (
-                          <FileVideo className="h-4 w-4 text-cyan-400 shrink-0" />
-                        ) : (
-                          <ImageIcon className="h-4 w-4 text-purple-400 shrink-0" />
-                        )}
+                        {file.mediaType === "video"
+                          ? <FileVideo className="h-4 w-4 text-cyan-400 shrink-0" />
+                          : <ImageIcon className="h-4 w-4 text-purple-400 shrink-0" />
+                        }
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-white truncate">{file.name}</p>
                           <p className="text-[10px] text-slate-500">
@@ -679,21 +823,14 @@ export default function UploadPage() {
 
               {r2Selected.length > 0 && (
                 <div className="px-4 py-2.5 border-t border-white/[0.04] flex items-center justify-between bg-orange-500/5">
-                  <span className="text-xs font-medium text-orange-400">
-                    {r2Selected.length} file(s) selected
-                  </span>
-                  <button
-                    onClick={() => setR2Selected([])}
-                    className="text-[10px] text-slate-500 hover:text-red-400 transition-colors"
-                  >
-                    Clear
-                  </button>
+                  <span className="text-xs font-medium text-orange-400">{r2Selected.length} file(s) selected</span>
+                  <button onClick={() => setR2Selected([])} className="text-[10px] text-slate-500 hover:text-red-400">Clear</button>
                 </div>
               )}
             </div>
           )}
 
-          {/* Add to Queue button */}
+          {/* Add to Queue */}
           <button
             onClick={addToQueue}
             disabled={
@@ -709,106 +846,53 @@ export default function UploadPage() {
 
         {/* ─── Right: Config Panel ─── */}
         <div className="space-y-4">
-          {/* Campaign Selection */}
-          <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4 space-y-3">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Campaign</h3>
-            {loadingCampaigns ? (
-              <div className="flex items-center gap-2 py-2">
-                <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
-                <span className="text-xs text-slate-500">Loading campaigns...</span>
-              </div>
-            ) : (
-              <select
-                value={selectedCampaignId}
-                onChange={(e) => {
-                  setSelectedCampaignId(e.target.value);
-                  setSelectedAdsetId("");
-                }}
-                className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 focus:border-cyan-500/50 focus:outline-none"
-              >
-                <option value="">Select campaign...</option>
-                {campaigns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.status})
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
           {/* Ad Set */}
           <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4 space-y-3">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ad Set</h3>
             <div className="flex gap-1 p-0.5 rounded-lg bg-white/[0.03]">
-              <button
-                onClick={() => setAdsetMode("existing")}
-                className={cn(
-                  "flex-1 text-[11px] py-1.5 rounded-md transition-all font-medium",
-                  adsetMode === "existing"
-                    ? "bg-white/10 text-white"
-                    : "text-slate-500 hover:text-slate-300"
-                )}
-              >
-                Existing
-              </button>
-              <button
-                onClick={() => setAdsetMode("new")}
-                className={cn(
-                  "flex-1 text-[11px] py-1.5 rounded-md transition-all font-medium",
-                  adsetMode === "new"
-                    ? "bg-white/10 text-white"
-                    : "text-slate-500 hover:text-slate-300"
-                )}
-              >
-                Create New
-              </button>
+              {(["existing", "new"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setAdsetMode(mode)}
+                  className={cn(
+                    "flex-1 text-[11px] py-1.5 rounded-md transition-all font-medium capitalize",
+                    adsetMode === mode ? "bg-white/10 text-white" : "text-slate-500 hover:text-slate-300"
+                  )}
+                >
+                  {mode === "existing" ? "Existing" : "Create New"}
+                </button>
+              ))}
             </div>
 
             {adsetMode === "existing" ? (
               loadingAdsets ? (
                 <div className="flex items-center gap-2 py-2">
                   <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
-                  <span className="text-xs text-slate-500">Loading ad sets...</span>
+                  <span className="text-xs text-slate-500">Loading...</span>
                 </div>
               ) : (
                 <select
                   value={selectedAdsetId}
                   onChange={(e) => setSelectedAdsetId(e.target.value)}
-                  className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 focus:border-cyan-500/50 focus:outline-none"
+                  className={inputCls}
                 >
                   <option value="">Select ad set...</option>
                   {adsets.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({a.status})
-                    </option>
+                    <option key={a.id} value={a.id}>{a.name} ({a.status})</option>
                   ))}
                 </select>
               )
             ) : (
               <div className="space-y-2">
-                <input
-                  value={newAdsetName}
-                  onChange={(e) => setNewAdsetName(e.target.value)}
-                  placeholder="Ad set name"
-                  className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none"
-                />
+                <input value={newAdsetName} onChange={(e) => setNewAdsetName(e.target.value)} placeholder="Ad set name (auto if empty)" className={inputCls} />
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-slate-500 mb-0.5 block">Budget (SEK/day)</label>
-                    <input
-                      type="number"
-                      value={newAdsetBudget}
-                      onChange={(e) => setNewAdsetBudget(Number(e.target.value))}
-                      className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-1.5 focus:border-cyan-500/50 focus:outline-none"
-                    />
+                    <label className={labelCls}>Budget (SEK/day)</label>
+                    <input type="number" value={newAdsetBudget} onChange={(e) => setNewAdsetBudget(Number(e.target.value))} className={inputSmCls} />
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-500 mb-0.5 block">Country</label>
-                    <select
-                      value={newAdsetCountry}
-                      onChange={(e) => setNewAdsetCountry(e.target.value)}
-                      className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-1.5 focus:border-cyan-500/50 focus:outline-none"
-                    >
+                    <label className={labelCls}>Country</label>
+                    <select value={newAdsetCountry} onChange={(e) => setNewAdsetCountry(e.target.value)} className={inputSmCls}>
                       <option value="SE">Sweden</option>
                       <option value="NO">Norway</option>
                       <option value="DK">Denmark</option>
@@ -818,12 +902,8 @@ export default function UploadPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-slate-500 mb-0.5 block">Optimization</label>
-                    <select
-                      value={newAdsetOptGoal}
-                      onChange={(e) => setNewAdsetOptGoal(e.target.value)}
-                      className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-1.5 focus:border-cyan-500/50 focus:outline-none"
-                    >
+                    <label className={labelCls}>Optimization</label>
+                    <select value={newAdsetOptGoal} onChange={(e) => setNewAdsetOptGoal(e.target.value)} className={inputSmCls}>
                       <option value="OFFSITE_CONVERSIONS">Conversions</option>
                       <option value="LANDING_PAGE_VIEWS">Landing Page Views</option>
                       <option value="LINK_CLICKS">Link Clicks</option>
@@ -831,12 +911,8 @@ export default function UploadPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-500 mb-0.5 block">Bid Strategy</label>
-                    <select
-                      value={newAdsetBidStrategy}
-                      onChange={(e) => setNewAdsetBidStrategy(e.target.value)}
-                      className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-1.5 focus:border-cyan-500/50 focus:outline-none"
-                    >
+                    <label className={labelCls}>Bid Strategy</label>
+                    <select value={newAdsetBidStrategy} onChange={(e) => setNewAdsetBidStrategy(e.target.value)} className={inputSmCls}>
                       <option value="LOWEST_COST_WITHOUT_CAP">Lowest Cost</option>
                       <option value="LOWEST_COST_WITH_BID_CAP">Bid Cap</option>
                       <option value="COST_CAP">Cost Cap</option>
@@ -850,41 +926,80 @@ export default function UploadPage() {
           {/* Ad Copy */}
           <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4 space-y-3">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ad Copy</h3>
+
+            {/* Headlines */}
             <div>
-              <label className="text-[10px] text-slate-500 mb-0.5 block">Headline</label>
-              <input
-                value={headline}
-                onChange={(e) => setHeadline(e.target.value)}
-                placeholder="Your headline"
-                className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className={labelCls}>Headlines ({headlines.filter(Boolean).length})</label>
+                {headlines.length < 5 && (
+                  <button onClick={() => addListItem(setHeadlines)} className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-0.5">
+                    <Plus className="h-3 w-3" /> Add
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {headlines.map((h, i) => (
+                  <div key={i} className="flex gap-1.5">
+                    <input
+                      value={h}
+                      onChange={(e) => updateListItem(setHeadlines, i, e.target.value)}
+                      placeholder={`Headline ${i + 1}`}
+                      className={inputCls + " flex-1"}
+                    />
+                    {headlines.length > 1 && (
+                      <button
+                        onClick={() => removeListItem(setHeadlines, i)}
+                        className="px-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/5 transition-colors"
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Primary Texts */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className={labelCls}>Primary Texts ({primaryTexts.filter(Boolean).length})</label>
+                {primaryTexts.length < 5 && (
+                  <button onClick={() => addListItem(setPrimaryTexts)} className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-0.5">
+                    <Plus className="h-3 w-3" /> Add
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {primaryTexts.map((t, i) => (
+                  <div key={i} className="flex gap-1.5">
+                    <textarea
+                      value={t}
+                      onChange={(e) => updateListItem(setPrimaryTexts, i, e.target.value)}
+                      placeholder={`Primary text ${i + 1}`}
+                      rows={2}
+                      className={inputCls + " flex-1 resize-none"}
+                    />
+                    {primaryTexts.length > 1 && (
+                      <button
+                        onClick={() => removeListItem(setPrimaryTexts, i)}
+                        className="px-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/5 transition-colors self-start mt-2"
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Link + CTA */}
+            <div>
+              <label className={labelCls}>Link URL</label>
+              <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://apotekhunden.se/..." className={inputCls} />
             </div>
             <div>
-              <label className="text-[10px] text-slate-500 mb-0.5 block">Primary Text</label>
-              <textarea
-                value={primaryText}
-                onChange={(e) => setPrimaryText(e.target.value)}
-                placeholder="Your ad text..."
-                rows={3}
-                className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none resize-none"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-slate-500 mb-0.5 block">Link URL</label>
-              <input
-                value={linkUrl}
-                onChange={(e) => setLinkUrl(e.target.value)}
-                placeholder="https://apotekhunden.se/..."
-                className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-slate-500 mb-0.5 block">CTA Button</label>
-              <select
-                value={ctaType}
-                onChange={(e) => setCtaType(e.target.value)}
-                className="w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 focus:border-cyan-500/50 focus:outline-none"
-              >
+              <label className={labelCls}>CTA Button</label>
+              <select value={ctaType} onChange={(e) => setCtaType(e.target.value)} className={inputCls}>
                 <option value="SHOP_NOW">Shop Now</option>
                 <option value="LEARN_MORE">Learn More</option>
                 <option value="BUY_NOW">Buy Now</option>
@@ -901,17 +1016,11 @@ export default function UploadPage() {
       {jobs.length > 0 && (
         <div className="rounded-xl border border-white/[0.06] bg-[#111827] overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.04]">
-            <h3 className="text-sm font-semibold text-white">
-              Upload Queue ({jobs.length})
-            </h3>
+            <h3 className="text-sm font-semibold text-white">Upload Queue ({jobs.length})</h3>
             <div className="flex gap-2">
               {hasCompleted && (
-                <button
-                  onClick={clearCompleted}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/[0.06] transition-all"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Clear Done
+                <button onClick={clearCompleted} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/[0.06] transition-all">
+                  <Trash2 className="h-3 w-3" /> Clear Done
                 </button>
               )}
               {hasPending && (
@@ -920,11 +1029,7 @@ export default function UploadPage() {
                   disabled={isUploading}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-white bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 transition-all disabled:opacity-50"
                 >
-                  {isUploading ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Play className="h-3 w-3" />
-                  )}
+                  {isUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                   {isUploading ? "Uploading..." : "Upload All"}
                 </button>
               )}
@@ -948,21 +1053,12 @@ export default function UploadPage() {
                     {job.status === "pending" && "Waiting..."}
                     {job.status === "uploading_r2" && "Uploading to Cloudflare R2..."}
                     {job.status === "uploading_meta" && "Uploading to Meta..."}
-                    {job.status === "completed" && (
-                      <span className="text-emerald-400">
-                        Done! Ad ID: {job.result?.adId}
-                      </span>
-                    )}
-                    {job.status === "failed" && (
-                      <span className="text-red-400">{job.error}</span>
-                    )}
+                    {job.status === "completed" && <span className="text-emerald-400">Done! Ad ID: {job.result?.adId}</span>}
+                    {job.status === "failed" && <span className="text-red-400">{job.error}</span>}
                   </p>
                 </div>
                 {job.status === "pending" && (
-                  <button
-                    onClick={() => removeJob(job.id)}
-                    className="text-slate-600 hover:text-red-400 transition-colors"
-                  >
+                  <button onClick={() => removeJob(job.id)} className="text-slate-600 hover:text-red-400">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 )}

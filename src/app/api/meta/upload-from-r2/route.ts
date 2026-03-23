@@ -53,6 +53,23 @@ async function uploadVideoByUrl(url: string, filename: string): Promise<string> 
   return result.id;
 }
 
+// Determine if we should use Dynamic Creative (multiple headlines or texts)
+function isDynamicCreative(adCopy: AdCopyInput): boolean {
+  const headlineCount = Array.isArray(adCopy.headlines) ? adCopy.headlines.filter(Boolean).length : 0;
+  const textCount = Array.isArray(adCopy.primaryTexts) ? adCopy.primaryTexts.filter(Boolean).length : 0;
+  return headlineCount > 1 || textCount > 1;
+}
+
+interface AdCopyInput {
+  // Support both single values and arrays
+  headline?: string;
+  headlines?: string[];
+  primaryText?: string;
+  primaryTexts?: string[];
+  linkUrl: string;
+  ctaType: string;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
@@ -85,18 +102,18 @@ export async function POST(request: NextRequest) {
         bidStrategy: string;
         conversionEvent?: string;
       };
-      adCopy: {
-        headline: string;
-        primaryText: string;
-        linkUrl: string;
-        ctaType: string;
-      };
+      adCopy: AdCopyInput;
       adName: string;
     };
 
     if (!r2Key || !campaignId || !adCopy) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+
+    // Normalize ad copy — support both single and array formats
+    const headlinesArr = (adCopy.headlines?.filter(Boolean) || (adCopy.headline ? [adCopy.headline] : []));
+    const textsArr = (adCopy.primaryTexts?.filter(Boolean) || (adCopy.primaryText ? [adCopy.primaryText] : []));
+    const useDynamic = headlinesArr.length > 1 || textsArr.length > 1;
 
     const results: Record<string, string> = {};
 
@@ -116,7 +133,6 @@ export async function POST(request: NextRequest) {
       }
       results.videoId = videoId;
     } else {
-      // Images must be uploaded as bytes
       const { buffer } = await downloadFromR2(r2Key);
       const result = await uploadImage(buffer, filename);
       imageHash = result.hash;
@@ -127,42 +143,68 @@ export async function POST(request: NextRequest) {
     const pageId = await getPageId();
     const creativeName = `${filename.replace(/\.[^.]+$/, "")} ${new Date().toISOString().split("T")[0]}`;
 
-    const creativePayload: Record<string, unknown> = {
-      name: creativeName,
-      object_story_spec: { page_id: pageId },
-    };
+    let creativePayload: Record<string, unknown>;
 
-    if (videoId) {
-      (creativePayload.object_story_spec as Record<string, unknown>).video_data = {
-        video_id: videoId,
-        message: adCopy.primaryText || "",
-        title: adCopy.headline || "",
-        call_to_action: {
-          type: adCopy.ctaType || "SHOP_NOW",
-          value: { link: adCopy.linkUrl || "" },
+    if (useDynamic) {
+      // Dynamic Creative — uses asset_feed_spec for A/B testing multiple headlines/texts
+      creativePayload = {
+        name: creativeName,
+        object_story_spec: { page_id: pageId },
+        asset_feed_spec: {
+          bodies: textsArr.map((text) => ({ text })),
+          titles: headlinesArr.map((text) => ({ text })),
+          link_urls: [{ website_url: adCopy.linkUrl }],
+          call_to_action_types: [adCopy.ctaType || "SHOP_NOW"],
+          ...(videoId
+            ? { videos: [{ video_id: videoId }], ad_formats: ["SINGLE_VIDEO"] }
+            : imageHash
+            ? { images: [{ hash: imageHash }], ad_formats: ["SINGLE_IMAGE"] }
+            : {}),
         },
       };
-    } else if (imageHash) {
-      (creativePayload.object_story_spec as Record<string, unknown>).link_data = {
-        link: adCopy.linkUrl || "",
-        message: adCopy.primaryText || "",
-        name: adCopy.headline || "",
-        image_hash: imageHash,
-        call_to_action: { type: adCopy.ctaType || "SHOP_NOW" },
+    } else {
+      // Standard Creative — single headline/text
+      const firstHeadline = headlinesArr[0] || "";
+      const firstText = textsArr[0] || "";
+
+      creativePayload = {
+        name: creativeName,
+        object_story_spec: { page_id: pageId },
       };
+
+      if (videoId) {
+        (creativePayload.object_story_spec as Record<string, unknown>).video_data = {
+          video_id: videoId,
+          message: firstText,
+          title: firstHeadline,
+          call_to_action: {
+            type: adCopy.ctaType || "SHOP_NOW",
+            value: { link: adCopy.linkUrl || "" },
+          },
+        };
+      } else if (imageHash) {
+        (creativePayload.object_story_spec as Record<string, unknown>).link_data = {
+          link: adCopy.linkUrl || "",
+          message: firstText,
+          name: firstHeadline,
+          image_hash: imageHash,
+          call_to_action: { type: adCopy.ctaType || "SHOP_NOW" },
+        };
+      }
     }
 
     const adCreative = await createAdCreative(
       creativePayload as Parameters<typeof createAdCreative>[0]
     );
     results.creativeId = adCreative.id;
+    if (useDynamic) results.dynamicCreative = "true";
 
     // Step 3: Use existing or create new ad set
     let adsetId = existingAdsetId;
 
     if (!adsetId && adsetConfig) {
       const pixelId = await getPixelId();
-      const adset = await createAdSet({
+      const adsetParams: Record<string, unknown> = {
         campaign_id: campaignId,
         name: adsetConfig.name,
         daily_budget: adsetConfig.dailyBudget ? adsetConfig.dailyBudget * 100 : undefined,
@@ -174,7 +216,14 @@ export async function POST(request: NextRequest) {
         promoted_object: pixelId
           ? { pixel_id: pixelId, custom_event_type: adsetConfig.conversionEvent || "PURCHASE" }
           : undefined,
-      });
+      };
+
+      // If dynamic creative, tell Meta this ad set uses it
+      if (useDynamic) {
+        adsetParams.is_dynamic_creative = true;
+      }
+
+      const adset = await createAdSet(adsetParams as Parameters<typeof createAdSet>[0]);
       adsetId = adset.id;
       results.adsetId = adset.id;
     } else if (adsetId) {
