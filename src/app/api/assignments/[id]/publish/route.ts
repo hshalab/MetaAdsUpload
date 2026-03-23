@@ -4,7 +4,7 @@ import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { createCampaign } from "@/lib/meta/campaigns";
 import { createAdSet } from "@/lib/meta/adsets";
-import { createAd } from "@/lib/meta/ads";
+import { createAd, getAdPostId } from "@/lib/meta/ads";
 import { createAdCreative, uploadImage, uploadVideo } from "@/lib/meta/creatives";
 
 interface CreativeInput {
@@ -43,6 +43,9 @@ interface PublishConfig {
 
   // Creatives (multiple = multiply ads)
   creatives: CreativeInput[];
+
+  // Post ID preservation — reuse existing Facebook post to keep engagement
+  sourcePostId?: string; // effective_object_story_id e.g. "page_id_post_id"
 }
 
 export async function POST(
@@ -154,31 +157,35 @@ export async function POST(
     }> = [];
 
     for (const creative of config.creatives) {
-      // Upload media if base64 provided
+      // If sourcePostId is set, skip media upload — reuse existing post
+      const useExistingPost = !!config.sourcePostId;
+
       let videoId = creative.metaVideoId;
       let imageHash = creative.metaImageHash;
 
-      if (creative.base64) {
-        const buffer = Buffer.from(creative.base64, "base64");
-        if (creative.type === "video") {
-          const result = await uploadVideo(buffer, creative.name);
-          videoId = result.id;
-        } else {
-          const result = await uploadImage(buffer, creative.name);
-          imageHash = Object.values(result.images)[0]?.hash;
-        }
-      } else if (creative.deliverableUrl) {
-        // Download from R2 URL and upload to Meta
-        const fileRes = await fetch(creative.deliverableUrl);
-        if (!fileRes.ok) throw new Error(`Failed to download deliverable from ${creative.deliverableUrl}`);
-        const arrayBuffer = await fileRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        if (creative.type === "video") {
-          const result = await uploadVideo(buffer, creative.name);
-          videoId = result.id;
-        } else {
-          const result = await uploadImage(buffer, creative.name);
-          imageHash = Object.values(result.images)[0]?.hash;
+      if (!useExistingPost) {
+        if (creative.base64) {
+          const buffer = Buffer.from(creative.base64, "base64");
+          if (creative.type === "video") {
+            const result = await uploadVideo(buffer, creative.name);
+            videoId = result.id;
+          } else {
+            const result = await uploadImage(buffer, creative.name);
+            imageHash = Object.values(result.images)[0]?.hash;
+          }
+        } else if (creative.deliverableUrl) {
+          // Download from R2 URL and upload to Meta
+          const fileRes = await fetch(creative.deliverableUrl);
+          if (!fileRes.ok) throw new Error(`Failed to download deliverable from ${creative.deliverableUrl}`);
+          const arrayBuffer = await fileRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          if (creative.type === "video") {
+            const result = await uploadVideo(buffer, creative.name);
+            videoId = result.id;
+          } else {
+            const result = await uploadImage(buffer, creative.name);
+            imageHash = Object.values(result.images)[0]?.hash;
+          }
         }
       }
 
@@ -191,45 +198,55 @@ export async function POST(
         const cleanCreativeName = creative.name.replace(/\.[^.]+$/, "");
         const adName = `${countryCode} ${editorName} ${cleanCreativeName}${lpSuffix}`;
 
-        // Build creative payload
-        const creativePayload: Record<string, unknown> = {
-          name: adName,
-          object_story_spec: { page_id: pageId },
-        };
+        let adCreative;
 
-        if (videoId) {
-          (creativePayload.object_story_spec as Record<string, unknown>).video_data = {
-            video_id: videoId,
-            message: primaryTexts[0] || "",
-            title: headlines[0] || "",
-            call_to_action: {
-              type: ctaType,
-              value: { link: landingPage },
-            },
+        if (useExistingPost) {
+          // Post ID preservation: reuse existing Facebook post (shares likes/comments/shares)
+          adCreative = await createAdCreative({
+            name: adName,
+            object_story_id: config.sourcePostId!,
+          });
+        } else {
+          // Build creative payload with new media
+          const creativePayload: Record<string, unknown> = {
+            name: adName,
+            object_story_spec: { page_id: pageId },
           };
-        } else if (imageHash) {
-          (creativePayload.object_story_spec as Record<string, unknown>).link_data = {
-            link: landingPage,
-            message: primaryTexts[0] || "",
-            name: headlines[0] || "",
-            description: descriptions[0] || "",
-            image_hash: imageHash,
-            call_to_action: { type: ctaType },
-          };
+
+          if (videoId) {
+            (creativePayload.object_story_spec as Record<string, unknown>).video_data = {
+              video_id: videoId,
+              message: primaryTexts[0] || "",
+              title: headlines[0] || "",
+              call_to_action: {
+                type: ctaType,
+                value: { link: landingPage },
+              },
+            };
+          } else if (imageHash) {
+            (creativePayload.object_story_spec as Record<string, unknown>).link_data = {
+              link: landingPage,
+              message: primaryTexts[0] || "",
+              name: headlines[0] || "",
+              description: descriptions[0] || "",
+              image_hash: imageHash,
+              call_to_action: { type: ctaType },
+            };
+          }
+
+          // If multiple headlines/texts, use asset_feed_spec
+          if (headlines.length > 1 || primaryTexts.length > 1) {
+            creativePayload.asset_feed_spec = {
+              ...(headlines.length > 0 ? { titles: headlines.map((t) => ({ text: t })) } : {}),
+              ...(primaryTexts.length > 0 ? { bodies: primaryTexts.map((t) => ({ text: t })) } : {}),
+              ...(descriptions.length > 0 ? { descriptions: descriptions.map((t) => ({ text: t })) } : {}),
+              link_urls: [{ website_url: landingPage }],
+              call_to_action_types: [ctaType],
+            };
+          }
+
+          adCreative = await createAdCreative(creativePayload as Parameters<typeof createAdCreative>[0]);
         }
-
-        // If multiple headlines/texts, use asset_feed_spec
-        if (headlines.length > 1 || primaryTexts.length > 1) {
-          creativePayload.asset_feed_spec = {
-            ...(headlines.length > 0 ? { titles: headlines.map((t) => ({ text: t })) } : {}),
-            ...(primaryTexts.length > 0 ? { bodies: primaryTexts.map((t) => ({ text: t })) } : {}),
-            ...(descriptions.length > 0 ? { descriptions: descriptions.map((t) => ({ text: t })) } : {}),
-            link_urls: [{ website_url: landingPage }],
-            call_to_action_types: [ctaType],
-          };
-        }
-
-        const adCreative = await createAdCreative(creativePayload as Parameters<typeof createAdCreative>[0]);
 
         const ad = await createAd({
           adset_id: adset.id,
@@ -248,7 +265,13 @@ export async function POST(
       }
     }
 
-    // --- Step 4: Update assignment ---
+    // --- Step 4: Retrieve post ID from first ad for future reuse ---
+    let metaPostId = config.sourcePostId || null;
+    if (!metaPostId && createdAds.length > 0) {
+      metaPostId = await getAdPostId(createdAds[0].adId);
+    }
+
+    // --- Step 5: Update assignment ---
     const allAdIds = createdAds.map((a) => a.adId);
     const [updated] = await db
       .update(schema.assignments)
@@ -256,6 +279,7 @@ export async function POST(
         metaAdId: allAdIds[0], // primary ad ID
         metaAdsetId: adset.id,
         metaCampaignId: campaignId,
+        metaPostId,
         status: "posted",
         completedAt: new Date(),
         updatedAt: new Date(),

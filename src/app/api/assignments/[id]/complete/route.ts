@@ -68,6 +68,7 @@ export async function POST(
         landingPage: assignment.landingPage,
         assignedToId: assignment.assignedToId,
         creativeStrategistId: assignment.creativeStrategistId,
+        creativeStrategistName: assignment.creativeStrategistName,
         videoLengthSeconds,
         createdAt: assignment.createdAt,
       });

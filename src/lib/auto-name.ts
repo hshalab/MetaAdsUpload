@@ -69,6 +69,7 @@ export async function generateAutoName(assignment: {
   landingPage: string | null;
   assignedToId: string;
   creativeStrategistId: string | null;
+  creativeStrategistName?: string | null;
   videoLengthSeconds: number | null;
   createdAt: Date;
 }): Promise<string> {
@@ -108,7 +109,7 @@ export async function generateAutoName(assignment: {
     angleName: angle?.name || null,
     scriptStructureName: scriptStructure?.name || null,
     videoLengthSeconds: assignment.videoLengthSeconds,
-    creativeStrategistName: cs?.name || null,
+    creativeStrategistName: assignment.creativeStrategistName || cs?.name || null,
     createdAt: assignment.createdAt,
   });
 }

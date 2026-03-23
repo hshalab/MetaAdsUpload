@@ -105,9 +105,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     authorized({ auth: session, request }) {
       const isLoggedIn = !!session?.user;
       const isOnLogin = request.nextUrl.pathname.startsWith("/login");
+      const isOnRegister = request.nextUrl.pathname.startsWith("/register");
       const isAuthApi = request.nextUrl.pathname.startsWith("/api/auth");
       const isSeedApi = request.nextUrl.pathname.startsWith("/api/seed");
       const isCronApi = request.nextUrl.pathname.startsWith("/api/cron");
+      const isPublicReview = request.nextUrl.pathname.startsWith("/r/");
+      const isPublicReviewApi = request.nextUrl.pathname.startsWith("/api/review/");
 
       if (isAuthApi) return true;
       if (isSeedApi) {
@@ -119,6 +122,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return true;
       }
       if (isOnLogin) return true;
+      if (isOnRegister) return true;
+      if (isPublicReview) return true;
+      if (isPublicReviewApi) return true;
       if (isLoggedIn) return true;
 
       return Response.redirect(new URL("/login", request.nextUrl.origin));

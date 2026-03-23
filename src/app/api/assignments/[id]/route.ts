@@ -116,7 +116,7 @@ export async function PUT(
     const {
       batchNumber, version, formatId, angleId, productId, countryId,
       offerTypeId, scriptStructureId, customerAvatarIds, landingPage, assignedToId,
-      creativeStrategistId, priority, dueDate, estimatedMinutes,
+      creativeStrategistId, creativeStrategistName, priority, dueDate, estimatedMinutes,
       videoLengthSeconds, description, scriptContent, revisionFeedback,
       strategistNotes,
     } = body;
@@ -160,6 +160,7 @@ export async function PUT(
     if (landingPage !== undefined) updateData.landingPage = landingPage;
     if (assignedToId !== undefined) updateData.assignedToId = assignedToId;
     if (creativeStrategistId !== undefined) updateData.creativeStrategistId = creativeStrategistId;
+    if (creativeStrategistName !== undefined) updateData.creativeStrategistName = creativeStrategistName;
     if (dbPriority !== undefined) updateData.priority = dbPriority;
     if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
     if (estimatedMinutes !== undefined) updateData.estimatedMinutes = estimatedMinutes;
@@ -181,6 +182,7 @@ export async function PUT(
       landingPage: landingPage !== undefined ? landingPage : current.landingPage,
       assignedToId: assignedToId ?? current.assignedToId,
       creativeStrategistId: creativeStrategistId !== undefined ? creativeStrategistId : current.creativeStrategistId,
+      creativeStrategistName: creativeStrategistName !== undefined ? creativeStrategistName : current.creativeStrategistName,
       videoLengthSeconds: videoLengthSeconds !== undefined ? videoLengthSeconds : current.videoLengthSeconds,
       createdAt: current.createdAt,
     });

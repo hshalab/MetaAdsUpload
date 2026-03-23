@@ -17,6 +17,7 @@ export async function GET() {
         email: schema.users.email,
         name: schema.users.name,
         role: schema.users.role,
+        userType: schema.users.userType,
         isActive: schema.users.isActive,
         hourlyRate: schema.users.hourlyRate,
         timezone: schema.users.timezone,

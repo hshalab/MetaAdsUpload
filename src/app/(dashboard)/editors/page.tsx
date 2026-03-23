@@ -10,7 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   RefreshCw,
   DollarSign,
@@ -24,6 +26,11 @@ import {
   Check,
   Clock,
   AlertCircle,
+  Plus,
+  Video,
+  Lightbulb,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -249,6 +256,16 @@ export default function EditorsPage() {
   const [payoutNotes, setPayoutNotes] = useState("");
   const [creatingPayout, setCreatingPayout] = useState(false);
 
+  // Create team member state
+  const [showCreateMember, setShowCreateMember] = useState(false);
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [newMemberPassword, setNewMemberPassword] = useState("");
+  const [newMemberType, setNewMemberType] = useState<"video_editor" | "creative_strategist">("video_editor");
+  const [showPassword, setShowPassword] = useState(false);
+  const [creatingMember, setCreatingMember] = useState(false);
+  const [createError, setCreateError] = useState("");
+
   const fetchEditors = useCallback(async () => {
     setLoading(true);
     try {
@@ -338,6 +355,46 @@ export default function EditorsPage() {
     }
   };
 
+  const handleCreateMember = async () => {
+    setCreateError("");
+    if (!newMemberName.trim() || !newMemberEmail.trim() || !newMemberPassword) {
+      setCreateError("All fields are required");
+      return;
+    }
+    if (newMemberPassword.length < 8) {
+      setCreateError("Password must be at least 8 characters");
+      return;
+    }
+    setCreatingMember(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newMemberName.trim(),
+          email: newMemberEmail.trim().toLowerCase(),
+          password: newMemberPassword,
+          userType: newMemberType,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create member");
+      }
+      toast.success(`${newMemberName.trim()} added as ${newMemberType === "video_editor" ? "Video Editor" : "Creative Strategist"}`);
+      setShowCreateMember(false);
+      setNewMemberName("");
+      setNewMemberEmail("");
+      setNewMemberPassword("");
+      setNewMemberType("video_editor");
+      setShowPassword(false);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create member");
+    } finally {
+      setCreatingMember(false);
+    }
+  };
+
   const totalSpend = editors.reduce((s, e) => s + e.totalSpend, 0);
   const totalRevenue = editors.reduce((s, e) => s + e.totalPurchaseValue, 0);
   const totalBonus = editors.reduce((s, e) => s + e.totalBonus, 0);
@@ -367,6 +424,13 @@ export default function EditorsPage() {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
+          </button>
+          <button
+            onClick={() => setShowCreateMember(true)}
+            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-sm font-medium text-white transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            Add Member
           </button>
         </div>
       </div>
@@ -591,6 +655,144 @@ export default function EditorsPage() {
               className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-medium text-white hover:from-emerald-400 hover:to-emerald-500 transition-all disabled:opacity-50"
             >
               {creatingPayout ? "Creating..." : "Create Payout"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Team Member Modal */}
+      <Dialog open={showCreateMember} onOpenChange={setShowCreateMember}>
+        <DialogContent className="max-w-md bg-[#111827] border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Plus className="h-4 w-4 text-cyan-400" />
+              Add Team Member
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm">
+              Create a new account for a team member.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Role selection */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setNewMemberType("video_editor")}
+                className={cn(
+                  "relative rounded-xl border p-4 text-left transition-all",
+                  newMemberType === "video_editor"
+                    ? "border-cyan-500/50 bg-cyan-500/5 ring-1 ring-cyan-500/30"
+                    : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                )}
+              >
+                <div className={cn(
+                  "h-9 w-9 rounded-lg flex items-center justify-center mb-2",
+                  newMemberType === "video_editor" ? "bg-cyan-500/15" : "bg-white/5"
+                )}>
+                  <Video className={cn("h-4.5 w-4.5", newMemberType === "video_editor" ? "text-cyan-400" : "text-slate-500")} />
+                </div>
+                <div className={cn("text-sm font-medium", newMemberType === "video_editor" ? "text-white" : "text-slate-300")}>
+                  Video Editor
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Edits video content
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setNewMemberType("creative_strategist")}
+                className={cn(
+                  "relative rounded-xl border p-4 text-left transition-all",
+                  newMemberType === "creative_strategist"
+                    ? "border-purple-500/50 bg-purple-500/5 ring-1 ring-purple-500/30"
+                    : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                )}
+              >
+                <div className={cn(
+                  "h-9 w-9 rounded-lg flex items-center justify-center mb-2",
+                  newMemberType === "creative_strategist" ? "bg-purple-500/15" : "bg-white/5"
+                )}>
+                  <Lightbulb className={cn("h-4.5 w-4.5", newMemberType === "creative_strategist" ? "text-purple-400" : "text-slate-500")} />
+                </div>
+                <div className={cn("text-sm font-medium", newMemberType === "creative_strategist" ? "text-white" : "text-slate-300")}>
+                  Creative Strategist
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Plans ad strategy
+                </div>
+              </button>
+            </div>
+
+            {/* Form fields */}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Name</label>
+                <Input
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                  placeholder="Full name"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Email</label>
+                <Input
+                  type="email"
+                  value={newMemberEmail}
+                  onChange={(e) => setNewMemberEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Password</label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={newMemberPassword}
+                    onChange={(e) => setNewMemberPassword(e.target.value)}
+                    placeholder="Min 8 characters"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {createError && (
+              <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                {createError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <button
+              onClick={() => setShowCreateMember(false)}
+              className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateMember}
+              disabled={creatingMember}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50",
+                newMemberType === "creative_strategist"
+                  ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500"
+                  : "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500"
+              )}
+            >
+              {creatingMember ? "Creating..." : "Add Member"}
             </button>
           </DialogFooter>
         </DialogContent>

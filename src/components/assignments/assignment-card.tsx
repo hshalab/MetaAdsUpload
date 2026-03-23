@@ -21,7 +21,9 @@ import {
   Video,
   Image,
   Rocket,
+  Film,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 // --- Shared types ---
@@ -73,6 +75,7 @@ export interface EditorAssignment {
   assignedBy: { id: string; name: string; email: string };
   creativeStrategistId: string | null;
   creativeStrategist: { id: string; name: string; email: string } | null;
+  creativeStrategistName: string | null;
   status: AssignmentStatus;
   priority: AssignmentPriority;
   dueDate: string | null;
@@ -191,6 +194,7 @@ interface AssignmentCardProps {
 }
 
 export function AssignmentCard({ assignment, onClick, onStatusChange, onPublish }: AssignmentCardProps) {
+  const router = useRouter();
   const priority = PRIORITY_CONFIG[assignment.priority];
   const FormatIcon = getFormatIcon(assignment.format?.name);
   const overdue =
@@ -225,6 +229,15 @@ export function AssignmentCard({ assignment, onClick, onStatusChange, onPublish 
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-[#111827] border-white/10" onClick={(e) => e.stopPropagation()}>
+            {assignment.deliverableUrl && (
+              <DropdownMenuItem
+                onClick={() => router.push(`/review/${assignment.id}`)}
+                className="text-cyan-400 focus:text-cyan-400"
+              >
+                <Film className="h-4 w-4 mr-2" />
+                Open Review
+              </DropdownMenuItem>
+            )}
             {assignment.status === "READY_FOR_POSTING" && onPublish && (
               <DropdownMenuItem
                 onClick={onPublish}

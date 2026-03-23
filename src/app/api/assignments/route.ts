@@ -139,6 +139,7 @@ export async function POST(request: NextRequest) {
       landingPage,
       assignedToId,
       creativeStrategistId,
+      creativeStrategistName,
       priority = "medium",
       dueDate,
       estimatedMinutes,
@@ -186,6 +187,7 @@ export async function POST(request: NextRequest) {
       landingPage: landingPage || null,
       assignedToId,
       creativeStrategistId: creativeStrategistId || null,
+      creativeStrategistName: creativeStrategistName || null,
       videoLengthSeconds: null,
       createdAt: now,
     });
@@ -208,6 +210,7 @@ export async function POST(request: NextRequest) {
         assignedToId,
         assignedById: userId,
         creativeStrategistId: creativeStrategistId || null,
+        creativeStrategistName: creativeStrategistName || null,
         status: "ready_for_editing",
         priority: dbPriority,
         dueDate: dueDate ? new Date(dueDate) : null,

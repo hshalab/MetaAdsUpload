@@ -35,3 +35,15 @@ export async function createAd(params: {
 export async function updateAd(adId: string, params: Record<string, unknown>) {
   return metaApi(`/${adId}`, { method: "POST", body: params });
 }
+
+export async function getAdPostId(adId: string): Promise<string | null> {
+  try {
+    const data = await metaApi<{ effective_object_story_id?: string }>(
+      `/${adId}`,
+      { params: { fields: "effective_object_story_id" } }
+    );
+    return data.effective_object_story_id || null;
+  } catch {
+    return null;
+  }
+}

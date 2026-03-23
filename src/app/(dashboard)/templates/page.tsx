@@ -17,7 +17,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, FileText, Star, Globe, Type, AlignLeft, Link, Target, Edit2 } from "lucide-react";
+import { Plus, Trash2, FileText, Star, Link, Edit2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -28,22 +28,11 @@ interface Template {
   objective: string;
   budgetType: string;
   dailyBudget: number | null;
-  headlines: string[];
-  primaryTexts: string[];
-  descriptions: string[];
   ctaType: string;
   landingPages: string[];
-  targetCountries: string[];
-  ageMin: number | null;
-  ageMax: number | null;
-  genders: number[] | null;
   optimizationGoal: string;
   conversionEvent: string;
   bidStrategy: string;
-  adsetNameTemplate: string;
-  adNameTemplate: string;
-  productName: string | null;
-  angleName: string | null;
   pixelId: string | null;
 }
 
@@ -53,42 +42,13 @@ const EMPTY_FORM = {
   objective: "OUTCOME_SALES",
   budgetType: "ABO",
   dailyBudget: 50 as number | null,
-  headlines: [""],
-  primaryTexts: [""],
-  descriptions: [""],
   ctaType: "SHOP_NOW",
   landingPages: [""],
-  targetCountries: ["SE"],
-  ageMin: null as number | null,
-  ageMax: null as number | null,
-  genders: null as number[] | null,
   optimizationGoal: "OFFSITE_CONVERSIONS",
   conversionEvent: "PURCHASE",
   bidStrategy: "LOWEST_COST_WITHOUT_CAP",
-  adsetNameTemplate: "{product} {angle} {country}",
-  adNameTemplate: "{country} {editor} {creative} {lp}",
-  productName: "",
-  angleName: "",
   pixelId: "",
 };
-
-const COUNTRIES = [
-  { code: "SE", name: "Sweden" },
-  { code: "NO", name: "Norway" },
-  { code: "DK", name: "Denmark" },
-  { code: "FI", name: "Finland" },
-  { code: "DE", name: "Germany" },
-  { code: "NL", name: "Netherlands" },
-  { code: "GB", name: "United Kingdom" },
-  { code: "US", name: "United States" },
-  { code: "FR", name: "France" },
-  { code: "ES", name: "Spain" },
-  { code: "IT", name: "Italy" },
-  { code: "PL", name: "Poland" },
-  { code: "AT", name: "Austria" },
-  { code: "CH", name: "Switzerland" },
-  { code: "BE", name: "Belgium" },
-];
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -106,7 +66,18 @@ export default function TemplatesPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    // Try loading last-submitted template values
+    try {
+      const lastRaw = localStorage.getItem("template-last-submitted");
+      if (lastRaw) {
+        const lastForm = JSON.parse(lastRaw);
+        setForm({ ...lastForm, name: "", isDefault: false });
+      } else {
+        setForm(EMPTY_FORM);
+      }
+    } catch {
+      setForm(EMPTY_FORM);
+    }
     setDialogOpen(true);
   };
 
@@ -118,22 +89,11 @@ export default function TemplatesPage() {
       objective: t.objective,
       budgetType: t.budgetType,
       dailyBudget: t.dailyBudget ?? 50,
-      headlines: t.headlines.length > 0 ? t.headlines : [""],
-      primaryTexts: t.primaryTexts.length > 0 ? t.primaryTexts : [""],
-      descriptions: t.descriptions.length > 0 ? t.descriptions : [""],
       ctaType: t.ctaType,
       landingPages: t.landingPages.length > 0 ? t.landingPages : [""],
-      targetCountries: t.targetCountries.length > 0 ? t.targetCountries : ["SE"],
-      ageMin: t.ageMin,
-      ageMax: t.ageMax,
-      genders: t.genders,
       optimizationGoal: t.optimizationGoal,
       conversionEvent: t.conversionEvent,
       bidStrategy: t.bidStrategy,
-      adsetNameTemplate: t.adsetNameTemplate || "{product} {angle} {country}",
-      adNameTemplate: t.adNameTemplate || "{country} {editor} {creative} {lp}",
-      productName: t.productName || "",
-      angleName: t.angleName || "",
       pixelId: t.pixelId || "",
     });
     setDialogOpen(true);
@@ -143,12 +103,7 @@ export default function TemplatesPage() {
     try {
       const payload = {
         ...form,
-        headlines: form.headlines.filter(Boolean),
-        primaryTexts: form.primaryTexts.filter(Boolean),
-        descriptions: form.descriptions.filter(Boolean),
         landingPages: form.landingPages.filter(Boolean),
-        productName: form.productName || null,
-        angleName: form.angleName || null,
         pixelId: form.pixelId || null,
       };
 
@@ -168,6 +123,10 @@ export default function TemplatesPage() {
         if (!res.ok) throw new Error();
         toast.success("Template created");
       }
+      // Save last-submitted for prefilling next create
+      try {
+        localStorage.setItem("template-last-submitted", JSON.stringify(form));
+      } catch { /* ignore */ }
       setDialogOpen(false);
       fetchTemplates();
     } catch {
@@ -186,16 +145,6 @@ export default function TemplatesPage() {
       fetchTemplates();
     } catch {
       toast.error("Failed to delete template");
-    }
-  };
-
-  const toggleCountry = (code: string) => {
-    const current = form.targetCountries;
-    if (current.includes(code)) {
-      if (current.length <= 1) return; // keep at least one
-      setForm({ ...form, targetCountries: current.filter((c) => c !== code) });
-    } else {
-      setForm({ ...form, targetCountries: [...current, code] });
     }
   };
 
@@ -256,24 +205,9 @@ export default function TemplatesPage() {
               {/* Details */}
               <div className="mt-3 space-y-1">
                 <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <Globe className="h-3 w-3" />
-                  {t.targetCountries.join(", ")}
-                  {t.ageMin || t.ageMax ? ` · ${t.ageMin || 18}-${t.ageMax || "65+"}` : ""}
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <Type className="h-3 w-3" />
-                  {t.headlines.length} headline{t.headlines.length !== 1 ? "s" : ""} · {t.primaryTexts.length} text{t.primaryTexts.length !== 1 ? "s" : ""}
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-slate-500">
                   <Link className="h-3 w-3" />
                   {t.landingPages.length} landing page{t.landingPages.length !== 1 ? "s" : ""}
                 </div>
-                {(t.productName || t.angleName) && (
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <Target className="h-3 w-3" />
-                    {[t.productName, t.angleName].filter(Boolean).join(" · ")}
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -306,23 +240,6 @@ export default function TemplatesPage() {
               <div className="flex items-center gap-2 pb-1">
                 <Switch checked={form.isDefault} onCheckedChange={(v) => setForm({ ...form, isDefault: v })} />
                 <label className="text-xs text-slate-400">Default</label>
-              </div>
-            </div>
-
-            {/* --- Product & Angle --- */}
-            <div className="rounded-lg border border-white/5 p-4 space-y-3">
-              <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider">Product & Angle</h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">Product Name</label>
-                  <Input value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })}
-                    className="bg-white/5 border-white/10 placeholder:text-slate-600" placeholder="e.g. PawCare" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">Angle</label>
-                  <Input value={form.angleName} onChange={(e) => setForm({ ...form, angleName: e.target.value })}
-                    className="bg-white/5 border-white/10 placeholder:text-slate-600" placeholder="e.g. PawLicking" />
-                </div>
               </div>
             </div>
 
@@ -386,96 +303,6 @@ export default function TemplatesPage() {
               </div>
             </div>
 
-            {/* --- Targeting --- */}
-            <div className="rounded-lg border border-white/5 p-4 space-y-3">
-              <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider">Targeting</h3>
-              <div className="space-y-1.5">
-                <label className="text-xs text-slate-500">Countries</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {COUNTRIES.map((c) => (
-                    <button key={c.code} onClick={() => toggleCountry(c.code)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-lg text-xs font-medium border transition-all",
-                        form.targetCountries.includes(c.code)
-                          ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
-                          : "bg-white/5 text-slate-500 border-white/10 hover:bg-white/10"
-                      )}>
-                      {c.code}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">Age Min (optional)</label>
-                  <Input type="number" value={form.ageMin ?? ""} onChange={(e) => setForm({ ...form, ageMin: e.target.value ? Number(e.target.value) : null })}
-                    className="bg-white/5 border-white/10" placeholder="No limit" min={18} max={65} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">Age Max (optional)</label>
-                  <Input type="number" value={form.ageMax ?? ""} onChange={(e) => setForm({ ...form, ageMax: e.target.value ? Number(e.target.value) : null })}
-                    className="bg-white/5 border-white/10" placeholder="No limit" min={18} max={65} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">Gender</label>
-                  <Select value={form.genders ? form.genders.join(",") : "all"} onValueChange={(v) => setForm({ ...form, genders: v === "all" ? null : v.split(",").map(Number) })}>
-                    <SelectTrigger className="bg-white/5 border-white/10"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-[#111827] border-white/10">
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="1">Female</SelectItem>
-                      <SelectItem value="2">Male</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* --- Ad Copy --- */}
-            <div className="rounded-lg border border-white/5 p-4 space-y-3">
-              <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider">Ad Copy</h3>
-              <div className="space-y-2">
-                <label className="text-xs text-slate-500">Headlines</label>
-                {form.headlines.map((h, i) => (
-                  <Input key={i} value={h} onChange={(e) => {
-                    const arr = [...form.headlines]; arr[i] = e.target.value;
-                    setForm({ ...form, headlines: arr });
-                  }} placeholder={`Headline ${i + 1}`} className="bg-white/5 border-white/10 placeholder:text-slate-600" />
-                ))}
-                <button onClick={() => setForm({ ...form, headlines: [...form.headlines, ""] })}
-                  className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
-                  <Plus className="h-3 w-3" /> Add Headline
-                </button>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs text-slate-500">Primary Texts</label>
-                {form.primaryTexts.map((t, i) => (
-                  <textarea key={i} value={t} onChange={(e) => {
-                    const arr = [...form.primaryTexts]; arr[i] = e.target.value;
-                    setForm({ ...form, primaryTexts: arr });
-                  }} placeholder={`Text ${i + 1}`} rows={2}
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 transition-all resize-none" />
-                ))}
-                <button onClick={() => setForm({ ...form, primaryTexts: [...form.primaryTexts, ""] })}
-                  className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
-                  <Plus className="h-3 w-3" /> Add Text
-                </button>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-slate-500">CTA Button</label>
-                <Select value={form.ctaType} onValueChange={(v) => setForm({ ...form, ctaType: v })}>
-                  <SelectTrigger className="bg-white/5 border-white/10"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-[#111827] border-white/10">
-                    <SelectItem value="SHOP_NOW">Shop Now</SelectItem>
-                    <SelectItem value="LEARN_MORE">Learn More</SelectItem>
-                    <SelectItem value="BUY_NOW">Buy Now</SelectItem>
-                    <SelectItem value="SIGN_UP">Sign Up</SelectItem>
-                    <SelectItem value="ORDER_NOW">Order Now</SelectItem>
-                    <SelectItem value="GET_OFFER">Get Offer</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
             {/* --- Landing Pages --- */}
             <div className="rounded-lg border border-white/5 p-4 space-y-3">
               <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider">
@@ -502,25 +329,6 @@ export default function TemplatesPage() {
               </button>
             </div>
 
-            {/* --- Naming Templates --- */}
-            <div className="rounded-lg border border-white/5 p-4 space-y-3">
-              <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider">Naming Templates</h3>
-              <p className="text-xs text-slate-600">
-                Variables: {"{product}"} {"{angle}"} {"{country}"} {"{editor}"} {"{creative}"} {"{lp}"} {"{date}"}
-              </p>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">Ad-Set Name</label>
-                  <Input value={form.adsetNameTemplate} onChange={(e) => setForm({ ...form, adsetNameTemplate: e.target.value })}
-                    className="bg-white/5 border-white/10 font-mono text-xs" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">Ad Name</label>
-                  <Input value={form.adNameTemplate} onChange={(e) => setForm({ ...form, adNameTemplate: e.target.value })}
-                    className="bg-white/5 border-white/10 font-mono text-xs" />
-                </div>
-              </div>
-            </div>
           </div>
 
           <DialogFooter>

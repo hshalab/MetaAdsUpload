@@ -34,7 +34,8 @@ export async function uploadVideo(videoFile: Buffer, filename: string) {
 
 export async function createAdCreative(params: {
   name: string;
-  object_story_spec: {
+  object_story_id?: string; // Use existing post (preserves engagement)
+  object_story_spec?: {
     page_id: string;
     link_data?: {
       link: string;

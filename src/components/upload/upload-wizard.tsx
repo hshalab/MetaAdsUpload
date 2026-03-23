@@ -177,11 +177,15 @@ export function UploadWizard({ onAddToQueue, onSaveTemplate }: UploadWizardProps
           <div key={s} className="flex items-center gap-2">
             <button
               onClick={() => setStep(i)}
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium transition-colors ${
-                i === step ? "bg-primary text-primary-foreground" : i < step ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium border transition-colors ${
+                i === step
+                  ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-400"
+                  : i < step
+                  ? "border-white/10 bg-white/5 text-cyan-400/60"
+                  : "border-white/10 bg-white/5 text-slate-500"
               }`}
             >
-              {i + 1}
+              {i < step ? "\u2713" : i + 1}
             </button>
             <span className={`text-sm ${i === step ? "font-medium" : "text-muted-foreground"}`}>{s}</span>
             {i < steps.length - 1 && <Separator className="w-8" />}

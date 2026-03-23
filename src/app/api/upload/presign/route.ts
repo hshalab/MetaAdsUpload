@@ -34,7 +34,15 @@ export async function POST(request: NextRequest) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json();
-    const { filename, contentType, fileSize, assignmentId } = body;
+    const { filename, contentType, fileSize, assignmentId, purpose, tags, batchNumber } = body as {
+      filename: string;
+      contentType: string;
+      fileSize?: number;
+      assignmentId?: string;
+      purpose?: "deliverable" | "library" | "version";
+      tags?: string[];
+      batchNumber?: number;
+    };
 
     if (!filename || !contentType) {
       return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
@@ -73,11 +81,15 @@ export async function POST(request: NextRequest) {
     // Generate unique key
     const timestamp = Date.now();
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const isLibrary = purpose === "library";
+    const isVersion = purpose === "version";
 
-    let key = `deliverables/${timestamp}-${sanitizedFilename}`;
+    let key = isLibrary
+      ? `library/${timestamp}-${sanitizedFilename}`
+      : `deliverables/${timestamp}-${sanitizedFilename}`;
 
     // If assignmentId provided, build folder structure: editor/Batch_N/file
-    if (assignmentId) {
+    if (assignmentId && !isLibrary) {
       const [assignment] = await db
         .select({
           batchNumber: schema.assignments.batchNumber,
@@ -104,11 +116,32 @@ export async function POST(request: NextRequest) {
     });
 
     const uploadUrl = await getSignedUrl(client, command, { expiresIn: 3600 });
+    const finalPublicUrl = publicUrl ? `${publicUrl}/${key}` : key;
+
+    // Auto-create creatives record for library uploads
+    let creativeId: number | undefined;
+    if (isLibrary) {
+      const isImage = /^image\//.test(contentType);
+      const [creative] = await db.insert(schema.creatives).values({
+        name: filename,
+        type: isImage ? "image" : "video",
+        source: "r2",
+        r2Key: key,
+        r2Url: finalPublicUrl,
+        fileSize: fileSize || null,
+        tags: tags || [],
+        batchNumber: batchNumber || null,
+        editorName: session.user.name || null,
+        status: "uploaded",
+      }).returning();
+      creativeId = creative.id;
+    }
 
     return NextResponse.json({
       uploadUrl,
-      publicUrl: publicUrl ? `${publicUrl}/${key}` : key,
+      publicUrl: finalPublicUrl,
       key,
+      ...(creativeId !== undefined && { creativeId }),
     });
   } catch (error) {
     console.error("Presign error:", error);

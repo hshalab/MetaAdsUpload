@@ -49,6 +49,7 @@ interface UserItem {
   name: string;
   email: string;
   role?: string;
+  userType?: string;
 }
 
 interface AssignmentModalProps {
@@ -71,6 +72,7 @@ interface FormState {
   landingPage: string;
   assignedToId: string;
   creativeStrategistId: string;
+  creativeStrategistName: string;
   priority: AssignmentPriority;
   dueDate: string | undefined;
   description: string;
@@ -128,6 +130,7 @@ const emptyForm: FormState = {
   landingPage: "",
   assignedToId: "",
   creativeStrategistId: "",
+  creativeStrategistName: "",
   priority: "MEDIUM",
   dueDate: undefined,
   description: "",
@@ -315,6 +318,7 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
         landingPage: assignment.landingPage || "",
         assignedToId: assignment.assignedToId,
         creativeStrategistId: assignment.creativeStrategistId || "",
+        creativeStrategistName: assignment.creativeStrategistName || "",
         priority: assignment.priority,
         dueDate: assignment.dueDate ? new Date(assignment.dueDate).toISOString() : undefined,
         description: assignment.description || "",
@@ -326,7 +330,7 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
       }
       if (assignment.customerAvatars?.length) setShowAvatars(true);
     } else {
-      // New assignment — try restoring draft
+      // New assignment — try restoring draft first, then last-submitted values
       const draft = loadDraft(getDraftKey(null));
       if (draft) {
         setForm(draft.form);
@@ -335,8 +339,22 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
         if (draft.form.customerAvatarIds?.length) setShowAvatars(true);
         toast.info("Draft restored", { description: "Your previous unsaved work was recovered." });
       } else {
-        setForm({ ...emptyForm });
-        setScript({ ...emptyScript, hooks: [{ id: "h1", label: "H1", eng: "", se: "" }] });
+        // Check for last-submitted values to prefill
+        let prefilled = false;
+        try {
+          const lastRaw = localStorage.getItem("assignment-last-submitted");
+          if (lastRaw) {
+            const { form: lastForm, script: lastScript } = JSON.parse(lastRaw);
+            setForm({ ...lastForm, batchNumber: "", description: "", dueDate: undefined });
+            setScript(lastScript);
+            if (lastForm.customerAvatarIds?.length) setShowAvatars(true);
+            prefilled = true;
+          }
+        } catch { /* ignore parse errors */ }
+        if (!prefilled) {
+          setForm({ ...emptyForm });
+          setScript({ ...emptyScript, hooks: [{ id: "h1", label: "H1", eng: "", se: "" }] });
+        }
         setDraftRestored(false);
       }
     }
@@ -349,10 +367,12 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
 
   const refreshOptions = async () => { const opts = await fetchOptions(); setOptions(opts); };
 
-  const editors = users.filter((u) => u.role === "EMPLOYEE" || u.role === "EDITOR");
-  const admins = users.filter((u) => u.role === "ADMIN");
+  const allEditors = users.filter((u) => u.role?.toLowerCase() === "editor" || u.role?.toLowerCase() === "employee");
+  const videoEditors = allEditors.filter((u) => !u.userType || u.userType === "video_editor" || u.userType === "editor");
+  const creativeStrategists = allEditors.filter((u) => u.userType === "creative_strategist");
+  const admins = users.filter((u) => u.role?.toLowerCase() === "admin");
   const selectedEditor = users.find((u) => u.id === form.assignedToId);
-  const selectedCS = users.find((u) => u.id === form.creativeStrategistId);
+  const selectedStrategist = users.find((u) => u.id === form.creativeStrategistId);
 
   // ─── Hook helpers ───
   const addHook = () => {
@@ -405,6 +425,7 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
       landingPage: form.landingPage || undefined,
       assignedToId: form.assignedToId,
       creativeStrategistId: form.creativeStrategistId || undefined,
+      creativeStrategistName: form.creativeStrategistName || undefined,
       priority: form.priority,
       dueDate: form.dueDate ? format(new Date(form.dueDate), "yyyy-MM-dd") : undefined,
       description: form.description || undefined,
@@ -421,6 +442,13 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
       }
       toast.success(assignment ? "Assignment updated" : "Assignment created");
       clearDraft(draftKey);
+      // Save last-submitted values for prefilling next new assignment
+      if (!assignment) {
+        try {
+          const lastSubmitted = { ...formRef.current, batchNumber: "", description: "", dueDate: undefined };
+          localStorage.setItem("assignment-last-submitted", JSON.stringify({ form: lastSubmitted, script: scriptRef.current }));
+        } catch { /* quota exceeded, ignore */ }
+      }
       onSaved();
       onOpenChange(false);
     } catch (err) {
@@ -526,7 +554,7 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
                       </SelectTrigger>
                       <SelectContent className="bg-[#111827] border-white/10">
                         <SelectItem value="___none___" className="text-slate-600">— Select —</SelectItem>
-                        {editors.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                        {videoEditors.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
                         {admins.map((a) => <SelectItem key={a.id} value={a.id}>{a.name} (Admin)</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -700,15 +728,22 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
                       <div className="space-y-1.5">
                         <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Creative Strategist</Label>
                         <Select value={form.creativeStrategistId || "___none___"}
-                          onValueChange={(v) => updateForm({ creativeStrategistId: v === "___none___" ? "" : v })}>
+                          onValueChange={(v) => {
+                            const user = users.find((u) => u.id === v);
+                            updateForm({
+                              creativeStrategistId: v === "___none___" ? "" : v,
+                              creativeStrategistName: user?.name || "",
+                            });
+                          }}>
                           <SelectTrigger className="bg-white/[0.03] border-white/[0.06] text-sm h-10">
-                            <span className={!selectedCS ? "text-slate-600" : "text-white"}>
-                              {selectedCS?.name || "Select..."}
+                            <span className={!selectedStrategist ? "text-slate-600" : "text-white"}>
+                              {selectedStrategist?.name || "Select strategist..."}
                             </span>
                           </SelectTrigger>
                           <SelectContent className="bg-[#111827] border-white/10">
                             <SelectItem value="___none___" className="text-slate-600">— None —</SelectItem>
-                            {admins.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                            {creativeStrategists.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                            {admins.map((a) => <SelectItem key={a.id} value={a.id}>{a.name} (Admin)</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>

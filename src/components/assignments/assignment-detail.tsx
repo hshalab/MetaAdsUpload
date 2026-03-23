@@ -44,7 +44,9 @@ import {
   ExternalLink,
   FolderOpen,
   Trash2,
+  Eye,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
   STATUS_CONFIG,
@@ -325,11 +327,11 @@ export function AssignmentDetail({
                     <span className="text-muted-foreground">Editor:</span>
                     <span className="font-medium">{assignment.assignedTo.name}</span>
                   </div>
-                  {assignment.creativeStrategist && (
+                  {(assignment.creativeStrategistName || assignment.creativeStrategist) && (
                     <div className="flex items-center gap-3 text-sm">
                       <User className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Strategist:</span>
-                      <span className="font-medium">{assignment.creativeStrategist.name}</span>
+                      <span className="font-medium">{assignment.creativeStrategistName || assignment.creativeStrategist?.name}</span>
                     </div>
                   )}
                   {assignment.dueDate && (
@@ -378,15 +380,24 @@ export function AssignmentDetail({
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {assignment.deliverableUrl && (
-                      <a
-                        href={assignment.deliverableUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 hover:text-blue-300 underline flex items-center gap-2 text-sm break-all"
-                      >
-                        Uploaded file
-                        <ExternalLink className="h-4 w-4 flex-shrink-0" />
-                      </a>
+                      <div className="flex items-center gap-3">
+                        <a
+                          href={assignment.deliverableUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 underline flex items-center gap-2 text-sm break-all"
+                        >
+                          Uploaded file
+                          <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                        </a>
+                        <Link
+                          href={`/review/${assignment.id}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-xs font-medium text-cyan-400 hover:bg-cyan-500/20 transition-all"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Open Review
+                        </Link>
+                      </div>
                     )}
                     {assignment.googleDriveLink && (
                       <a

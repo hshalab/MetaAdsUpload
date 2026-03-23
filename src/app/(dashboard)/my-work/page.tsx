@@ -31,7 +31,9 @@ import {
   Loader2,
   Undo2,
   StickyNote,
+  Eye,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
   STATUS_CONFIG,
@@ -583,7 +585,7 @@ export default function MyWorkPage() {
                           <div>
                             <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Deliverable</h4>
                             <div className="rounded-lg border border-white/5 bg-[#0d1220] p-3">
-                              <div className="flex items-center gap-2 text-sm">
+                              <div className="flex items-center gap-3 text-sm">
                                 <FileVideo className="h-4 w-4 text-emerald-400" />
                                 <a
                                   href={assignment.deliverableUrl}
@@ -593,6 +595,13 @@ export default function MyWorkPage() {
                                 >
                                   View uploaded file <ExternalLink className="h-3 w-3" />
                                 </a>
+                                <Link
+                                  href={`/review/${assignment.id}`}
+                                  className="inline-flex items-center gap-1 text-cyan-400 hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Eye className="h-3 w-3" /> Review
+                                </Link>
                               </div>
                             </div>
                           </div>

@@ -22,6 +22,7 @@ import {
   DollarSign,
   Menu,
   X,
+  Eye,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -47,6 +48,7 @@ const navSections = [
     items: [
       { href: "/assignments", label: "Assignments", icon: LayoutGrid },
       { href: "/my-work", label: "My Work", icon: ClipboardList },
+      { href: "/review", label: "Review", icon: Eye },
       { href: "/timer", label: "Timer", icon: Timer },
     ],
   },

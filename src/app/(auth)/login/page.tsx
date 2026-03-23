@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Megaphone, Loader2 } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justRegistered = searchParams.get("registered") === "true";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,19 +46,26 @@ export default function LoginPage() {
           <p className="text-sm text-slate-500 mt-1">Premium Ad Management</p>
         </div>
 
+        {/* Success message after registration */}
+        {justRegistered && (
+          <div className="mb-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-sm text-emerald-400 text-center">
+            Account created successfully. Please sign in.
+          </div>
+        )}
+
         {/* Login Card */}
         <div className="rounded-xl border border-white/10 bg-[#111827] p-6 shadow-2xl shadow-black/20">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label htmlFor="email" className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Email
+                Username / Email
               </label>
               <input
                 id="email"
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@example.com"
+                placeholder="username or email"
                 required
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
               />
@@ -93,8 +103,26 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* Register link */}
+          <div className="mt-4 text-center">
+            <p className="text-sm text-slate-500">
+              Don&apos;t have an account?{" "}
+              <Link href="/register" className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">
+                Sign Up
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -1,4 +1,4 @@
-import { pgTable, text, integer, real, boolean, timestamp, jsonb, serial, varchar, date, index } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, boolean, timestamp, jsonb, serial, varchar, date, index, unique } from "drizzle-orm/pg-core";
 
 // ─── Users & Auth ────────────────────────────────────────────────────────────
 
@@ -8,6 +8,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(), // bcrypt hash
   name: text("name").notNull(),
   role: text("role").notNull().default("editor"), // "admin" | "editor"
+  userType: text("user_type").default("editor"), // "video_editor" | "creative_strategist"
   isActive: boolean("is_active").default(true).notNull(),
   hourlyRate: real("hourly_rate"),
   timezone: text("timezone").default("Europe/Stockholm"),
@@ -96,6 +97,7 @@ export const assignments = pgTable("assignments", {
   assignedToId: text("assigned_to_id").notNull(),
   assignedById: text("assigned_by_id").notNull(),
   creativeStrategistId: text("creative_strategist_id"),
+  creativeStrategistName: text("creative_strategist_name"),
   status: text("status").notNull().default("ready_for_editing"),
   // Statuses: ready_for_editing, editing_now, ready_for_review, revision, ready_for_posting, posted
   priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
@@ -113,6 +115,8 @@ export const assignments = pgTable("assignments", {
   metaAdId: text("meta_ad_id"),
   metaAdsetId: text("meta_adset_id"),
   metaCampaignId: text("meta_campaign_id"),
+  metaPostId: text("meta_post_id"), // effective_object_story_id for post ID preservation
+  currentVersionId: text("current_version_id"), // FK → deliverable_versions
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -190,7 +194,7 @@ export const creatives = pgTable("creatives", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   type: text("type").notNull(), // "video" | "image"
-  source: text("source").notNull(), // "local" | "gdrive" | "meta"
+  source: text("source").notNull(), // "local" | "gdrive" | "meta" | "r2"
   metaHash: text("meta_hash"),
   metaVideoId: text("meta_video_id"),
   metaImageHash: text("meta_image_hash"),
@@ -201,6 +205,12 @@ export const creatives = pgTable("creatives", {
   duration: real("duration"),
   tags: jsonb("tags").$type<string[]>().default([]),
   gdriveFileId: text("gdrive_file_id"),
+  r2Key: text("r2_key"),
+  r2Url: text("r2_url"),
+  assignmentId: text("assignment_id"),
+  editorName: text("editor_name"),
+  batchNumber: integer("batch_number"),
+  status: text("status").default("uploaded"), // uploaded | in_review | approved | archived
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -351,3 +361,65 @@ export const metaConnections = pgTable("meta_connections", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ─── Review System ──────────────────────────────────────────────────────────
+
+export const deliverableVersions = pgTable("deliverable_versions", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  assignmentId: text("assignment_id").notNull(),
+  versionNumber: integer("version_number").notNull().default(1),
+  r2Key: text("r2_key").notNull(),
+  r2Url: text("r2_url").notNull(),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(),
+  fileSize: integer("file_size"),
+  width: integer("width"),
+  height: integer("height"),
+  duration: real("duration"),
+  thumbnailR2Key: text("thumbnail_r2_key"),
+  thumbnailUrl: text("thumbnail_url"),
+  uploadedById: text("uploaded_by_id").notNull(),
+  reviewStatus: text("review_status").notNull().default("no_status"),
+  // no_status | in_progress | needs_review | approved
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("dv_assignment_idx").on(table.assignmentId),
+  index("dv_version_idx").on(table.assignmentId, table.versionNumber),
+]);
+
+export const reviewComments = pgTable("review_comments", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  deliverableVersionId: text("deliverable_version_id").notNull(),
+  parentCommentId: text("parent_comment_id"), // null=root, set=reply
+  authorId: text("author_id"), // null for guest comments
+  guestName: text("guest_name"), // for share link reviewers
+  body: text("body").notNull(),
+  timecodeSeconds: real("timecode_seconds"), // null=general comment
+  annotation: jsonb("annotation"),
+  isInternal: boolean("is_internal").default(true).notNull(),
+  isResolved: boolean("is_resolved").default(false).notNull(),
+  reactions: jsonb("reactions").$type<Record<string, string[]>>().default({}),
+  mentionedUserIds: jsonb("mentioned_user_ids").$type<string[]>().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("rc_version_idx").on(table.deliverableVersionId),
+  index("rc_parent_idx").on(table.parentCommentId),
+]);
+
+export const shareLinks = pgTable("share_links", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  assignmentId: text("assignment_id").notNull(),
+  token: text("token").notNull().unique(),
+  password: text("password"), // bcrypt hash, null=no password
+  expiresAt: timestamp("expires_at"),
+  createdById: text("created_by_id").notNull(),
+  allowComments: boolean("allow_comments").default(true).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  accessCount: integer("access_count").default(0).notNull(),
+  lastAccessedAt: timestamp("last_accessed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("sl_token_idx").on(table.token),
+  index("sl_assignment_idx").on(table.assignmentId),
+]);
