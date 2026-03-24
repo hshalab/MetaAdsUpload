@@ -209,7 +209,7 @@ export const creatives = pgTable("creatives", {
   r2Url: text("r2_url"),
   assignmentId: text("assignment_id"),
   editorName: text("editor_name"),
-  batchNumber: integer("batch_number"),
+  batchNumber: text("batch_number"),
   status: text("status").default("uploaded"), // uploaded | in_review | approved | archived
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

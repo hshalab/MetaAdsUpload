@@ -127,6 +127,7 @@ export async function POST(request: NextRequest) {
     const userId = session.user.id;
     const body = await request.json();
     const {
+      isDraft,
       batchNumber,
       version = 1,
       formatId,
@@ -147,6 +148,43 @@ export async function POST(request: NextRequest) {
       scriptContent,
     } = body;
 
+    // ─── Draft creation: instant empty assignment ───
+    if (isDraft) {
+      const now = new Date();
+      const [assignment] = await db
+        .insert(schema.assignments)
+        .values({
+          title: "Draft",
+          description: null,
+          batchNumber: 0,
+          version: 1,
+          formatId: null,
+          angleId: null,
+          productId: null,
+          countryId: null,
+          offerTypeId: null,
+          scriptStructureId: null,
+          customerAvatarIds: [],
+          landingPage: null,
+          assignedToId: userId,
+          assignedById: userId,
+          creativeStrategistId: null,
+          creativeStrategistName: null,
+          status: "draft",
+          priority: "medium",
+          dueDate: null,
+          estimatedMinutes: null,
+          scriptContent: null,
+          autoName: "Draft",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      return NextResponse.json(assignment, { status: 201 });
+    }
+
+    // ─── Normal creation with validation ───
     if (!batchNumber || !assignedToId) {
       return NextResponse.json({ error: "Batch number and assignedToId are required" }, { status: 400 });
     }

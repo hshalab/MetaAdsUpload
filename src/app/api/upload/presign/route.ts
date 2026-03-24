@@ -7,6 +7,15 @@ import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { getR2Client, getR2PublicUrl } from "@/lib/r2";
 
+/**
+ * Extract batch ID from naming convention.
+ * "H1 - SE Josiah Jan194 - #1 - STATIC - LP11 - Evergreen - LickingPaws - Josiah.png" → "Jan194"
+ */
+function extractBatchId(filename: string): string | null {
+  const match = filename.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(\d+)\b/);
+  return match ? match[1] + match[2] : null;
+}
+
 export async function POST(request: NextRequest) {
   const rateLimitResponse = checkRateLimit(request, 10, 60_000);
   if (rateLimitResponse) return rateLimitResponse;
@@ -16,15 +25,19 @@ export async function POST(request: NextRequest) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json();
-    const { filename, contentType, fileSize, assignmentId, purpose, tags, batchNumber } = body as {
+    const { filename, contentType, fileSize, assignmentId, purpose, tags, batchNumber: rawBatch } = body as {
       filename: string;
       contentType: string;
       fileSize?: number;
       assignmentId?: string;
       purpose?: "deliverable" | "library" | "version";
       tags?: string[];
-      batchNumber?: number;
+      batchNumber?: string;
     };
+
+    // Auto-extract batch ID from naming convention if not explicitly provided
+    // Pattern: "H1 - SE Josiah Jan194 - #1 - STATIC - ..." → "Jan194"
+    const batchNumber = rawBatch || extractBatchId(filename);
 
     if (!filename || !contentType) {
       return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });

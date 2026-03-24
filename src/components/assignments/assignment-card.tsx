@@ -22,12 +22,14 @@ import {
   Image,
   Rocket,
   Film,
+  FileEdit,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 // --- Shared types ---
 export type AssignmentStatus =
+  | "DRAFT"
   | "READY_FOR_EDITING"
   | "EDITING_NOW"
   | "READY_FOR_REVIEW"
@@ -109,6 +111,12 @@ export const STATUS_CONFIG: Record<
   AssignmentStatus,
   { label: string; color: string; bgClass: string; icon: React.ElementType }
 > = {
+  DRAFT: {
+    label: "Draft",
+    color: "text-cyan-400",
+    bgClass: "bg-cyan-500/10 border-cyan-500/20",
+    icon: FileEdit,
+  },
   READY_FOR_EDITING: {
     label: "Ready for Editing",
     color: "text-blue-400",

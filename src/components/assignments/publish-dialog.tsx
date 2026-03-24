@@ -153,16 +153,30 @@ export function PublishDialog({
 
       // Auto-add deliverable as creative if available
       if (assignment.deliverableUrl) {
-        const filename = assignment.deliverableR2Key
-          ? assignment.deliverableR2Key.split("/").pop() || "deliverable.mp4"
-          : "deliverable.mp4";
-        const isImage = /\.(jpg|jpeg|png|webp)$/i.test(filename);
-        setCreatives([{
-          id: "deliverable",
-          name: filename,
-          type: isImage ? "image" : "video",
-          deliverableUrl: assignment.deliverableUrl,
-        }]);
+        // Fetch original filename from deliverable version
+        const fetchOriginalFilename = async () => {
+          try {
+            const res = await fetch(`/api/assignments/${assignment.id}/deliverable-info`);
+            if (res.ok) {
+              const data = await res.json();
+              return data.filename || null;
+            }
+          } catch {}
+          return null;
+        };
+        fetchOriginalFilename().then((originalFilename) => {
+          const fallbackFilename = assignment.deliverableR2Key
+            ? assignment.deliverableR2Key.split("/").pop() || "deliverable.mp4"
+            : "deliverable.mp4";
+          const filename = originalFilename || fallbackFilename;
+          const isImage = /\.(jpg|jpeg|png|webp)$/i.test(filename);
+          setCreatives([{
+            id: "deliverable",
+            name: filename,
+            type: isImage ? "image" : "video",
+            deliverableUrl: assignment.deliverableUrl!,
+          }]);
+        });
       } else {
         setCreatives([]);
       }
@@ -642,11 +656,11 @@ export function PublishDialog({
                   <div className="max-h-40 overflow-y-auto space-y-1">
                     {creatives.map((c) =>
                       landingPages.filter(Boolean).map((lp, lpIdx) => {
-                        const cleanName = c.name.replace(/\.[^.]+$/, "");
+                        const cleanName = c.name.replace(/\.[^.]+$/, "").replace(/^\d{10,}-/, "");
                         const lpSuffix = landingPages.filter(Boolean).length > 1 ? ` LP${lpIdx + 1}` : "";
                         return (
                           <div key={`${c.id}-${lpIdx}`} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white/[0.02]">
-                            <span className="text-slate-300">{assignment.country?.code || "SE"} {assignment.assignedTo?.name?.split(" ")[0] || "Editor"} {cleanName}{lpSuffix}</span>
+                            <span className="text-slate-300">{cleanName}{lpSuffix}</span>
                             <span className="text-slate-600 truncate max-w-[150px]">{lp}</span>
                           </div>
                         );

@@ -4,6 +4,7 @@ import { db, schema } from "@/db";
 import { eq, and, sql, desc, asc, inArray } from "drizzle-orm";
 
 const STATUS_KEYS = [
+  "DRAFT",
   "READY_FOR_EDITING",
   "EDITING_NOW",
   "READY_FOR_REVIEW",

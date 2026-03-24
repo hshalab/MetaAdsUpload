@@ -261,18 +261,62 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
 
   const draftKey = getDraftKey(assignment?.id);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serverSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef(form);
   const scriptRef = useRef(script);
   formRef.current = form;
   scriptRef.current = script;
 
-  // ─── Auto-save draft to localStorage ───
+  // ─── Auto-save to server (for existing assignments) ───
+  const saveToServer = useCallback(async () => {
+    if (!assignment) return;
+    const f = formRef.current;
+    const s = scriptRef.current;
+    const hasScriptContent = s.hooks.some((h) => h.eng || h.se) || s.body.eng || s.body.se;
+
+    const payload: Record<string, unknown> = {};
+    if (f.batchNumber && parseInt(f.batchNumber) > 0) payload.batchNumber = parseInt(f.batchNumber);
+    if (parseInt(f.version) > 0) payload.version = parseInt(f.version);
+    payload.formatId = f.formatId || null;
+    payload.angleId = f.angleId || null;
+    payload.productId = f.productId || null;
+    payload.countryId = f.countryId || null;
+    payload.offerTypeId = f.offerTypeId || null;
+    payload.scriptStructureId = f.scriptStructureId || null;
+    payload.customerAvatarIds = f.customerAvatarIds;
+    payload.landingPage = f.landingPage || null;
+    if (f.assignedToId) payload.assignedToId = f.assignedToId;
+    payload.creativeStrategistId = f.creativeStrategistId || null;
+    payload.creativeStrategistName = f.creativeStrategistName || null;
+    payload.priority = f.priority;
+    payload.dueDate = f.dueDate ? new Date(f.dueDate).toISOString().split("T")[0] : null;
+    payload.description = f.description || null;
+    payload.scriptContent = hasScriptContent ? s : null;
+
+    try {
+      await fetch(`/api/assignments/${assignment.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch { /* silent auto-save failure */ }
+  }, [assignment]);
+
+  // ─── Auto-save draft to localStorage + server ───
   const scheduleDraftSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       saveDraft(draftKey, formRef.current, scriptRef.current);
     }, 500);
-  }, [draftKey]);
+
+    // Also auto-save to server when editing an existing assignment
+    if (assignment) {
+      if (serverSaveTimerRef.current) clearTimeout(serverSaveTimerRef.current);
+      serverSaveTimerRef.current = setTimeout(() => {
+        saveToServer();
+      }, 1000);
+    }
+  }, [draftKey, assignment, saveToServer]);
 
   // Update form with auto-save
   const updateForm = useCallback((updates: Partial<FormState>) => {
@@ -304,7 +348,21 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
   useEffect(() => {
     if (!open) return;
 
-    if (assignment) {
+    if (assignment && assignment.status === "DRAFT") {
+      // Draft assignment — show empty form but with assignment ID linked
+      // Try restoring localStorage draft for this draft ID first
+      const draft = loadDraft(getDraftKey(assignment.id));
+      if (draft) {
+        setForm(draft.form);
+        setScript(draft.script);
+        setDraftRestored(true);
+        if (draft.form.customerAvatarIds?.length) setShowAvatars(true);
+      } else {
+        setForm({ ...emptyForm });
+        setScript({ ...emptyScript, hooks: [{ id: "h1", label: "H1", eng: "", se: "" }] });
+        setDraftRestored(false);
+      }
+    } else if (assignment) {
       setForm({
         batchNumber: assignment.batchNumber.toString(),
         version: assignment.version.toString(),
@@ -360,9 +418,12 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
     }
   }, [assignment, open]);
 
-  // ─── Cleanup timer on unmount ───
+  // ─── Cleanup timers on unmount ───
   useEffect(() => {
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (serverSaveTimerRef.current) clearTimeout(serverSaveTimerRef.current);
+    };
   }, []);
 
   const refreshOptions = async () => { const opts = await fetchOptions(); setOptions(opts); };
@@ -402,6 +463,8 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
     });
   };
 
+  const isDraftAssignment = assignment?.status === "DRAFT";
+
   // ─── Submit ───
   const handleSubmit = async () => {
     if (!form.batchNumber || !form.assignedToId) {
@@ -440,7 +503,17 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
         const data = await res.json().catch(() => ({}));
         throw new Error((data as { error?: string }).error || "Save failed");
       }
-      toast.success(assignment ? "Assignment updated" : "Assignment created");
+
+      // If this was a draft, move it to ready_for_editing
+      if (isDraftAssignment && assignment) {
+        await fetch(`/api/assignments/${assignment.id}/status`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "READY_FOR_EDITING" }),
+        });
+      }
+
+      toast.success(isDraftAssignment ? "Assignment created" : assignment ? "Assignment updated" : "Assignment created");
       clearDraft(draftKey);
       // Save last-submitted values for prefilling next new assignment
       if (!assignment) {
@@ -491,8 +564,11 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
           <div className="flex items-center justify-between px-8 py-5 border-b border-white/[0.06] shrink-0">
             <div>
               <h2 className="text-lg font-semibold text-white">
-                {assignment ? "Edit Assignment" : "New Assignment"}
+                {isDraftAssignment ? "New Assignment" : assignment ? "Edit Assignment" : "New Assignment"}
               </h2>
+              {isDraftAssignment && (
+                <p className="text-xs text-cyan-400/70 mt-0.5">Auto-saving to database — your work is safe</p>
+              )}
               {draftRestored && !assignment && (
                 <p className="text-xs text-cyan-400/70 mt-0.5">Draft restored from previous session</p>
               )}
@@ -503,12 +579,12 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
               </span>
               <Button type="button" variant="outline" onClick={handleClose}
                 className="bg-white/[0.03] border-white/[0.06] text-slate-400 hover:bg-white/[0.06] h-9 px-4 text-sm">
-                Cancel
+                {isDraftAssignment ? "Close" : "Cancel"}
               </Button>
               <Button onClick={handleSubmit} disabled={saving}
                 className="bg-cyan-600 hover:bg-cyan-500 text-white h-9 px-6 text-sm">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                {saving ? "Saving..." : assignment ? "Update" : "Create Assignment"}
+                {saving ? "Saving..." : isDraftAssignment ? "Create Assignment" : assignment ? "Update" : "Create Assignment"}
               </Button>
             </div>
           </div>

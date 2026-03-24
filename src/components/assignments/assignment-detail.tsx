@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,6 +45,8 @@ import {
   FolderOpen,
   Trash2,
   Eye,
+  Upload,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -75,6 +77,8 @@ interface AssignmentDetailProps {
   onStatusChange: (status: AssignmentStatus, feedback?: string) => void;
   onUpdateNotes?: (notes: string) => void;
   onDelete?: () => void;
+  isAdmin?: boolean;
+  onUploadComplete?: () => void;
 }
 
 export function AssignmentDetail({
@@ -85,6 +89,8 @@ export function AssignmentDetail({
   onStatusChange,
   onUpdateNotes,
   onDelete,
+  isAdmin,
+  onUploadComplete,
 }: AssignmentDetailProps) {
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -92,6 +98,73 @@ export function AssignmentDetail({
   const [strategistNotes, setStrategistNotes] = useState(assignment.strategistNotes || "");
   const [savingNotes, setSavingNotes] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Admin upload state
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAdminUpload = async (file: File) => {
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      const presignRes = await fetch("/api/upload/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+          assignmentId: assignment.id,
+        }),
+      });
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to get upload URL");
+      }
+      const { uploadUrl, publicUrl, key } = await presignRes.json();
+      setUploadProgress(20);
+
+      const xhr = new XMLHttpRequest();
+      await new Promise<void>((resolve, reject) => {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(20 + Math.round((e.loaded / e.total) * 70));
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed: ${xhr.status}`));
+        };
+        xhr.onerror = () => reject(new Error("Upload failed"));
+        xhr.open("PUT", uploadUrl);
+        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.send(file);
+      });
+      setUploadProgress(90);
+
+      const saveRes = await fetch(`/api/assignments/${assignment.id}/deliverable`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deliverableUrl: publicUrl,
+          deliverableR2Key: key,
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+        }),
+      });
+      if (!saveRes.ok) throw new Error("Failed to save deliverable");
+      setUploadProgress(100);
+      onUploadComplete?.();
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
 
   const status = STATUS_CONFIG[assignment.status];
   const StatusIcon = status.icon;
@@ -409,6 +482,63 @@ export function AssignmentDetail({
                         {assignment.googleDriveLink}
                         <ExternalLink className="h-4 w-4 flex-shrink-0" />
                       </a>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Admin Upload Section */}
+              {isAdmin && (
+                <Card className="border-cyan-500/20 bg-cyan-500/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-cyan-400 flex items-center gap-2">
+                      <Upload className="h-4 w-4" />
+                      Upload Video
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="video/mp4,video/quicktime,video/webm,image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file && !uploading) handleAdminUpload(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    {uploading ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm text-cyan-400">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Uploading...
+                        </div>
+                        <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-300 rounded-full"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">{uploadProgress}%</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {assignment.deliverableUrl && (
+                          <p className="text-xs text-muted-foreground">
+                            A deliverable already exists. Uploading will replace it.
+                          </p>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                        >
+                          <Upload className="h-4 w-4 mr-1.5" />
+                          {assignment.deliverableUrl ? "Replace Video" : "Upload Video"}
+                        </Button>
+                      </div>
                     )}
                   </CardContent>
                 </Card>

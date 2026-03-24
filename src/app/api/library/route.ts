@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (status) conditions.push(eq(schema.creatives.status, status));
     else conditions.push(sql`${schema.creatives.status} != 'archived'`);
     if (editor) conditions.push(ilike(schema.creatives.editorName, `%${editor}%`));
-    if (batch) conditions.push(eq(schema.creatives.batchNumber, parseInt(batch)));
+    if (batch) conditions.push(ilike(schema.creatives.batchNumber, `%${batch}%`));
     if (search) {
       conditions.push(
         or(
@@ -116,35 +116,41 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// DELETE — Soft delete (archive) or hard delete
+// DELETE — Soft delete (archive) or hard delete. Supports single id or array of ids.
 export async function DELETE(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
-    const { id, hard } = body as { id: number; hard?: boolean };
+    const { id, ids, hard } = body as { id?: number; ids?: number[]; hard?: boolean };
 
-    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    const idsToDelete = ids || (id ? [id] : []);
+    if (idsToDelete.length === 0) return NextResponse.json({ error: "id or ids is required" }, { status: 400 });
 
-    if (hard) {
-      // Hard delete: remove from R2 + DB
-      const [creative] = await db.select().from(schema.creatives).where(eq(schema.creatives.id, id));
-      if (creative?.r2Key) {
-        const bucketName = process.env.R2_BUCKET_NAME?.trim();
-        if (bucketName) {
-          const client = getR2Client();
-          await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: creative.r2Key }));
+    for (const deleteId of idsToDelete) {
+      if (hard) {
+        // Hard delete: remove from R2 + DB
+        const [creative] = await db.select().from(schema.creatives).where(eq(schema.creatives.id, deleteId));
+        if (creative?.r2Key) {
+          const bucketName = process.env.R2_BUCKET_NAME?.trim();
+          if (bucketName) {
+            try {
+              const client = getR2Client();
+              await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: creative.r2Key }));
+            } catch (e) {
+              console.error("R2 delete failed for", creative.r2Key, e);
+            }
+          }
         }
+        await db.delete(schema.creatives).where(eq(schema.creatives.id, deleteId));
+      } else {
+        // Soft delete: set status to archived
+        await db.update(schema.creatives).set({ status: "archived" }).where(eq(schema.creatives.id, deleteId));
       }
-      await db.delete(schema.creatives).where(eq(schema.creatives.id, id));
-    } else {
-      // Soft delete: set status to archived
-      await db.update(schema.creatives).set({ status: "archived" }).where(eq(schema.creatives.id, id));
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, deleted: idsToDelete.length });
   } catch (error) {
     console.error("Library DELETE error:", error);
     return NextResponse.json({ error: "Failed to delete asset" }, { status: 500 });

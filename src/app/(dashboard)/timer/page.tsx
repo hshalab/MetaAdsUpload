@@ -28,6 +28,7 @@ import {
   FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ProductivityDashboard } from "@/components/timer/productivity-dashboard";
 import type { EditorAssignment, ScriptContent } from "@/components/assignments/assignment-card";
 
 // --- Types ---
@@ -520,6 +521,9 @@ function TimerPageContent() {
           </div>
         )}
       </div>
+
+      {/* Productivity Dashboard */}
+      <ProductivityDashboard />
 
       {/* Completion Modal */}
       <Dialog open={showCompletionModal} onOpenChange={setShowCompletionModal}>

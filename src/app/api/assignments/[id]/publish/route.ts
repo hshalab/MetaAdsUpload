@@ -66,12 +66,20 @@ export async function POST(
 
     // If no creatives provided, auto-use the assignment's deliverable
     if (!config.creatives?.length && assignment.deliverableUrl) {
-      const filename = assignment.deliverableR2Key
-        ? assignment.deliverableR2Key.split("/").pop() || "deliverable.mp4"
-        : "deliverable.mp4";
-      const isImage = /\.(jpg|jpeg|png|webp)$/i.test(filename);
+      // Get original filename from deliverable version (not sanitized R2 key)
+      let originalFilename = "deliverable.mp4";
+      if (assignment.currentVersionId) {
+        const [version] = await db
+          .select({ filename: schema.deliverableVersions.filename })
+          .from(schema.deliverableVersions)
+          .where(eq(schema.deliverableVersions.id, assignment.currentVersionId));
+        if (version?.filename) originalFilename = version.filename;
+      } else if (assignment.deliverableR2Key) {
+        originalFilename = assignment.deliverableR2Key.split("/").pop() || "deliverable.mp4";
+      }
+      const isImage = /\.(jpg|jpeg|png|webp)$/i.test(originalFilename);
       config.creatives = [{
-        name: filename,
+        name: originalFilename,
         type: isImage ? "image" : "video",
         deliverableUrl: assignment.deliverableUrl,
       }];
@@ -194,9 +202,11 @@ export async function POST(
         const landingPage = config.landingPages[lpIdx];
         const lpSuffix = config.landingPages.length > 1 ? ` LP${lpIdx + 1}` : "";
 
-        // Creative name = filename without extension
+        // Ad name = original filename without extension
         const cleanCreativeName = creative.name.replace(/\.[^.]+$/, "");
-        const adName = `${countryCode} ${editorName} ${cleanCreativeName}${lpSuffix}`;
+        // Remove any timestamp prefix (e.g. "1234567890-") from sanitized R2 filenames
+        const displayName = cleanCreativeName.replace(/^\d{10,}-/, "");
+        const adName = `${displayName}${lpSuffix}`;
 
         let adCreative;
 

@@ -17,6 +17,7 @@ import {
   X,
   RefreshCw,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import {
   AssignmentCard,
@@ -32,6 +33,7 @@ import { PublishDialog } from "@/components/assignments/publish-dialog";
 import { cn } from "@/lib/utils";
 
 interface AssignmentBoard {
+  DRAFT: EditorAssignment[];
   READY_FOR_EDITING: EditorAssignment[];
   EDITING_NOW: EditorAssignment[];
   READY_FOR_REVIEW: EditorAssignment[];
@@ -131,6 +133,7 @@ export default function AssignmentsPage() {
   const [editingAssignment, setEditingAssignment] = useState<EditorAssignment | null>(null);
   const [viewingAssignment, setViewingAssignment] = useState<EditorAssignment | null>(null);
   const [publishingAssignment, setPublishingAssignment] = useState<EditorAssignment | null>(null);
+  const [creatingDraft, setCreatingDraft] = useState(false);
 
   const fetchBoard = useCallback(async () => {
     setLoading(true);
@@ -192,8 +195,38 @@ export default function AssignmentsPage() {
     }
   };
 
+  const createDraftAndOpen = async () => {
+    setCreatingDraft(true);
+    try {
+      const res = await fetch("/api/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDraft: true }),
+      });
+      if (!res.ok) throw new Error("Failed to create draft");
+      const draft = await res.json();
+      // Fetch the full enriched assignment so the modal gets all fields
+      const detailRes = await fetch(`/api/assignments/${draft.id}`);
+      if (!detailRes.ok) throw new Error("Failed to fetch draft");
+      const enrichedDraft = await detailRes.json();
+      setEditingAssignment(enrichedDraft);
+      setShowCreateModal(true);
+      fetchBoard();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCreatingDraft(false);
+    }
+  };
+
   const handleCardClick = (assignment: EditorAssignment) => {
-    setViewingAssignment(assignment);
+    // Draft assignments open directly in edit mode
+    if (assignment.status === "DRAFT") {
+      setEditingAssignment(assignment);
+      setShowCreateModal(true);
+    } else {
+      setViewingAssignment(assignment);
+    }
   };
 
   const filterBySearch = (assignments: EditorAssignment[]) => {
@@ -234,13 +267,11 @@ export default function AssignmentsPage() {
             Refresh
           </button>
           <button
-            onClick={() => {
-              setEditingAssignment(null);
-              setShowCreateModal(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-sm font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all"
+            onClick={createDraftAndOpen}
+            disabled={creatingDraft}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 text-sm font-medium text-white hover:from-cyan-400 hover:to-cyan-500 transition-all disabled:opacity-50"
           >
-            <Plus className="h-4 w-4" />
+            {creatingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             New Assignment
           </button>
         </div>
@@ -429,6 +460,8 @@ export default function AssignmentsPage() {
               fetchBoard();
             });
           }}
+          isAdmin
+          onUploadComplete={() => fetchBoard()}
         />
       )}
 

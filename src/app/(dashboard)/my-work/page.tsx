@@ -32,6 +32,7 @@ import {
   Undo2,
   StickyNote,
   Eye,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -90,6 +91,10 @@ export default function MyWorkPage() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Video length modal state
+  const [videoLengthModalId, setVideoLengthModalId] = useState<string | null>(null);
+  const [videoLengthInput, setVideoLengthInput] = useState("");
 
   // Performance insights
   const [insights, setInsights] = useState<AdInsight[]>([]);
@@ -177,6 +182,9 @@ export default function MyWorkPage() {
         body: JSON.stringify({
           deliverableUrl: publicUrl,
           deliverableR2Key: key,
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
         }),
       });
       if (!saveRes.ok) throw new Error("Failed to save deliverable");
@@ -263,15 +271,24 @@ export default function MyWorkPage() {
     }
   };
 
-  const handleMarkComplete = async (assignment: EditorAssignment) => {
-    setCompletingId(assignment.id);
+  const handleMarkComplete = (assignment: EditorAssignment) => {
+    setVideoLengthModalId(assignment.id);
+    setVideoLengthInput("");
+  };
+
+  const handleConfirmComplete = async () => {
+    if (!videoLengthModalId) return;
+    setCompletingId(videoLengthModalId);
     try {
-      const res = await fetch(`/api/assignments/${assignment.id}/complete`, {
+      const res = await fetch(`/api/assignments/${videoLengthModalId}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          videoLengthSeconds: videoLengthInput ? parseInt(videoLengthInput) : undefined,
+        }),
       });
       if (!res.ok) throw new Error("Failed to complete");
+      setVideoLengthModalId(null);
       fetchAssignments();
     } catch (err) {
       console.error(err);
@@ -380,6 +397,66 @@ export default function MyWorkPage() {
           e.target.value = "";
         }}
       />
+
+      {/* Video Length Modal */}
+      {videoLengthModalId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setVideoLengthModalId(null)} />
+          <div className="relative bg-[#111827] border border-white/10 rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl">
+            <button
+              onClick={() => setVideoLengthModalId(null)}
+              className="absolute top-4 right-4 text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                <Video className="h-5 w-5 text-cyan-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Enter Video Length</h3>
+                <p className="text-xs text-slate-500">Required before submitting for review</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5 block">
+                  Video Length (seconds)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={videoLengthInput}
+                  onChange={(e) => setVideoLengthInput(e.target.value)}
+                  placeholder="e.g. 45"
+                  autoFocus
+                  className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all"
+                />
+                {videoLengthInput && parseInt(videoLengthInput) > 0 && (
+                  <p className="text-xs text-slate-500 mt-1.5">
+                    Duration: {Math.floor(parseInt(videoLengthInput) / 60)}m {parseInt(videoLengthInput) % 60}s
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setVideoLengthModalId(null)}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmComplete}
+                  disabled={!videoLengthInput || parseInt(videoLengthInput) <= 0 || completingId !== null}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-medium text-white hover:from-emerald-400 hover:to-emerald-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {completingId ? "Submitting..." : "Submit for Review"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Assignments list */}
       <div className="space-y-3">
