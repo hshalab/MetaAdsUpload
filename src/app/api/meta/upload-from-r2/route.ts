@@ -296,7 +296,11 @@ export async function POST(request: NextRequest) {
 
     let creativeId: string | undefined;
 
-    if (!hasMultipleTexts) {
+    // For images with multiple texts: skip creative here — created inline at ad level via creative_asset_groups_spec
+    // For videos (even with multiple texts): always create creative here — creative_asset_groups_spec doesn't support video
+    const needsCreativeHere = !hasMultipleTexts || !!videoId;
+
+    if (needsCreativeHere) {
       await updateJob(jobId, { currentStep, stepLabel: "Creating ad creative..." });
 
       const firstHeadline = headlinesArr[0] || "";
@@ -347,7 +351,7 @@ export async function POST(request: NextRequest) {
       results.creativeId = adCreative.id;
       await updateJob(jobId, { creativeId: adCreative.id });
     } else {
-      // Multiple texts: creative will be created inline at ad level (step 4)
+      // Multiple texts with image: creative will be created inline at ad level (step 4)
       await updateJob(jobId, { currentStep, stepLabel: "Hoppar över (creative skapas med ad)..." });
     }
 
@@ -430,8 +434,9 @@ export async function POST(request: NextRequest) {
     let ad: { id: string };
     let adPayloadForError: Record<string, unknown>;
 
-    if (hasMultipleTexts) {
-      // Multiple headlines/texts: use creative_asset_groups_spec (Flexible Ads)
+    if (hasMultipleTexts && imageHash) {
+      // Multiple headlines/texts WITH IMAGE: use creative_asset_groups_spec (Flexible Ads)
+      // Note: creative_asset_groups_spec does NOT support video — only images
       const flexParams = {
         adset_id: adsetId,
         name: adNameValue || creativeName,
@@ -440,7 +445,6 @@ export async function POST(request: NextRequest) {
         headlines: headlinesArr,
         primaryTexts: textsArr,
         imageHash,
-        videoId,
         linkUrl: adCopy.linkUrl,
         ctaType: adCopy.ctaType,
       };
@@ -458,7 +462,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
       }
     } else {
-      // Single headline/text: standard ad with creative_id
+      // Standard ad with creative_id (single text, OR video with any number of texts)
       const adParams = {
         adset_id: adsetId,
         name: adNameValue || creativeName,
