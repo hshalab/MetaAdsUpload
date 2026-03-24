@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { uploadImage, uploadVideo, createAdCreative } from "@/lib/meta/creatives";
+import { uploadImage, uploadVideo, createAdCreative, waitForVideoReady, getVideoThumbnail } from "@/lib/meta/creatives";
 import { createAdSet } from "@/lib/meta/adsets";
 import { createAd, createAdWithTextOptions } from "@/lib/meta/ads";
 import { getPageId, getPixelId, metaApi, getAdAccountId, MetaApiError } from "@/lib/meta/client";
@@ -269,7 +269,14 @@ export async function POST(request: NextRequest) {
         }
       }
       results.videoId = videoId;
-      await updateJob(jobId, { videoId });
+      await updateJob(jobId, { videoId, stepLabel: "Waiting for video processing..." });
+
+      // Wait for video to finish processing on Meta's side
+      await waitForVideoReady(videoId);
+
+      // Get auto-generated thumbnail (required for video creatives)
+      const thumbnailUrl = await getVideoThumbnail(videoId);
+      if (thumbnailUrl) results.thumbnailUrl = thumbnailUrl;
     } else {
       try {
         const { buffer } = await downloadFromR2(r2Key);
@@ -309,7 +316,7 @@ export async function POST(request: NextRequest) {
       const storySpec: Record<string, unknown> = { page_id: pageId };
 
       if (videoId) {
-        storySpec.video_data = {
+        const videoData: Record<string, unknown> = {
           video_id: videoId,
           message: firstText,
           title: firstHeadline,
@@ -318,6 +325,11 @@ export async function POST(request: NextRequest) {
             value: { link: adCopy.linkUrl || "" },
           },
         };
+        // Thumbnail is REQUIRED for video creatives
+        if (results.thumbnailUrl) {
+          videoData.image_url = results.thumbnailUrl;
+        }
+        storySpec.video_data = videoData;
       } else if (imageHash) {
         storySpec.link_data = {
           link: adCopy.linkUrl || "",
