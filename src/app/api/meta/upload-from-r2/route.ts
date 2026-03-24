@@ -306,13 +306,10 @@ export async function POST(request: NextRequest) {
       const firstHeadline = headlinesArr[0] || "";
       const firstText = textsArr[0] || "";
 
-      const creativePayload: Record<string, unknown> = {
-        name: creativeName,
-        object_story_spec: { page_id: pageId },
-      };
+      const storySpec: Record<string, unknown> = { page_id: pageId };
 
       if (videoId) {
-        (creativePayload.object_story_spec as Record<string, unknown>).video_data = {
+        storySpec.video_data = {
           video_id: videoId,
           message: firstText,
           title: firstHeadline,
@@ -322,7 +319,7 @@ export async function POST(request: NextRequest) {
           },
         };
       } else if (imageHash) {
-        (creativePayload.object_story_spec as Record<string, unknown>).link_data = {
+        storySpec.link_data = {
           link: adCopy.linkUrl || "",
           message: firstText,
           name: firstHeadline,
@@ -331,13 +328,21 @@ export async function POST(request: NextRequest) {
         };
       }
 
+      // Use FormData with stringified JSON — Meta requires this for nested objects
+      const creativeForm = new FormData();
+      creativeForm.append("name", creativeName);
+      creativeForm.append("object_story_spec", JSON.stringify(storySpec));
+
+      const creativePayloadForError = { name: creativeName, object_story_spec: storySpec };
+
       let adCreative: { id: string };
       try {
-        adCreative = await createAdCreative(
-          creativePayload as Parameters<typeof createAdCreative>[0]
-        );
+        adCreative = await metaApi<{ id: string }>(`/${await getAdAccountId()}/adcreatives`, {
+          method: "POST",
+          body: creativeForm,
+        });
       } catch (e) {
-        const details = buildErrorDetails(e, currentStep, creativePayload);
+        const details = buildErrorDetails(e, currentStep, creativePayloadForError);
         await updateJob(jobId, {
           status: "failed",
           error: details.message,
