@@ -86,8 +86,12 @@ export async function createAdWithTextOptions(params: {
       call_to_action: { type: ctaType },
     };
   } else if (params.videoId) {
+    // video_data requires message + title as baseline text for creative_asset_groups_spec
     storySpec.video_data = {
       video_id: params.videoId,
+      message: params.primaryTexts[0] || "",
+      title: params.headlines[0] || "",
+      link_description: params.headlines[0] || "",
       call_to_action: { type: ctaType, value: { link: params.linkUrl } },
     };
   }

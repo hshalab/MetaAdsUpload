@@ -168,6 +168,8 @@ export async function POST(request: NextRequest) {
       adCopy,
       adName: adNameValue,
       existingJobId,
+      pageId: overridePageId,
+      pixelId: overridePixelId,
     } = body as {
       r2Key: string;
       r2Url: string;
@@ -186,6 +188,8 @@ export async function POST(request: NextRequest) {
       adCopy: AdCopyInput;
       adName: string;
       existingJobId?: number;
+      pageId?: string;
+      pixelId?: string;
     };
 
     if (!r2Key || !campaignId || !adCopy) {
@@ -287,7 +291,7 @@ export async function POST(request: NextRequest) {
 
     // ─── Step 2: Create Ad Creative (skip if multiple texts — handled at ad level) ───
     currentStep = 2;
-    const pageId = await getPageId();
+    const pageId = overridePageId || await getPageId();
     const creativeName = `${filename.replace(/\.[^.]+$/, "")} ${new Date().toISOString().split("T")[0]}`;
 
     let creativeId: string | undefined;
@@ -354,7 +358,7 @@ export async function POST(request: NextRequest) {
     let adsetId = existingAdsetId;
 
     if (!adsetId && adsetConfig) {
-      const pixelId = await getPixelId();
+      const pixelId = overridePixelId || await getPixelId();
       const optGoal = adsetConfig.optimizationGoal || "OFFSITE_CONVERSIONS";
 
       // Check if campaign uses CBO — if so, budget is at campaign level, not ad set

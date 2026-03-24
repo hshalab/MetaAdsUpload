@@ -33,6 +33,8 @@ import {
   ShieldAlert,
   Timer,
   WifiOff,
+  Globe,
+  Crosshair,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -77,6 +79,11 @@ interface Template {
   pixelId?: string;
 }
 
+interface MetaPage {
+  id: string;
+  name: string;
+}
+
 interface R2Folder {
   name: string;
   prefix: string;
@@ -107,6 +114,11 @@ interface ErrorDetails {
   timestamp: string;
 }
 
+interface LandingPage {
+  url: string;
+  label: string; // e.g. "LP7", "LP11"
+}
+
 interface UploadJob {
   id: string;
   filename: string;
@@ -120,6 +132,8 @@ interface UploadJob {
   file?: File;
   result?: Record<string, string>;
   dbJobId?: number;
+  linkUrl?: string;       // Per-job landing page URL (for multi-LP duplication)
+  lpLabel?: string;       // Per-job LP label for naming
 }
 
 interface DbJob {
@@ -153,6 +167,14 @@ const STEP_LABELS = [
   "Creating ad",
 ];
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Try to extract an LP label from a URL, e.g. "/lp7" → "LP7", "/products/reluma" → null */
+function extractLpLabel(url: string): string | null {
+  const match = url.match(/\/lp(\d+)/i);
+  return match ? `LP${match[1]}` : null;
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function UploadPage() {
@@ -172,6 +194,12 @@ export default function UploadPage() {
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingAdsets, setLoadingAdsets] = useState(false);
 
+  // Pages & Pixel
+  const [pages, setPages] = useState<MetaPage[]>([]);
+  const [selectedPageId, setSelectedPageId] = useState("");
+  const [pixelId, setPixelId] = useState("");
+  const [loadingConnection, setLoadingConnection] = useState(true);
+
   // New adset config
   const [newAdsetName, setNewAdsetName] = useState("");
   const [newAdsetBudget, setNewAdsetBudget] = useState(50);
@@ -183,8 +211,11 @@ export default function UploadPage() {
   // Ad copy — arrays for multi-variant
   const [headlines, setHeadlines] = useState<string[]>(["", ""]);
   const [primaryTexts, setPrimaryTexts] = useState<string[]>(["", ""]);
-  const [linkUrl, setLinkUrl] = useState("");
+  const [landingPages, setLandingPages] = useState<LandingPage[]>([{ url: "", label: "LP1" }, { url: "", label: "LP2" }]);
   const [ctaType, setCtaType] = useState("SHOP_NOW");
+
+  // Landing page × file assignment matrix (key: "fileIdx-lpIdx", true = assigned)
+  const [lpMatrix, setLpMatrix] = useState<Record<string, boolean>>({});
 
   // Upload queue
   const [jobs, setJobs] = useState<UploadJob[]>([]);
@@ -225,6 +256,8 @@ export default function UploadPage() {
         const prefs = JSON.parse(saved);
         if (prefs.templateId) setSelectedTemplateId(prefs.templateId);
         if (prefs.campaignId) setSelectedCampaignId(prefs.campaignId);
+        if (prefs.pageId) setSelectedPageId(prefs.pageId);
+        if (prefs.pixelId) setPixelId(prefs.pixelId);
       }
     } catch { /* ignore */ }
   }, []);
@@ -234,9 +267,11 @@ export default function UploadPage() {
       localStorage.setItem(PREFS_KEY, JSON.stringify({
         templateId: selectedTemplateId,
         campaignId: selectedCampaignId,
+        pageId: selectedPageId,
+        pixelId,
       }));
     } catch { /* ignore */ }
-  }, [selectedTemplateId, selectedCampaignId]);
+  }, [selectedTemplateId, selectedCampaignId, selectedPageId, pixelId]);
 
   useEffect(() => { savePrefs(); }, [savePrefs]);
 
@@ -245,9 +280,10 @@ export default function UploadPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [tplRes, campRes] = await Promise.all([
+        const [tplRes, campRes, connRes] = await Promise.all([
           fetch("/api/templates"),
           fetch("/api/meta/campaigns"),
+          fetch("/api/meta/connection"),
         ]);
         if (tplRes.ok) {
           const tplData = await tplRes.json();
@@ -266,11 +302,23 @@ export default function UploadPage() {
           const { data } = await campRes.json();
           setCampaigns(data || []);
         }
+        if (connRes.ok) {
+          const connData = await connRes.json();
+          const active = connData.active;
+          const activeConn = connData.connections?.find((c: { isActive: boolean }) => c.isActive);
+          if (activeConn?.pages) setPages(activeConn.pages);
+          // Set defaults from connection if no saved prefs
+          const saved = localStorage.getItem(PREFS_KEY);
+          const prefs = saved ? JSON.parse(saved) : {};
+          if (!prefs.pageId && active?.activePageId) setSelectedPageId(active.activePageId);
+          if (!prefs.pixelId && active?.pixelId) setPixelId(active.pixelId);
+        }
       } catch {
         toast.error("Failed to load data");
       } finally {
         setLoadingTemplates(false);
         setLoadingCampaigns(false);
+        setLoadingConnection(false);
       }
     })();
   }, []);
@@ -288,7 +336,17 @@ export default function UploadPage() {
         ? [...tpl.primaryTexts]
         : ["", ""]
     );
-    setLinkUrl(tpl.landingPages?.[0] || "");
+    if (tpl.landingPages && tpl.landingPages.length > 0) {
+      const lps = tpl.landingPages.map((url, i) => ({
+        url,
+        label: extractLpLabel(url) || `LP${i + 1}`,
+      }));
+      // Always have at least 2 rows so the user can easily add a second LP
+      if (lps.length < 2) lps.push({ url: "", label: `LP${lps.length + 1}` });
+      setLandingPages(lps);
+    } else {
+      setLandingPages([{ url: "", label: "LP1" }, { url: "", label: "LP2" }]);
+    }
     setCtaType(tpl.ctaType || "SHOP_NOW");
     setNewAdsetBudget(tpl.dailyBudget || 50);
     setNewAdsetCountry(tpl.targetCountries?.[0] || "SE");
@@ -479,6 +537,7 @@ export default function UploadPage() {
 
   const removeFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setLpMatrix({}); // Reset matrix when files change
   };
 
   // ─── List helpers ───────────────────────────────────────────────────────
@@ -575,9 +634,10 @@ export default function UploadPage() {
 
   // ─── Build payload ──────────────────────────────────────────────────────
 
-  const buildPayload = (r2Key: string, r2Url: string, filename: string, mediaType: "video" | "image", overrideAdsetId?: string) => {
+  const buildPayload = (r2Key: string, r2Url: string, filename: string, mediaType: "video" | "image", overrideAdsetId?: string, jobLinkUrl?: string, jobAdName?: string) => {
     const filteredHeadlines = headlines.filter(Boolean);
     const filteredTexts = primaryTexts.filter(Boolean);
+    const resolvedLinkUrl = jobLinkUrl || landingPages[0]?.url || "";
 
     const payload: Record<string, unknown> = {
       r2Key,
@@ -588,11 +648,15 @@ export default function UploadPage() {
       adCopy: {
         headlines: filteredHeadlines,
         primaryTexts: filteredTexts,
-        linkUrl,
+        linkUrl: resolvedLinkUrl,
         ctaType,
       },
-      adName: filename.replace(/\.[^.]+$/, ""),
+      adName: jobAdName || filename.replace(/\.[^.]+$/, ""),
     };
+
+    // Pass page/pixel overrides if selected
+    if (selectedPageId) payload.pageId = selectedPageId;
+    if (pixelId) payload.pixelId = pixelId;
 
     if (overrideAdsetId) {
       payload.adsetId = overrideAdsetId;
@@ -631,40 +695,69 @@ export default function UploadPage() {
       toast.error("Add at least one primary text");
       return;
     }
+    const activeLPs = landingPages.filter((lp) => lp.url);
+    if (activeLPs.length === 0) {
+      toast.error("Add at least one landing page");
+      return;
+    }
 
-    const newJobs: UploadJob[] = [];
+    // Gather source files
+    type SourceFile = { filename: string; mediaType: "video" | "image"; file?: File; r2Key?: string; r2Url?: string };
+    const sourceFiles: SourceFile[] = [];
 
     if (activeTab === "computer") {
       if (selectedFiles.length === 0) { toast.error("Select files"); return; }
       for (const file of selectedFiles) {
-        newJobs.push({
-          id: crypto.randomUUID(),
+        sourceFiles.push({
           filename: file.name,
-          status: "pending",
-          step: "Waiting...",
           mediaType: file.type.startsWith("video/") ? "video" : "image",
           file,
         });
       }
-      setSelectedFiles([]);
     } else {
       if (r2Selected.length === 0) { toast.error("Select files from R2"); return; }
       for (const f of r2Selected) {
-        newJobs.push({
-          id: crypto.randomUUID(),
+        sourceFiles.push({
           filename: f.name,
-          status: "pending",
-          step: "Waiting...",
           mediaType: f.mediaType,
           r2Key: f.key,
           r2Url: f.url,
         });
       }
-      setR2Selected([]);
     }
 
+    const newJobs: UploadJob[] = [];
+    const multiLP = activeLPs.length > 1;
+
+    for (let fi = 0; fi < sourceFiles.length; fi++) {
+      const src = sourceFiles[fi];
+      for (let li = 0; li < activeLPs.length; li++) {
+        const lp = activeLPs[li];
+        // Check matrix — if multi-LP, only include assigned combinations
+        if (multiLP) {
+          const matrixKey = `${fi}-${li}`;
+          if (lpMatrix[matrixKey] === false) continue; // explicitly unchecked
+        }
+        newJobs.push({
+          id: crypto.randomUUID(),
+          filename: src.filename,
+          status: "pending",
+          step: "Waiting...",
+          mediaType: src.mediaType,
+          file: src.file,
+          r2Key: src.r2Key,
+          r2Url: src.r2Url,
+          linkUrl: lp.url,
+          lpLabel: multiLP ? lp.label : undefined,
+        });
+      }
+    }
+
+    if (activeTab === "computer") setSelectedFiles([]);
+    else setR2Selected([]);
+
     setJobs((prev) => [...prev, ...newJobs]);
-    toast.success(`${newJobs.length} fil(er) tillagda i kön`);
+    toast.success(`${newJobs.length} ad(s) tillagda i kön`);
     setShouldAutoStart(true);
   };
 
@@ -780,7 +873,9 @@ export default function UploadPage() {
           job.r2Url!,
           job.filename,
           job.mediaType,
-          createdAdsetId
+          createdAdsetId,
+          job.linkUrl,
+          job.lpLabel ? `${job.filename.replace(/\.[^.]+$/, "")} - ${job.lpLabel}` : undefined
         );
 
         // Pass the DB job ID so the API updates the same record
@@ -1220,6 +1315,76 @@ export default function UploadPage() {
         </div>
       </div>
 
+      {/* ─── Page + Pixel Row ─── */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {/* Page */}
+        <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Globe className="h-4 w-4 text-blue-400" />
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Facebook Page</h3>
+          </div>
+          {loadingConnection ? (
+            <div className="flex items-center gap-2 py-2">
+              <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+              <span className="text-xs text-slate-500">Loading...</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <select
+                value={selectedPageId}
+                onChange={(e) => setSelectedPageId(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">Select page...</option>
+                {pages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              {selectedPageId && (
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/[0.06] text-slate-400">
+                    ID: {selectedPageId}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Pixel */}
+        <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Crosshair className="h-4 w-4 text-purple-400" />
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Pixel</h3>
+          </div>
+          {loadingConnection ? (
+            <div className="flex items-center gap-2 py-2">
+              <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+              <span className="text-xs text-slate-500">Loading...</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={pixelId}
+                onChange={(e) => setPixelId(e.target.value)}
+                placeholder="Pixel ID (t.ex. 123456789)"
+                className={inputCls}
+              />
+              {pixelId && (
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/[0.06] text-slate-400">
+                    Tracking: Purchase
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-[1fr,400px]">
         {/* ─── Left: File Selection ─── */}
         <div className="space-y-4">
@@ -1389,6 +1554,100 @@ export default function UploadPage() {
             </div>
           )}
 
+          {/* LP Assignment Matrix — show when multiple LPs AND files selected */}
+          {(() => {
+            const activeLPs = landingPages.filter((lp) => lp.url);
+            const files = activeTab === "computer" ? selectedFiles.map((f) => f.name) : r2Selected.map((f) => f.name);
+            if (activeLPs.length <= 1 || files.length === 0) return null;
+
+            // Count total ads
+            let totalAds = 0;
+            for (let fi = 0; fi < files.length; fi++) {
+              for (let li = 0; li < activeLPs.length; li++) {
+                if (lpMatrix[`${fi}-${li}`] !== false) totalAds++;
+              }
+            }
+
+            return (
+              <div className="rounded-xl border border-white/[0.06] bg-[#111827] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.04]">
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    LP-tilldelning
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setLpMatrix({})}
+                      className="text-[10px] text-cyan-400 hover:text-cyan-300"
+                    >
+                      Markera alla
+                    </button>
+                    <span className="text-[10px] text-slate-500">
+                      {totalAds} ads skapas
+                    </span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-white/[0.04]">
+                        <th className="text-left px-4 py-2 text-[10px] text-slate-500 font-medium">Kreativ</th>
+                        {activeLPs.map((lp, li) => (
+                          <th
+                            key={li}
+                            className="px-3 py-2 text-center cursor-pointer hover:text-cyan-400 text-[10px] text-slate-500 font-medium"
+                            onClick={() => {
+                              // Toggle entire column
+                              const allChecked = files.every((_, fi) => lpMatrix[`${fi}-${li}`] !== false);
+                              setLpMatrix((prev) => {
+                                const next = { ...prev };
+                                for (let fi = 0; fi < files.length; fi++) {
+                                  next[`${fi}-${li}`] = !allChecked;
+                                }
+                                return next;
+                              });
+                            }}
+                          >
+                            <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                              {lp.label}
+                            </span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {files.map((filename, fi) => (
+                        <tr key={fi} className="border-b border-white/[0.02] hover:bg-white/[0.02]">
+                          <td className="px-4 py-1.5 text-white truncate max-w-[200px]" title={filename}>
+                            {filename.replace(/\.[^.]+$/, "").slice(0, 40)}
+                          </td>
+                          {activeLPs.map((_, li) => {
+                            const key = `${fi}-${li}`;
+                            const checked = lpMatrix[key] !== false;
+                            return (
+                              <td key={li} className="px-3 py-1.5 text-center">
+                                <button
+                                  onClick={() => setLpMatrix((prev) => ({ ...prev, [key]: !checked }))}
+                                  className={cn(
+                                    "w-5 h-5 rounded border transition-all inline-flex items-center justify-center",
+                                    checked
+                                      ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-400"
+                                      : "bg-white/[0.02] border-white/[0.08] text-transparent hover:border-white/20"
+                                  )}
+                                >
+                                  {checked && <CheckCircle2 className="h-3.5 w-3.5" />}
+                                </button>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Add to Queue */}
           <button
             onClick={addToQueue}
@@ -1551,11 +1810,52 @@ export default function UploadPage() {
               </div>
             </div>
 
-            {/* Link + CTA */}
+            {/* Landing Pages */}
             <div>
-              <label className={labelCls}>Link URL</label>
-              <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://apotekhunden.se/..." className={inputCls} />
+              <div className="flex items-center justify-between mb-1">
+                <label className={labelCls}>Landing Pages ({landingPages.filter((lp) => lp.url).length})</label>
+                {landingPages.length < 5 && (
+                  <button
+                    onClick={() => setLandingPages((prev) => [...prev, { url: "", label: `LP${prev.length + 1}` }])}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-0.5"
+                  >
+                    <Plus className="h-3 w-3" /> Add
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {landingPages.map((lp, i) => (
+                  <div key={i} className="flex gap-1.5">
+                    <input
+                      value={lp.label}
+                      onChange={(e) => setLandingPages((prev) => prev.map((p, j) => j === i ? { ...p, label: e.target.value } : p))}
+                      className="w-16 shrink-0 rounded-lg bg-white/[0.03] border border-white/[0.08] text-[10px] font-semibold text-cyan-400 px-2 py-2 text-center focus:border-cyan-500/50 focus:outline-none"
+                      placeholder="LP"
+                    />
+                    <input
+                      value={lp.url}
+                      onChange={(e) => {
+                        const url = e.target.value;
+                        const autoLabel = extractLpLabel(url);
+                        setLandingPages((prev) => prev.map((p, j) => j === i ? { ...p, url, ...(autoLabel && p.label === `LP${i + 1}` ? { label: autoLabel } : {}) } : p));
+                      }}
+                      placeholder="https://apotekhunden.se/lp7"
+                      className={inputCls + " flex-1"}
+                    />
+                    {landingPages.length > 1 && (
+                      <button
+                        onClick={() => setLandingPages((prev) => prev.filter((_, j) => j !== i))}
+                        className="px-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/5 transition-colors"
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
+
+            {/* CTA */}
             <div>
               <label className={labelCls}>CTA Button</label>
               <select value={ctaType} onChange={(e) => setCtaType(e.target.value)} className={inputCls}>
@@ -1614,7 +1914,14 @@ export default function UploadPage() {
                       <div className="h-4 w-4 rounded-full border border-white/[0.1] shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-white truncate font-medium">{job.filename}</p>
+                      <p className="text-xs text-white truncate font-medium">
+                        {job.filename}
+                        {job.lpLabel && (
+                          <span className="ml-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                            {job.lpLabel}
+                          </span>
+                        )}
+                      </p>
                       <p className="text-[10px] text-slate-500">
                         {job.status === "pending" && "Waiting..."}
                         {job.status === "uploading_r2" && "Uploading to Cloudflare R2..."}
