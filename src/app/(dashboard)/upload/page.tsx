@@ -788,111 +788,48 @@ export default function UploadPage() {
     } catch { /* best effort */ }
   };
 
-  const processQueue = async () => {
-    setIsUploading(true);
-    const pending = jobs.filter((j) => j.status === "pending");
-    let createdAdsetId: string | undefined;
+  const PARALLEL_UPLOADS = 3;
 
-    for (const job of pending) {
-      let dbJobId: number | undefined;
+  const processSingleJob = async (job: UploadJob, overrideAdsetId?: string): Promise<{ adsetId?: string }> => {
+    let dbJobId: number | undefined;
 
-      try {
-        // Immediately create a DB record so it shows in Upload Log
-        dbJobId = await createDbJob(job.filename, job.mediaType, selectedCampaignId);
+    try {
+      dbJobId = await createDbJob(job.filename, job.mediaType, selectedCampaignId);
 
-        // Step 0: Upload to R2 if file is from computer
-        if (job.file && !job.r2Key) {
-          setJobs((prev) =>
-            prev.map((j) =>
-              j.id === job.id ? { ...j, status: "uploading_r2", step: "Laddar upp till Cloudflare R2...", dbJobId } : j
-            )
-          );
-          if (dbJobId) await updateDbJob(dbJobId, { status: "uploading_r2", stepLabel: "Laddar upp till R2..." });
-
-          try {
-            const { key, url } = await uploadFileToR2(job.file);
-            job.r2Key = key;
-            job.r2Url = url;
-            if (dbJobId) await updateDbJob(dbJobId, { r2Key: key, r2Url: url });
-          } catch (r2Error) {
-            const errMsg = r2Error instanceof Error ? r2Error.message : "R2 upload failed";
-            if (dbJobId) {
-              await updateDbJob(dbJobId, {
-                status: "failed",
-                error: errMsg,
-                stepLabel: "Misslyckades: R2-uppladdning",
-                config: {
-                  errorDetails: {
-                    message: errMsg,
-                    failedStep: 0,
-                    failedStepName: "Ladda upp till R2",
-                    suggestion: errMsg.includes("presign")
-                      ? "Kunde inte hämta presigned URL. Kontrollera R2-konfigurationen i miljövariabler."
-                      : "Uppladdning till Cloudflare R2 misslyckades. Kontrollera filstorlek och internetanslutning.",
-                    timestamp: new Date().toISOString(),
-                  },
-                },
-              });
-            }
-            setJobs((prev) =>
-              prev.map((j) =>
-                j.id === job.id
-                  ? {
-                      ...j,
-                      status: "failed" as const,
-                      step: "Failed",
-                      error: errMsg,
-                      dbJobId,
-                      errorDetails: {
-                        message: errMsg,
-                        failedStep: 0,
-                        failedStepName: "Ladda upp till R2",
-                        suggestion: "Uppladdning till Cloudflare R2 misslyckades. Kontrollera filstorlek och internetanslutning.",
-                        timestamp: new Date().toISOString(),
-                      },
-                    }
-                  : j
-              )
-            );
-            continue;
-          }
-        } else if (dbJobId && job.r2Key) {
-          // R2 file already exists, save the keys
-          await updateDbJob(dbJobId, { r2Key: job.r2Key, r2Url: job.r2Url });
-        }
-
-        // Step 1-4: Upload to Meta (API handles steps with DB tracking)
+      // Step 0: Upload to R2 if file is from computer
+      if (job.file && !job.r2Key) {
         setJobs((prev) =>
           prev.map((j) =>
-            j.id === job.id ? { ...j, status: "uploading_meta", step: "Step 1/4: Laddar upp media till Meta...", dbJobId } : j
+            j.id === job.id ? { ...j, status: "uploading_r2", step: "Laddar upp till Cloudflare R2...", dbJobId } : j
           )
         );
+        if (dbJobId) await updateDbJob(dbJobId, { status: "uploading_r2", stepLabel: "Laddar upp till R2..." });
 
-        const payload = buildPayload(
-          job.r2Key!,
-          job.r2Url!,
-          job.filename,
-          job.mediaType,
-          createdAdsetId,
-          job.linkUrl,
-          job.lpLabel ? `${job.filename.replace(/\.[^.]+$/, "")} - ${job.lpLabel}` : undefined
-        );
-
-        // Pass the DB job ID so the API updates the same record
-        if (dbJobId) {
-          (payload as Record<string, unknown>).existingJobId = dbJobId;
-        }
-
-        const res = await fetch("/api/meta/upload-from-r2", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        const result = await res.json();
-
-        if (!res.ok) {
-          const errDetails: ErrorDetails | undefined = result.errorDetails;
+        try {
+          const { key, url } = await uploadFileToR2(job.file);
+          job.r2Key = key;
+          job.r2Url = url;
+          if (dbJobId) await updateDbJob(dbJobId, { r2Key: key, r2Url: url });
+        } catch (r2Error) {
+          const errMsg = r2Error instanceof Error ? r2Error.message : "R2 upload failed";
+          if (dbJobId) {
+            await updateDbJob(dbJobId, {
+              status: "failed",
+              error: errMsg,
+              stepLabel: "Misslyckades: R2-uppladdning",
+              config: {
+                errorDetails: {
+                  message: errMsg,
+                  failedStep: 0,
+                  failedStepName: "Ladda upp till R2",
+                  suggestion: errMsg.includes("presign")
+                    ? "Kunde inte hämta presigned URL. Kontrollera R2-konfigurationen i miljövariabler."
+                    : "Uppladdning till Cloudflare R2 misslyckades. Kontrollera filstorlek och internetanslutning.",
+                  timestamp: new Date().toISOString(),
+                },
+              },
+            });
+          }
           setJobs((prev) =>
             prev.map((j) =>
               j.id === job.id
@@ -900,70 +837,155 @@ export default function UploadPage() {
                     ...j,
                     status: "failed" as const,
                     step: "Failed",
-                    error: result.error || "Meta upload failed",
-                    errorDetails: errDetails,
-                    dbJobId: dbJobId || result.jobId,
+                    error: errMsg,
+                    dbJobId,
+                    errorDetails: {
+                      message: errMsg,
+                      failedStep: 0,
+                      failedStepName: "Ladda upp till R2",
+                      suggestion: "Uppladdning till Cloudflare R2 misslyckades. Kontrollera filstorlek och internetanslutning.",
+                      timestamp: new Date().toISOString(),
+                    },
                   }
                 : j
             )
           );
-          continue;
+          return {};
         }
+      } else if (dbJobId && job.r2Key) {
+        await updateDbJob(dbJobId, { r2Key: job.r2Key, r2Url: job.r2Url });
+      }
 
-        // Reuse the ad set for all files in the batch
-        if (result.adsetId && adsetMode === "new" && !createdAdsetId) {
-          createdAdsetId = result.adsetId;
-        }
+      // Step 1-4: Upload to Meta
+      setJobs((prev) =>
+        prev.map((j) =>
+          j.id === job.id ? { ...j, status: "uploading_meta", step: "Step 1/4: Laddar upp media till Meta...", dbJobId } : j
+        )
+      );
 
+      const payload = buildPayload(
+        job.r2Key!,
+        job.r2Url!,
+        job.filename,
+        job.mediaType,
+        overrideAdsetId,
+        job.linkUrl,
+        job.lpLabel ? `${job.filename.replace(/\.[^.]+$/, "")} - ${job.lpLabel}` : undefined
+      );
+
+      if (dbJobId) {
+        (payload as Record<string, unknown>).existingJobId = dbJobId;
+      }
+
+      const res = await fetch("/api/meta/upload-from-r2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        const errDetails: ErrorDetails | undefined = result.errorDetails;
         setJobs((prev) =>
           prev.map((j) =>
             j.id === job.id
               ? {
                   ...j,
-                  status: "completed",
-                  step: "Done!",
+                  status: "failed" as const,
+                  step: "Failed",
+                  error: result.error || "Meta upload failed",
+                  errorDetails: errDetails,
                   dbJobId: dbJobId || result.jobId,
-                  result: {
-                    adId: result.adId,
-                    creativeId: result.creativeId,
-                    adsetId: result.adsetId,
-                    videoId: result.videoId,
-                    imageHash: result.imageHash,
-                  },
                 }
               : j
           )
         );
-      } catch (error) {
-        const errMsg = error instanceof Error ? error.message : "Unknown error";
-        if (dbJobId) {
-          await updateDbJob(dbJobId, {
-            status: "failed",
-            error: errMsg,
-            stepLabel: "Oväntat fel",
-            config: {
-              errorDetails: {
-                message: errMsg,
-                failedStep: 0,
-                failedStepName: "Okänt",
-                suggestion: "Ett oväntat fel uppstod. Försök igen eller kontrollera webbläsarens konsol.",
-                timestamp: new Date().toISOString(),
-              },
+        return {};
+      }
+
+      setJobs((prev) =>
+        prev.map((j) =>
+          j.id === job.id
+            ? {
+                ...j,
+                status: "completed",
+                step: "Done!",
+                dbJobId: dbJobId || result.jobId,
+                result: {
+                  adId: result.adId,
+                  creativeId: result.creativeId,
+                  adsetId: result.adsetId,
+                  videoId: result.videoId,
+                  imageHash: result.imageHash,
+                },
+              }
+            : j
+        )
+      );
+
+      return { adsetId: result.adsetId };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Unknown error";
+      if (dbJobId) {
+        await updateDbJob(dbJobId, {
+          status: "failed",
+          error: errMsg,
+          stepLabel: "Oväntat fel",
+          config: {
+            errorDetails: {
+              message: errMsg,
+              failedStep: 0,
+              failedStepName: "Okänt",
+              suggestion: "Ett oväntat fel uppstod. Försök igen eller kontrollera webbläsarens konsol.",
+              timestamp: new Date().toISOString(),
             },
-          });
-        }
-        setJobs((prev) =>
-          prev.map((j) =>
-            j.id === job.id
-              ? { ...j, status: "failed", step: "Failed", error: errMsg, dbJobId }
-              : j
-          )
-        );
+          },
+        });
+      }
+      setJobs((prev) =>
+        prev.map((j) =>
+          j.id === job.id
+            ? { ...j, status: "failed", step: "Failed", error: errMsg, dbJobId }
+            : j
+        )
+      );
+      return {};
+    }
+  };
+
+  const processQueue = async () => {
+    setIsUploading(true);
+    const pending = jobs.filter((j) => j.status === "pending");
+    let createdAdsetId: string | undefined;
+
+    if (pending.length === 0) {
+      setIsUploading(false);
+      return;
+    }
+
+    // First job runs alone to create the ad set (if "new" mode)
+    if (adsetMode === "new" && !selectedAdsetId) {
+      const first = pending.shift()!;
+      const result = await processSingleJob(first);
+      if (result.adsetId) createdAdsetId = result.adsetId;
+    }
+
+    // Remaining jobs run in parallel batches of PARALLEL_UPLOADS
+    for (let i = 0; i < pending.length; i += PARALLEL_UPLOADS) {
+      const batch = pending.slice(i, i + PARALLEL_UPLOADS);
+      const results = await Promise.all(
+        batch.map((job) => processSingleJob(job, createdAdsetId))
+      );
+      // Capture adset ID from first successful result if we don't have one yet
+      if (!createdAdsetId) {
+        const withAdset = results.find((r) => r.adsetId);
+        if (withAdset?.adsetId) createdAdsetId = withAdset.adsetId;
       }
     }
 
     setIsUploading(false);
-    if (pending.length > 0) toast.success(`Bearbetade ${pending.length} fil(er)`);
+    toast.success(`Bearbetade ${pending.length + (adsetMode === "new" ? 1 : 0)} fil(er)`);
   };
 
   const clearCompleted = () => {
