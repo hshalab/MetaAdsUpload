@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -35,6 +35,7 @@ import {
   WifiOff,
   Globe,
   Crosshair,
+  Pencil,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -134,6 +135,7 @@ interface UploadJob {
   dbJobId?: number;
   linkUrl?: string;       // Per-job landing page URL (for multi-LP duplication)
   lpLabel?: string;       // Per-job LP label for naming
+  adName?: string;        // Custom ad name override (from LP matrix)
 }
 
 interface DbJob {
@@ -216,6 +218,8 @@ export default function UploadPage() {
 
   // Landing page × file assignment matrix (key: "fileIdx-lpIdx", true = assigned)
   const [lpMatrix, setLpMatrix] = useState<Record<string, boolean>>({});
+  // Per-cell ad name overrides (key: "fileIdx-lpIdx", value = custom name)
+  const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
 
   // Upload queue
   const [jobs, setJobs] = useState<UploadJob[]>([]);
@@ -538,6 +542,7 @@ export default function UploadPage() {
   const removeFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
     setLpMatrix({}); // Reset matrix when files change
+    setNameOverrides({});
   };
 
   // ─── List helpers ───────────────────────────────────────────────────────
@@ -733,11 +738,13 @@ export default function UploadPage() {
       const src = sourceFiles[fi];
       for (let li = 0; li < activeLPs.length; li++) {
         const lp = activeLPs[li];
+        const matrixKey = `${fi}-${li}`;
         // Check matrix — if multi-LP, only include assigned combinations
         if (multiLP) {
-          const matrixKey = `${fi}-${li}`;
           if (lpMatrix[matrixKey] === false) continue; // explicitly unchecked
         }
+        // Use custom name if set, otherwise auto-generate
+        const customName = multiLP ? nameOverrides[matrixKey] : undefined;
         newJobs.push({
           id: crypto.randomUUID(),
           filename: src.filename,
@@ -749,6 +756,7 @@ export default function UploadPage() {
           r2Url: src.r2Url,
           linkUrl: lp.url,
           lpLabel: multiLP ? lp.label : undefined,
+          adName: customName || undefined,
         });
       }
     }
@@ -863,6 +871,9 @@ export default function UploadPage() {
         )
       );
 
+      // Use custom ad name if set, otherwise auto-generate with LP label
+      const resolvedAdName = job.adName
+        || (job.lpLabel ? `${job.filename.replace(/\.[^.]+$/, "")} - ${job.lpLabel}` : undefined);
       const payload = buildPayload(
         job.r2Key!,
         job.r2Url!,
@@ -870,7 +881,7 @@ export default function UploadPage() {
         job.mediaType,
         overrideAdsetId,
         job.linkUrl,
-        job.lpLabel ? `${job.filename.replace(/\.[^.]+$/, "")} - ${job.lpLabel}` : undefined
+        resolvedAdName
       );
 
       if (dbJobId) {
@@ -1637,32 +1648,65 @@ export default function UploadPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {files.map((filename, fi) => (
-                        <tr key={fi} className="border-b border-white/[0.02] hover:bg-white/[0.02]">
-                          <td className="px-4 py-1.5 text-white truncate max-w-[200px]" title={filename}>
-                            {filename.replace(/\.[^.]+$/, "").slice(0, 40)}
-                          </td>
-                          {activeLPs.map((_, li) => {
-                            const key = `${fi}-${li}`;
-                            const checked = lpMatrix[key] !== false;
-                            return (
-                              <td key={li} className="px-3 py-1.5 text-center">
-                                <button
-                                  onClick={() => setLpMatrix((prev) => ({ ...prev, [key]: !checked }))}
-                                  className={cn(
-                                    "w-5 h-5 rounded border transition-all inline-flex items-center justify-center",
-                                    checked
-                                      ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-400"
-                                      : "bg-white/[0.02] border-white/[0.08] text-transparent hover:border-white/20"
-                                  )}
-                                >
-                                  {checked && <CheckCircle2 className="h-3.5 w-3.5" />}
-                                </button>
+                      {files.map((filename, fi) => {
+                        const baseName = filename.replace(/\.[^.]+$/, "");
+                        const checkedLPs = activeLPs
+                          .map((lp, li) => ({ lp, li, key: `${fi}-${li}`, checked: lpMatrix[`${fi}-${li}`] !== false }))
+                          .filter((x) => x.checked);
+                        return (
+                          <Fragment key={fi}>
+                            {/* Main row: filename + checkboxes */}
+                            <tr className="border-b border-white/[0.02] hover:bg-white/[0.02]">
+                              <td className="px-4 py-1.5 text-white truncate max-w-[200px]" title={filename}>
+                                {baseName.slice(0, 40)}
                               </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
+                              {activeLPs.map((_, li) => {
+                                const key = `${fi}-${li}`;
+                                const checked = lpMatrix[key] !== false;
+                                return (
+                                  <td key={li} className="px-3 py-1.5 text-center">
+                                    <button
+                                      onClick={() => setLpMatrix((prev) => ({ ...prev, [key]: !checked }))}
+                                      className={cn(
+                                        "w-5 h-5 rounded border transition-all inline-flex items-center justify-center",
+                                        checked
+                                          ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-400"
+                                          : "bg-white/[0.02] border-white/[0.08] text-transparent hover:border-white/20"
+                                      )}
+                                    >
+                                      {checked && <CheckCircle2 className="h-3.5 w-3.5" />}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                            {/* Sub-rows: editable ad name per checked LP */}
+                            {checkedLPs.length > 0 && (
+                              <tr className="border-b border-white/[0.02]">
+                                <td colSpan={activeLPs.length + 1} className="px-4 py-1 pb-2">
+                                  <div className="flex flex-col gap-1">
+                                    {checkedLPs.map(({ lp, key }) => (
+                                      <div key={key} className="flex items-center gap-2">
+                                        <span className="text-[10px] text-cyan-400/70 font-medium w-8 shrink-0">{lp.label}</span>
+                                        <div className="relative flex-1">
+                                          <Pencil className="absolute left-2 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-slate-600" />
+                                          <input
+                                            type="text"
+                                            value={nameOverrides[key] ?? ""}
+                                            placeholder={baseName}
+                                            onChange={(e) => setNameOverrides((prev) => ({ ...prev, [key]: e.target.value }))}
+                                            className="w-full pl-6 pr-2 py-1 text-[11px] bg-white/[0.03] border border-white/[0.06] rounded text-white placeholder:text-slate-600 focus:border-cyan-500/30 focus:outline-none"
+                                          />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1937,7 +1981,7 @@ export default function UploadPage() {
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-white truncate font-medium">
-                        {job.filename}
+                        {job.adName || job.filename}
                         {job.lpLabel && (
                           <span className="ml-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                             {job.lpLabel}
