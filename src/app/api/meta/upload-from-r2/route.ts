@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
       existingJobId,
       pageId: overridePageId,
       pixelId: overridePixelId,
+      variants,
     } = body as {
       r2Key: string;
       r2Url: string;
@@ -190,6 +191,7 @@ export async function POST(request: NextRequest) {
       existingJobId?: number;
       pageId?: string;
       pixelId?: string;
+      variants?: Array<{ r2Key: string; r2Url: string; filename: string }>;
     };
 
     if (!r2Key || !campaignId || !adCopy) {
@@ -230,6 +232,7 @@ export async function POST(request: NextRequest) {
     const headlinesArr = adCopy.headlines?.filter(Boolean) || (adCopy.headline ? [adCopy.headline] : []);
     const textsArr = adCopy.primaryTexts?.filter(Boolean) || (adCopy.primaryText ? [adCopy.primaryText] : []);
     const hasMultipleTexts = headlinesArr.length > 1 || textsArr.length > 1;
+    const hasVariants = variants && variants.length > 0;
 
     const results: Record<string, string> = {};
     let currentStep = 1;
@@ -296,6 +299,21 @@ export async function POST(request: NextRequest) {
       await updateJob(jobId, { imageHash });
     }
 
+    // Upload variant images to Meta (placement variants)
+    const variantHashes: string[] = [];
+    if (hasVariants && mediaType === "image") {
+      for (const variant of variants!) {
+        try {
+          const { buffer: vBuffer } = await downloadFromR2(variant.r2Key);
+          const vResult = await uploadImage(vBuffer, variant.filename);
+          variantHashes.push(vResult.hash);
+        } catch (e) {
+          console.error(`Failed to upload variant ${variant.filename}:`, e);
+          // Non-fatal: continue with primary image only
+        }
+      }
+    }
+
     // ─── Step 2: Create Ad Creative (skip if multiple texts — handled at ad level) ───
     currentStep = 2;
     const pageId = overridePageId || await getPageId();
@@ -303,9 +321,9 @@ export async function POST(request: NextRequest) {
 
     let creativeId: string | undefined;
 
-    // For images with multiple texts: skip creative here — created inline at ad level via creative_asset_groups_spec
+    // For images with multiple texts OR variants: skip creative here — created inline at ad level via creative_asset_groups_spec
     // For videos (even with multiple texts): always create creative here — creative_asset_groups_spec doesn't support video
-    const needsCreativeHere = !hasMultipleTexts || !!videoId;
+    const needsCreativeHere = (!hasMultipleTexts && !hasVariants) || !!videoId;
 
     if (needsCreativeHere) {
       await updateJob(jobId, { currentStep, stepLabel: "Creating ad creative..." });
@@ -368,7 +386,7 @@ export async function POST(request: NextRequest) {
       results.creativeId = adCreative.id;
       await updateJob(jobId, { creativeId: adCreative.id });
     } else {
-      // Multiple texts with image: creative will be created inline at ad level (step 4)
+      // Multiple texts or variants with image: creative will be created inline at ad level (step 4)
       await updateJob(jobId, { currentStep, stepLabel: "Hoppar över (creative skapas med ad)..." });
     }
 
@@ -451,8 +469,8 @@ export async function POST(request: NextRequest) {
     let ad: { id: string };
     let adPayloadForError: Record<string, unknown>;
 
-    if (hasMultipleTexts && imageHash) {
-      // Multiple headlines/texts WITH IMAGE: use creative_asset_groups_spec (Flexible Ads)
+    if ((hasMultipleTexts || hasVariants) && imageHash) {
+      // Multiple headlines/texts OR placement variants WITH IMAGE: use creative_asset_groups_spec (Flexible Ads)
       // Note: creative_asset_groups_spec does NOT support video — only images
       const flexParams = {
         adset_id: adsetId,
@@ -462,6 +480,7 @@ export async function POST(request: NextRequest) {
         headlines: headlinesArr,
         primaryTexts: textsArr,
         imageHash,
+        variantHashes: variantHashes.length > 0 ? variantHashes : undefined,
         linkUrl: adCopy.linkUrl,
         ctaType: adCopy.ctaType,
       };

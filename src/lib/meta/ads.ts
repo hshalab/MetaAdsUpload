@@ -46,6 +46,7 @@ export async function createAdWithTextOptions(params: {
   headlines: string[];
   primaryTexts: string[];
   imageHash?: string;
+  variantHashes?: string[];
   videoId?: string;
   linkUrl: string;
   ctaType?: string;
@@ -68,7 +69,13 @@ export async function createAdWithTextOptions(params: {
   };
 
   if (params.imageHash) {
-    group.images = [{ hash: params.imageHash }];
+    const images: { hash: string }[] = [{ hash: params.imageHash }];
+    if (params.variantHashes) {
+      for (const h of params.variantHashes) {
+        images.push({ hash: h });
+      }
+    }
+    group.images = images;
   } else if (params.videoId) {
     group.videos = [{ video_id: params.videoId }];
   }

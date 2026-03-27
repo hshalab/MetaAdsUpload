@@ -120,6 +120,15 @@ interface LandingPage {
   label: string; // e.g. "LP7", "LP11"
 }
 
+interface PlacementVariant {
+  id: string;
+  file?: File;
+  r2Key?: string;
+  r2Url?: string;
+  filename: string;
+  aspectRatio: string;
+}
+
 interface UploadJob {
   id: string;
   filename: string;
@@ -136,6 +145,7 @@ interface UploadJob {
   linkUrl?: string;       // Per-job landing page URL (for multi-LP duplication)
   lpLabel?: string;       // Per-job LP label for naming
   adName?: string;        // Custom ad name override (from LP matrix)
+  variants?: PlacementVariant[];
 }
 
 interface DbJob {
@@ -170,6 +180,32 @@ const STEP_LABELS = [
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not load image"));
+    };
+    img.src = url;
+  });
+}
+
+function detectAspectRatio(w: number, h: number): string {
+  const ratio = w / h;
+  if (Math.abs(ratio - 1) < 0.05) return "1:1";
+  if (Math.abs(ratio - 9 / 16) < 0.05) return "9:16";
+  if (Math.abs(ratio - 4 / 5) < 0.05) return "4:5";
+  if (Math.abs(ratio - 16 / 9) < 0.05) return "16:9";
+  if (ratio < 1) return `${w}:${h}`;
+  return `${w}:${h}`;
+}
 
 /** Try to extract an LP label from a URL, e.g. "/lp7" → "LP7", "/products/reluma" → null */
 function extractLpLabel(url: string): string | null {
@@ -247,6 +283,12 @@ export default function UploadPage() {
   // Error detail expansion
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
   const [expandedHistoryErrors, setExpandedHistoryErrors] = useState<Set<number>>(new Set());
+
+  // Placement variants
+  const [variantsByFile, setVariantsByFile] = useState<Record<number, PlacementVariant[]>>({});
+  const [fileDimensions, setFileDimensions] = useState<Record<number, { w: number; h: number; ratio: string }>>({});
+  const variantInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const [expandedFileIndex, setExpandedFileIndex] = useState<number | null>(null);
 
   // Polling ref
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -543,7 +585,40 @@ export default function UploadPage() {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
     setLpMatrix({}); // Reset matrix when files change
     setNameOverrides({});
+    // Clean up variants and dimensions for removed file, reindex remaining
+    setVariantsByFile((prev) => {
+      const next: Record<number, PlacementVariant[]> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const ki = Number(k);
+        if (ki < index) next[ki] = v;
+        else if (ki > index) next[ki - 1] = v;
+      });
+      return next;
+    });
+    setFileDimensions((prev) => {
+      const next: Record<number, { w: number; h: number; ratio: string }> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const ki = Number(k);
+        if (ki < index) next[ki] = v;
+        else if (ki > index) next[ki - 1] = v;
+      });
+      return next;
+    });
   };
+
+  // Auto-detect image dimensions when files change
+  useEffect(() => {
+    selectedFiles.forEach((file, i) => {
+      if (fileDimensions[i] || !file.type.startsWith("image/")) return;
+      getImageDimensions(file).then(({ width, height }) => {
+        setFileDimensions((prev) => ({
+          ...prev,
+          [i]: { w: width, h: height, ratio: detectAspectRatio(width, height) },
+        }));
+      }).catch(() => { /* ignore */ });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFiles]);
 
   // ─── List helpers ───────────────────────────────────────────────────────
 
@@ -564,6 +639,35 @@ export default function UploadPage() {
     index: number
   ) => {
     setter((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+  };
+
+  // ─── Variant handling ───────────────────────────────────────────────────
+
+  const addVariantToFile = async (fileIndex: number, file: File) => {
+    let aspectRatio = "?";
+    if (file.type.startsWith("image/")) {
+      try {
+        const { width, height } = await getImageDimensions(file);
+        aspectRatio = detectAspectRatio(width, height);
+      } catch { /* ignore */ }
+    }
+    const variant: PlacementVariant = {
+      id: crypto.randomUUID(),
+      file,
+      filename: file.name,
+      aspectRatio,
+    };
+    setVariantsByFile((prev) => ({
+      ...prev,
+      [fileIndex]: [...(prev[fileIndex] || []), variant],
+    }));
+  };
+
+  const removeVariant = (fileIndex: number, variantId: string) => {
+    setVariantsByFile((prev) => ({
+      ...prev,
+      [fileIndex]: (prev[fileIndex] || []).filter((v) => v.id !== variantId),
+    }));
   };
 
   // ─── Upload to R2 (presigned URL for large files, proxy fallback for small) ─
@@ -639,7 +743,7 @@ export default function UploadPage() {
 
   // ─── Build payload ──────────────────────────────────────────────────────
 
-  const buildPayload = (r2Key: string, r2Url: string, filename: string, mediaType: "video" | "image", overrideAdsetId?: string, jobLinkUrl?: string, jobAdName?: string) => {
+  const buildPayload = (r2Key: string, r2Url: string, filename: string, mediaType: "video" | "image", overrideAdsetId?: string, jobLinkUrl?: string, jobAdName?: string, variantR2Data?: Array<{ r2Key: string; r2Url: string; filename: string }>) => {
     const filteredHeadlines = headlines.filter(Boolean);
     const filteredTexts = primaryTexts.filter(Boolean);
     const resolvedLinkUrl = jobLinkUrl || landingPages[0]?.url || "";
@@ -662,6 +766,11 @@ export default function UploadPage() {
     // Pass page/pixel overrides if selected
     if (selectedPageId) payload.pageId = selectedPageId;
     if (pixelId) payload.pixelId = pixelId;
+
+    // Placement variants
+    if (variantR2Data && variantR2Data.length > 0) {
+      payload.variants = variantR2Data;
+    }
 
     if (overrideAdsetId) {
       payload.adsetId = overrideAdsetId;
@@ -745,6 +854,8 @@ export default function UploadPage() {
         }
         // Use custom name if set, otherwise auto-generate
         const customName = multiLP ? nameOverrides[matrixKey] : undefined;
+        // Attach placement variants for image files (computer tab only)
+        const fileVariants = activeTab === "computer" ? variantsByFile[fi] : undefined;
         newJobs.push({
           id: crypto.randomUUID(),
           filename: src.filename,
@@ -757,12 +868,18 @@ export default function UploadPage() {
           linkUrl: lp.url,
           lpLabel: multiLP ? lp.label : undefined,
           adName: customName || undefined,
+          variants: fileVariants && fileVariants.length > 0 ? fileVariants : undefined,
         });
       }
     }
 
-    if (activeTab === "computer") setSelectedFiles([]);
-    else setR2Selected([]);
+    if (activeTab === "computer") {
+      setSelectedFiles([]);
+      setVariantsByFile({});
+      setFileDimensions({});
+    } else {
+      setR2Selected([]);
+    }
 
     setJobs((prev) => [...prev, ...newJobs]);
     toast.success(`${newJobs.length} ad(s) tillagda i kön`);
@@ -864,6 +981,26 @@ export default function UploadPage() {
         await updateDbJob(dbJobId, { r2Key: job.r2Key, r2Url: job.r2Url });
       }
 
+      // Upload placement variants to R2 (if any)
+      const variantR2Data: Array<{ r2Key: string; r2Url: string; filename: string }> = [];
+      if (job.variants && job.variants.length > 0) {
+        for (const variant of job.variants) {
+          if (variant.file && !variant.r2Key) {
+            try {
+              const { key, url } = await uploadFileToR2(variant.file);
+              variant.r2Key = key;
+              variant.r2Url = url;
+              variantR2Data.push({ r2Key: key, r2Url: url, filename: variant.filename });
+            } catch (e) {
+              console.error(`Failed to upload variant ${variant.filename} to R2:`, e);
+              // Non-fatal: skip this variant
+            }
+          } else if (variant.r2Key && variant.r2Url) {
+            variantR2Data.push({ r2Key: variant.r2Key, r2Url: variant.r2Url, filename: variant.filename });
+          }
+        }
+      }
+
       // Step 1-4: Upload to Meta
       setJobs((prev) =>
         prev.map((j) =>
@@ -881,7 +1018,8 @@ export default function UploadPage() {
         job.mediaType,
         overrideAdsetId,
         job.linkUrl,
-        resolvedAdName
+        resolvedAdName,
+        variantR2Data.length > 0 ? variantR2Data : undefined
       );
 
       if (dbJobId) {
@@ -1488,23 +1626,107 @@ export default function UploadPage() {
                 <div className="rounded-xl border border-white/[0.06] bg-[#111827] divide-y divide-white/[0.04]">
                   <div className="px-4 py-2.5 flex items-center justify-between">
                     <span className="text-xs font-medium text-slate-400">{selectedFiles.length} file(s)</span>
-                    <button onClick={() => setSelectedFiles([])} className="text-[10px] text-slate-500 hover:text-red-400">Clear all</button>
+                    <button onClick={() => { setSelectedFiles([]); setVariantsByFile({}); setFileDimensions({}); setExpandedFileIndex(null); }} className="text-[10px] text-slate-500 hover:text-red-400">Clear all</button>
                   </div>
-                  {selectedFiles.map((file, i) => (
-                    <div key={i} className="flex items-center gap-3 px-4 py-2">
-                      {file.type.startsWith("video/")
-                        ? <FileVideo className="h-4 w-4 text-cyan-400 shrink-0" />
-                        : <ImageIcon className="h-4 w-4 text-purple-400 shrink-0" />
-                      }
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-white truncate">{file.name}</p>
-                        <p className="text-[10px] text-slate-500">{formatSize(file.size)}</p>
+                  {selectedFiles.map((file, i) => {
+                    const dim = fileDimensions[i];
+                    const isImage = file.type.startsWith("image/");
+                    const variants = variantsByFile[i] || [];
+                    const isExpanded = expandedFileIndex === i;
+                    return (
+                      <div key={i}>
+                        {/* Main file row */}
+                        <div
+                          className={cn(
+                            "flex items-center gap-3 px-4 py-2 transition-colors",
+                            isImage && "cursor-pointer hover:bg-white/[0.02]",
+                            isExpanded && "bg-white/[0.02]"
+                          )}
+                          onClick={() => {
+                            if (isImage) setExpandedFileIndex(isExpanded ? null : i);
+                          }}
+                        >
+                          {file.type.startsWith("video/")
+                            ? <FileVideo className="h-4 w-4 text-cyan-400 shrink-0" />
+                            : <ImageIcon className="h-4 w-4 text-purple-400 shrink-0" />
+                          }
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs text-white truncate">{file.name}</p>
+                              {dim && (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0">
+                                  {dim.ratio}
+                                </span>
+                              )}
+                              {variants.length > 0 && (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20 shrink-0">
+                                  +{variants.length} variant{variants.length > 1 ? "er" : ""}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500">{formatSize(file.size)}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {isImage && (
+                              <ChevronDown className={cn("h-3.5 w-3.5 text-slate-500 transition-transform", isExpanded && "rotate-180")} />
+                            )}
+                            <button onClick={(e) => { e.stopPropagation(); removeFile(i); if (isExpanded) setExpandedFileIndex(null); }} className="text-slate-600 hover:text-red-400">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Expanded: variant list + upload zone */}
+                        {isImage && isExpanded && (
+                          <div className="px-4 pb-3 pt-1 bg-white/[0.015]">
+                            {/* Existing variants */}
+                            {variants.length > 0 && (
+                              <div className="mb-2 space-y-1">
+                                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Placement-varianter</p>
+                                {variants.map((v) => (
+                                  <div key={v.id} className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.05]">
+                                    <ImageIcon className="h-3.5 w-3.5 text-orange-400/70 shrink-0" />
+                                    <p className="text-[11px] text-slate-300 truncate flex-1">{v.filename}</p>
+                                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20 shrink-0">
+                                      {v.aspectRatio}
+                                    </span>
+                                    <button onClick={() => removeVariant(i, v.id)} className="text-slate-600 hover:text-red-400">
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Upload zone for adding variants */}
+                            <button
+                              onClick={() => variantInputRefs.current[i]?.click()}
+                              className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-lg border border-dashed border-white/[0.1] hover:border-orange-400/40 hover:bg-orange-500/5 transition-all group"
+                            >
+                              <Plus className="h-4 w-4 text-slate-500 group-hover:text-orange-400 transition-colors" />
+                              <span className="text-[11px] text-slate-500 group-hover:text-orange-300 transition-colors">
+                                Ladda upp variant (t.ex. 9:16 för Stories/Reels)
+                              </span>
+                            </button>
+                            <input
+                              ref={(el) => { variantInputRefs.current[i] = el; }}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) addVariantToFile(i, f);
+                                e.target.value = "";
+                              }}
+                            />
+                            <p className="text-[9px] text-slate-600 mt-1.5 text-center">
+                              Meta visar rätt bild per placement baserat på aspect ratio. Feed = 1:1, Stories/Reels = 9:16
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      <button onClick={() => removeFile(i)} className="text-slate-600 hover:text-red-400">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1985,6 +2207,11 @@ export default function UploadPage() {
                         {job.lpLabel && (
                           <span className="ml-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                             {job.lpLabel}
+                          </span>
+                        )}
+                        {job.variants && job.variants.length > 0 && (
+                          <span className="ml-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">
+                            {job.variants.map((v) => v.aspectRatio).join(" + ")}
                           </span>
                         )}
                       </p>
