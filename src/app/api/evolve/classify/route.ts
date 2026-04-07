@@ -86,8 +86,14 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Only include ads from active campaigns
+    const activeCampaignIds = new Set(
+      campaigns.filter((c) => c.status === "ACTIVE").map((c) => c.id)
+    );
+
     // Classify each ad
     const classifiedAds = ads
+      .filter((ad) => activeCampaignIds.has(ad.campaign_id))
       .filter((ad) => !campaignFilter || ad.campaign_id === campaignFilter)
       .map((ad) => {
         const metrics = insightsMap.get(ad.id) || {
@@ -164,7 +170,7 @@ export async function GET(request: NextRequest) {
       },
       ads: classifiedAds,
       dateRange: { since, until },
-      campaigns: campaigns.map((c) => ({ id: c.id, name: c.name })),
+      campaigns: campaigns.filter((c) => c.status === "ACTIVE").map((c) => ({ id: c.id, name: c.name })),
     });
   } catch (error) {
     console.error("Classify API error:", error);

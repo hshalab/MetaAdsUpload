@@ -243,7 +243,8 @@ export function auditAdSetCount(
 
 export function auditFrequency(
   adsetMetrics: AdsetMetrics[],
-  adsets: AdsetInfo[]
+  adsets: AdsetInfo[],
+  settings: EvolveSettings
 ): AuditFinding[] {
   const findings: AuditFinding[] = [];
   const adsetMap = new Map(adsets.map((a) => [a.id, a]));
@@ -252,18 +253,41 @@ export function auditFrequency(
   const okFrequency = adsetMetrics.filter((m) => m.frequency <= 1.5 && m.frequency > 0 && m.spend > 0);
 
   if (highFrequency.length > 0) {
-    for (const m of highFrequency.slice(0, 5)) {
+    for (const m of highFrequency.slice(0, 10)) {
       const adset = adsetMap.get(m.adsetId);
-      findings.push({
-        category: "frequency",
-        severity: m.frequency > 2.5 ? "fail" : "warning",
-        title: `"${adset?.name || m.adsetId}" frequency: ${m.frequency.toFixed(1)}`,
-        description: m.frequency > 2.5
-          ? "Frequency >2.5 indicates severe ad fatigue. Refresh creatives or pause."
-          : "Frequency >1.5 may indicate retargeting or early fatigue. Monitor closely.",
-        entityId: m.adsetId,
-        entityType: "adset",
-      });
+      const isPerforming = m.roas >= settings.targetRoas;
+
+      if (isPerforming) {
+        // High frequency BUT good ROAS — not a problem
+        findings.push({
+          category: "frequency",
+          severity: "pass",
+          title: `"${adset?.name || m.adsetId}" frequency: ${m.frequency.toFixed(1)} — but ROAS ${m.roas.toFixed(2)}x`,
+          description: `Hög frequency men levererar bra ROAS (ovanför target ${settings.targetRoas}x). Låt den vara — den träffar en engagerad publik.`,
+          entityId: m.adsetId,
+          entityType: "adset",
+        });
+      } else if (m.roas >= settings.breakevenRoas) {
+        // High frequency, mediocre ROAS — warning
+        findings.push({
+          category: "frequency",
+          severity: "warning",
+          title: `"${adset?.name || m.adsetId}" frequency: ${m.frequency.toFixed(1)} med ROAS ${m.roas.toFixed(2)}x`,
+          description: `Hög frequency och ROAS under target. Håll koll — om ROAS sjunker under breakeven, byt kreativen.`,
+          entityId: m.adsetId,
+          entityType: "adset",
+        });
+      } else {
+        // High frequency AND bad ROAS — fail
+        findings.push({
+          category: "frequency",
+          severity: "fail",
+          title: `"${adset?.name || m.adsetId}" frequency: ${m.frequency.toFixed(1)} med ROAS ${m.roas.toFixed(2)}x`,
+          description: `Hög frequency OCH dålig ROAS (under breakeven ${settings.breakevenRoas}x). Publiken är mättad. Byt kreativ eller pausa.`,
+          entityId: m.adsetId,
+          entityType: "adset",
+        });
+      }
     }
   }
 
@@ -272,7 +296,7 @@ export function auditFrequency(
       category: "frequency",
       severity: "pass",
       title: `${okFrequency.length} ad sets with healthy frequency`,
-      description: "Frequency ≤1.5 indicates good prospecting reach.",
+      description: "Frequency ≤1.5 — bra prospecting-räckvidd.",
     });
   }
 

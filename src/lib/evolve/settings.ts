@@ -25,7 +25,7 @@ const DEFAULTS: EvolveSettings = {
   learningPeriodDays: 7,
   scalingProtocolDays: 3,
   zombieCostCapDiscount: 0.20,
-  maxAdSetsPerCampaign: 10,
+  maxAdSetsPerCampaign: 5,
   surfModeEnabled: false,
   surfIntervalHours: 4,
 };

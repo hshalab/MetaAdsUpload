@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       ...auditCampaignStructure(campaignInfos, settings),
       ...auditZombieCampaign(campaignInfos, adsetInfos, adInfos, settings),
       ...auditAdSetCount(campaignInfos, adsetInfos, settings),
-      ...auditFrequency(adsetMetrics, adsetInfos),
+      ...auditFrequency(adsetMetrics, adsetInfos, settings),
       ...auditBudgetDistribution(campaignInfos, adsetInfos),
     ];
 

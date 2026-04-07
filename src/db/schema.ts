@@ -425,7 +425,7 @@ export const evolveSettings = pgTable("evolve_settings", {
   learningPeriodDays: integer("learning_period_days").default(7).notNull(),
   scalingProtocolDays: integer("scaling_protocol_days").default(3).notNull(),
   zombieCostCapDiscount: real("zombie_cost_cap_discount").default(0.20).notNull(),
-  maxAdSetsPerCampaign: integer("max_ad_sets_per_campaign").default(10).notNull(),
+  maxAdSetsPerCampaign: integer("max_ad_sets_per_campaign").default(5).notNull(),
   surfModeEnabled: boolean("surf_mode_enabled").default(false).notNull(),
   surfIntervalHours: integer("surf_interval_hours").default(4).notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
