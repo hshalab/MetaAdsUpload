@@ -4,26 +4,23 @@ import { getAdAccountId, metaApi } from "@/lib/meta/client";
 import { getAdSets, updateAdSet } from "@/lib/meta/adsets";
 import { getCampaigns } from "@/lib/meta/campaigns";
 import { getInsights, extractPurchases, extractPurchaseValue, calculateROAS } from "@/lib/meta/insights";
+import { getEvolveSettings } from "@/lib/evolve/settings";
+import { evaluateScalingProtocol } from "@/lib/evolve/scaling-protocol";
 import { format, subDays } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
-// ROAS thresholds
-const BREAKEVEN_ROAS = 1.42;
-const HOLD_ROAS = 1.7;
-const TARGET_ROAS = 2.0;
-
 type Zone = "scale" | "hold" | "watch" | "kill" | "new";
 
-function classifyZone(roas: number, spend: number): Zone {
-  if (spend < 50) return "new"; // Not enough data
-  if (roas >= TARGET_ROAS) return "scale";
-  if (roas >= HOLD_ROAS) return "hold";
-  if (roas >= BREAKEVEN_ROAS) return "watch";
+function classifyZone(roas: number, spend: number, thresholds: { target: number; hold: number; breakeven: number }, minSpend: number): Zone {
+  if (spend < minSpend) return "new";
+  if (roas >= thresholds.target) return "scale";
+  if (roas >= thresholds.hold) return "hold";
+  if (roas >= thresholds.breakeven) return "watch";
   return "kill";
 }
 
-function getSuggestion(zone: Zone, roas: number, spend: number): string {
+function getSuggestion(zone: Zone, roas: number, spend: number, thresholds: { breakeven: number }): string {
   switch (zone) {
     case "scale":
       return `ROAS ${roas.toFixed(2)}x — above target. Scale budget +20-30%`;
@@ -32,7 +29,7 @@ function getSuggestion(zone: Zone, roas: number, spend: number): string {
     case "watch":
       return `ROAS ${roas.toFixed(2)}x — above breakeven but below hold zone. Consider reducing budget or waiting for more data.`;
     case "kill":
-      return `ROAS ${roas.toFixed(2)}x — below breakeven (1.42). Pause or cut budget significantly.`;
+      return `ROAS ${roas.toFixed(2)}x — below breakeven (${thresholds.breakeven}). Pause or cut budget significantly.`;
     case "new":
       return `Only ${spend.toFixed(0)} SEK spent — too early to judge. Let it run for more data.`;
   }
@@ -45,9 +42,8 @@ export async function GET(request: NextRequest) {
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const searchParams = request.nextUrl.searchParams;
-    const statusFilter = searchParams.get("status") || "ACTIVE"; // ACTIVE, PAUSED, or ALL
+    const statusFilter = searchParams.get("status") || "ACTIVE";
 
-    // Date range: custom since/until, or days preset (0 = today)
     let since: string;
     let until: string;
     if (searchParams.has("since") && searchParams.has("until")) {
@@ -59,7 +55,14 @@ export async function GET(request: NextRequest) {
       until = format(new Date(), "yyyy-MM-dd");
     }
 
-    // Fetch campaigns, adsets, and insights in parallel
+    // Load dynamic settings
+    const settings = await getEvolveSettings();
+    const thresholds = {
+      breakeven: settings.breakevenRoas,
+      hold: settings.holdRoas,
+      target: settings.targetRoas,
+    };
+
     const [campaigns, allAdsets, insightsData] = await Promise.all([
       getCampaigns(200),
       getAdSets(undefined, 500),
@@ -70,10 +73,8 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Build campaign name lookup
     const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
 
-    // Build insights lookup by adset_id
     const insightsMap = new Map<string, {
       spend: number;
       impressions: number;
@@ -107,7 +108,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Combine adsets with insights
     const enrichedAdsets = allAdsets
       .filter((adset) => statusFilter === "ALL" || adset.status === statusFilter)
       .map((adset) => {
@@ -117,15 +117,28 @@ export async function GET(request: NextRequest) {
           ctr: 0, cpc: 0, cpm: 0,
         };
         const campaign = campaignMap.get(adset.campaign_id);
-        const zone = classifyZone(metrics.roas, metrics.spend);
-        const suggestion = getSuggestion(zone, metrics.roas, metrics.spend);
+        const zone = classifyZone(metrics.roas, metrics.spend, thresholds, settings.minDailySpend);
+        const suggestion = getSuggestion(zone, metrics.roas, metrics.spend, thresholds);
         const cpa = metrics.purchases > 0 ? metrics.spend / metrics.purchases : 0;
+        const dailyBudget = adset.daily_budget ? parseFloat(adset.daily_budget) / 100 : 0;
+
+        // Evaluate scaling protocol
+        const protocol = evaluateScalingProtocol(
+          {
+            roas: metrics.roas,
+            spend: metrics.spend,
+            dailyBudget,
+            consecutiveDaysAboveTarget: 0, // Would need historical tracking
+            consecutiveDaysBelowBreakeven: 0,
+          },
+          settings
+        );
 
         return {
           id: adset.id,
           name: adset.name,
           status: adset.status,
-          dailyBudget: adset.daily_budget ? parseFloat(adset.daily_budget) / 100 : null,
+          dailyBudget: dailyBudget || null,
           campaignId: adset.campaign_id,
           campaignName: campaign?.name || "Unknown",
           campaignStatus: campaign?.status || "UNKNOWN",
@@ -133,15 +146,18 @@ export async function GET(request: NextRequest) {
           cpa,
           zone,
           suggestion,
+          protocol: {
+            action: protocol.action,
+            reason: protocol.reason,
+            status: protocol.newStatus,
+          },
         };
       })
       .sort((a, b) => {
-        // Sort: scale first, then hold, watch, kill, new
         const zoneOrder: Record<Zone, number> = { scale: 0, hold: 1, watch: 2, kill: 3, new: 4 };
         return (zoneOrder[a.zone] || 5) - (zoneOrder[b.zone] || 5) || b.spend - a.spend;
       });
 
-    // Summary
     const totalSpend = enrichedAdsets.reduce((s, a) => s + a.spend, 0);
     const totalRevenue = enrichedAdsets.reduce((s, a) => s + a.purchaseValue, 0);
     const totalPurchases = enrichedAdsets.reduce((s, a) => s + a.purchases, 0);
@@ -160,7 +176,14 @@ export async function GET(request: NextRequest) {
       .reduce((s, a) => s + (a.dailyBudget || 0), 0);
 
     return NextResponse.json({
-      thresholds: { breakeven: BREAKEVEN_ROAS, hold: HOLD_ROAS, target: TARGET_ROAS },
+      thresholds,
+      settings: {
+        targetRoas: settings.targetRoas,
+        holdRoas: settings.holdRoas,
+        breakevenRoas: settings.breakevenRoas,
+        targetCpa: settings.targetCpa,
+        surfModeEnabled: settings.surfModeEnabled,
+      },
       summary: {
         totalSpend,
         totalRevenue,
@@ -194,7 +217,7 @@ export async function PATCH(request: NextRequest) {
       actions: Array<{
         adsetId: string;
         type: "adjust_budget" | "set_budget" | "pause" | "activate";
-        value?: number; // percentage for adjust, cents for set
+        value?: number;
       }>;
     };
 
@@ -212,7 +235,6 @@ export async function PATCH(request: NextRequest) {
             results.push({ adsetId: action.adsetId, action: "activated", success: true });
             break;
           case "adjust_budget": {
-            // Get current budget first
             const adsetData = await metaApi<{ daily_budget: string }>(`/${action.adsetId}`, {
               params: { fields: "daily_budget" },
             });

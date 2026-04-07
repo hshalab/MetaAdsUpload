@@ -24,6 +24,8 @@ import {
   X,
   Eye,
   History,
+  BarChart3,
+  ClipboardCheck,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -43,6 +45,14 @@ const navSections = [
       { href: "/creatives", label: "Creatives", icon: Image },
       { href: "/campaigns", label: "Campaigns", icon: Megaphone },
       { href: "/scaling", label: "Scaling", icon: Target },
+    ],
+  },
+  {
+    label: "EVOLVE",
+    items: [
+      { href: "/ad-analyzer", label: "Ad Analyzer", icon: BarChart3 },
+      { href: "/audit", label: "Audit", icon: ClipboardCheck },
+      { href: "/evolve-settings", label: "KPI Settings", icon: SlidersHorizontal },
     ],
   },
   {

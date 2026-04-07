@@ -64,6 +64,7 @@ interface AdsetData {
 
 interface ScalingData {
   thresholds: { breakeven: number; hold: number; target: number };
+  settings?: { targetRoas: number; holdRoas: number; breakevenRoas: number; targetCpa: number; surfModeEnabled: boolean };
   summary: {
     totalSpend: number;
     totalRevenue: number;
@@ -305,7 +306,8 @@ export default function ScalingPage() {
             Scaling Command Center
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Breakeven: 1.42x &middot; Hold: 1.7x &middot; Scale: 2.0x
+            Breakeven: {data?.thresholds.breakeven ?? 1.42}x &middot; Hold: {data?.thresholds.hold ?? 1.7}x &middot; Scale: {data?.thresholds.target ?? 2.0}x
+            {data?.settings?.surfModeEnabled && <span className="ml-2 text-amber-400 text-xs font-medium">[SURF MODE]</span>}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -417,7 +419,7 @@ export default function ScalingPage() {
             {[
               { label: "Total Spend", value: `${data.summary.totalSpend.toFixed(0)} SEK`, color: "text-white" },
               { label: "Revenue", value: `${data.summary.totalRevenue.toFixed(0)} SEK`, color: "text-white" },
-              { label: "ROAS", value: `${data.summary.overallRoas.toFixed(2)}x`, color: data.summary.overallRoas >= 2.0 ? "text-emerald-400" : data.summary.overallRoas >= 1.42 ? "text-amber-400" : "text-red-400" },
+              { label: "ROAS", value: `${data.summary.overallRoas.toFixed(2)}x`, color: data.summary.overallRoas >= data.thresholds.target ? "text-emerald-400" : data.summary.overallRoas >= data.thresholds.breakeven ? "text-amber-400" : "text-red-400" },
               { label: "Purchases", value: data.summary.totalPurchases.toString(), color: "text-white" },
               { label: "Daily Budget", value: `${data.summary.totalDailyBudget.toFixed(0)} SEK`, color: "text-white" },
             ].map((kpi) => (
@@ -571,9 +573,9 @@ export default function ScalingPage() {
                       <td className="px-4 py-3 text-right">
                         <span className={cn(
                           "font-bold",
-                          adset.roas >= 2.0 ? "text-emerald-400" :
-                          adset.roas >= 1.7 ? "text-blue-400" :
-                          adset.roas >= 1.42 ? "text-amber-400" :
+                          adset.roas >= (data?.thresholds.target ?? 2.0) ? "text-emerald-400" :
+                          adset.roas >= (data?.thresholds.hold ?? 1.7) ? "text-blue-400" :
+                          adset.roas >= (data?.thresholds.breakeven ?? 1.42) ? "text-amber-400" :
                           adset.spend > 50 ? "text-red-400" : "text-slate-500"
                         )}>
                           {adset.roas.toFixed(2)}x
@@ -685,9 +687,19 @@ export default function ScalingPage() {
 
           {/* ROAS Threshold Legend */}
           <div className="rounded-xl border border-white/5 bg-[#111827] p-4">
-            <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">Your ROAS Zones</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wider">Your ROAS Zones</h3>
+              <a href="/evolve-settings" className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
+                Edit thresholds &rarr;
+              </a>
+            </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {(["scale", "hold", "watch", "kill"] as const).map((zone) => {
+              {([
+                { zone: "scale" as const, desc: `ROAS > ${data?.thresholds.target ?? 2.0}x — Increase budget` },
+                { zone: "hold" as const, desc: `ROAS ${data?.thresholds.hold ?? 1.7}–${data?.thresholds.target ?? 2.0}x — Let it run` },
+                { zone: "watch" as const, desc: `ROAS ${data?.thresholds.breakeven ?? 1.42}–${data?.thresholds.hold ?? 1.7}x — Monitor closely` },
+                { zone: "kill" as const, desc: `ROAS < ${data?.thresholds.breakeven ?? 1.42}x — Below breakeven` },
+              ]).map(({ zone, desc }) => {
                 const config = ZONE_CONFIG[zone];
                 const ZoneIcon = config.icon;
                 return (
@@ -696,7 +708,7 @@ export default function ScalingPage() {
                       <ZoneIcon className={cn("h-4 w-4", config.color)} />
                       <span className={cn("text-sm font-semibold", config.color)}>{config.label}</span>
                     </div>
-                    <p className="text-xs text-slate-500">{config.desc}</p>
+                    <p className="text-xs text-slate-500">{desc}</p>
                   </div>
                 );
               })}

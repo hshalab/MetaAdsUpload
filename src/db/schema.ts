@@ -413,6 +413,74 @@ export const reviewComments = pgTable("review_comments", {
   index("rc_parent_idx").on(table.parentCommentId),
 ]);
 
+// ─── Evolve Framework ────────────────────────────────────────────────────────
+
+export const evolveSettings = pgTable("evolve_settings", {
+  id: serial("id").primaryKey(),
+  targetRoas: real("target_roas").default(2.0).notNull(),
+  holdRoas: real("hold_roas").default(1.7).notNull(),
+  breakevenRoas: real("breakeven_roas").default(1.42).notNull(),
+  targetCpa: real("target_cpa").default(30).notNull(),
+  minDailySpend: real("min_daily_spend").default(50).notNull(),
+  learningPeriodDays: integer("learning_period_days").default(7).notNull(),
+  scalingProtocolDays: integer("scaling_protocol_days").default(3).notNull(),
+  zombieCostCapDiscount: real("zombie_cost_cap_discount").default(0.20).notNull(),
+  maxAdSetsPerCampaign: integer("max_ad_sets_per_campaign").default(10).notNull(),
+  surfModeEnabled: boolean("surf_mode_enabled").default(false).notNull(),
+  surfIntervalHours: integer("surf_interval_hours").default(4).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const adClassifications = pgTable("ad_classifications", {
+  id: serial("id").primaryKey(),
+  adId: text("ad_id").notNull(),
+  classification: text("classification").notNull(), // breakthrough | spend_winner | kpi_winner | loser | new
+  spend: real("spend").default(0),
+  roas: real("roas").default(0),
+  cpa: real("cpa").default(0),
+  purchases: integer("purchases").default(0),
+  recommendation: text("recommendation"),
+  actionTaken: text("action_taken"),
+  actionTakenAt: timestamp("action_taken_at"),
+  campaignId: text("campaign_id"),
+  adsetId: text("adset_id"),
+  dateRangeStart: text("date_range_start"),
+  dateRangeEnd: text("date_range_end"),
+  classifiedAt: timestamp("classified_at").defaultNow().notNull(),
+}, (table) => [
+  index("ad_classifications_ad_id_idx").on(table.adId),
+  index("ad_classifications_classification_idx").on(table.classification),
+]);
+
+export const scalingProtocolLog = pgTable("scaling_protocol_log", {
+  id: serial("id").primaryKey(),
+  entityId: text("entity_id").notNull(),
+  entityType: text("entity_type").notNull(), // adset | campaign
+  status: text("status").notNull().default("monitoring"), // scaling | decreasing | holding | monitoring
+  consecutiveDaysAboveTarget: integer("consecutive_days_above_target").default(0).notNull(),
+  consecutiveDaysBelowBreakeven: integer("consecutive_days_below_breakeven").default(0).notNull(),
+  lastAction: text("last_action"),
+  lastActionAt: timestamp("last_action_at"),
+  enteredAt: timestamp("entered_at").defaultNow().notNull(),
+  exitedAt: timestamp("exited_at"),
+}, (table) => [
+  index("scaling_protocol_entity_idx").on(table.entityId, table.entityType),
+]);
+
+export const auditResults = pgTable("audit_results", {
+  id: serial("id").primaryKey(),
+  category: text("category").notNull(), // structure | zombie | budget | frequency | attribution | ad_count
+  severity: text("severity").notNull(), // pass | warning | fail
+  title: text("title").notNull(),
+  description: text("description"),
+  entityId: text("entity_id"),
+  entityType: text("entity_type"),
+  details: jsonb("details").$type<Record<string, unknown>>().default({}),
+  auditedAt: timestamp("audited_at").defaultNow().notNull(),
+});
+
+// ─── Review System ──────────────────────────────────────────────────────────
+
 export const shareLinks = pgTable("share_links", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   assignmentId: text("assignment_id").notNull(),
