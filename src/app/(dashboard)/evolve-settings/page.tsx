@@ -247,7 +247,7 @@ export default function EvolveSettingsPage() {
         <div className="divide-y divide-white/5">
           <SettingField
             label="Max Ad Sets per Campaign"
-            description="Audit will warn when a campaign exceeds this"
+            description="For många ad sets i en kampanj gör att budgeten sprids för tunt och Meta's algoritm lär sig långsammare. Auditen varnar om en kampanj överstiger detta."
             value={settings.maxAdSetsPerCampaign}
             onChange={(v) => update("maxAdSetsPerCampaign", v)}
             step="1"
@@ -258,12 +258,52 @@ export default function EvolveSettingsPage() {
       {/* Surf Mode */}
       <div className="rounded-xl border border-white/5 bg-[#111827] p-6">
         <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-1">Surf Mode</h2>
-        <p className="text-xs text-slate-500 mb-4">Aggressive scaling for promo / launch periods</p>
+        <p className="text-xs text-slate-500 mb-4">Aggressiv skalning under kampanjperioder och lanseringar</p>
+
+        {/* Explanation box */}
+        <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-4 mb-4">
+          <p className="text-sm font-medium text-cyan-400 mb-2">Vad är Surf Mode?</p>
+          <p className="text-xs text-slate-400 leading-relaxed mb-2">
+            Surf Mode är till för korta perioder med hög potential — t.ex. under en rea, produktlansering eller kampanjperiod.
+            Istället för att vänta 2-3 dagar på konsekvent data (som vanliga protokollet gör) agerar Surf Mode snabbare och mer aggressivt:
+          </p>
+          <div className="space-y-1.5 text-xs text-slate-400">
+            <div className="flex items-start gap-2">
+              <span className="text-emerald-400 font-bold shrink-0">50%+ ovanför target ROAS</span>
+              <span className="text-slate-500">&rarr;</span>
+              <span>Dubbla budgeten direkt</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-emerald-400 font-bold shrink-0">20-50% ovanför target</span>
+              <span className="text-slate-500">&rarr;</span>
+              <span>Skala +20%</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold shrink-0">Vid target ROAS</span>
+              <span className="text-slate-500">&rarr;</span>
+              <span>Håll nuvarande budget</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-amber-400 font-bold shrink-0">Under breakeven</span>
+              <span className="text-slate-500">&rarr;</span>
+              <span>Minska 20%</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 font-bold shrink-0">Långt under breakeven</span>
+              <span className="text-slate-500">&rarr;</span>
+              <span>Pausa direkt</span>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 mt-3">
+            Slå på Surf Mode vid kampanjstart och stäng av det när kampanjen är slut. Använd inte Surf Mode som standard — det är för aggressivt för normala perioder.
+          </p>
+        </div>
+
         <div className="divide-y divide-white/5">
           <div className="flex items-center justify-between gap-4 py-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white">Enable Surf Mode</p>
-              <p className="text-xs text-slate-500 mt-0.5">Use aggressive scaling rules instead of normal protocol</p>
+              <p className="text-sm font-medium text-white">Aktivera Surf Mode</p>
+              <p className="text-xs text-slate-500 mt-0.5">Ersätter det vanliga scaling-protokollet med aggressivare regler</p>
             </div>
             <button
               onClick={() => update("surfModeEnabled", !settings.surfModeEnabled)}
@@ -282,11 +322,11 @@ export default function EvolveSettingsPage() {
           </div>
           <SettingField
             label="Surf Interval"
-            description="How often to check scaling in surf mode"
+            description="Hur ofta systemet kollar skalning i Surf Mode"
             value={settings.surfIntervalHours}
             onChange={(v) => update("surfIntervalHours", v)}
             step="1"
-            suffix="hrs"
+            suffix="tim"
           />
         </div>
       </div>
