@@ -125,6 +125,41 @@ export async function GET(request: NextRequest) {
 
     const ageDays = differenceInDays(parseISO(until), parseISO(since)) + 1;
 
+    // Build ad-level insights for expanded view
+    const adInsightsMap = new Map<string, {
+      spend: number; roas: number; purchases: number; purchaseValue: number; cpa: number;
+    }>();
+    for (const insight of adInsightsData) {
+      if (!insight.ad_id) continue;
+      const spend = parseFloat(insight.spend || "0");
+      const purchases = extractPurchases(insight.actions);
+      const purchaseValue = extractPurchaseValue(insight.action_values);
+      const roas = calculateROAS(purchaseValue, spend);
+      const cpa = purchases > 0 ? spend / purchases : 0;
+      adInsightsMap.set(insight.ad_id, { spend, roas, purchases, purchaseValue, cpa });
+    }
+
+    // Group ads by adset for expanded view
+    const adsByAdset = new Map<string, Array<{
+      id: string; name: string; status: string;
+      spend: number; roas: number; purchases: number; cpa: number;
+    }>>();
+    for (const ad of ads) {
+      if (!activeCampaignIds.has(ad.campaign_id)) continue;
+      const metrics = adInsightsMap.get(ad.id) || { spend: 0, roas: 0, purchases: 0, purchaseValue: 0, cpa: 0 };
+      const existing = adsByAdset.get(ad.adset_id) || [];
+      existing.push({
+        id: ad.id,
+        name: ad.name,
+        status: ad.status,
+        spend: metrics.spend,
+        roas: metrics.roas,
+        purchases: metrics.purchases,
+        cpa: metrics.cpa,
+      });
+      adsByAdset.set(ad.adset_id, existing);
+    }
+
     // Classify each ad set
     const classifiedAdsets = filteredAdsets
       .map((as) => {
@@ -185,41 +220,6 @@ export async function GET(request: NextRequest) {
       loser: classifiedAdsets.filter((a) => a.classification === "loser").length,
       new: classifiedAdsets.filter((a) => a.classification === "new").length,
     };
-
-    // Build ad-level insights for expanded view
-    const adInsightsMap = new Map<string, {
-      spend: number; roas: number; purchases: number; purchaseValue: number; cpa: number;
-    }>();
-    for (const insight of adInsightsData) {
-      if (!insight.ad_id) continue;
-      const spend = parseFloat(insight.spend || "0");
-      const purchases = extractPurchases(insight.actions);
-      const purchaseValue = extractPurchaseValue(insight.action_values);
-      const roas = calculateROAS(purchaseValue, spend);
-      const cpa = purchases > 0 ? spend / purchases : 0;
-      adInsightsMap.set(insight.ad_id, { spend, roas, purchases, purchaseValue, cpa });
-    }
-
-    // Group ads by adset for expanded view
-    const adsByAdset = new Map<string, Array<{
-      id: string; name: string; status: string;
-      spend: number; roas: number; purchases: number; cpa: number;
-    }>>();
-    for (const ad of ads) {
-      if (!activeCampaignIds.has(ad.campaign_id)) continue;
-      const metrics = adInsightsMap.get(ad.id) || { spend: 0, roas: 0, purchases: 0, purchaseValue: 0, cpa: 0 };
-      const existing = adsByAdset.get(ad.adset_id) || [];
-      existing.push({
-        id: ad.id,
-        name: ad.name,
-        status: ad.status,
-        spend: metrics.spend,
-        roas: metrics.roas,
-        purchases: metrics.purchases,
-        cpa: metrics.cpa,
-      });
-      adsByAdset.set(ad.adset_id, existing);
-    }
 
     // Per-campaign summary
     const campaignSummaries = campaigns
