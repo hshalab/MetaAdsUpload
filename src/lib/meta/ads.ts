@@ -153,11 +153,24 @@ export async function createAdWithPostId(params: {
 
 export async function getAdPostId(adId: string): Promise<string | null> {
   try {
-    const data = await metaApi<{ effective_object_story_id?: string }>(
+    // Step 1: Get the creative ID from the ad
+    const ad = await metaApi<{ creative?: { id?: string } }>(
       `/${adId}`,
-      { params: { fields: "effective_object_story_id" } }
+      { params: { fields: "creative{id}" } }
     );
-    return data.effective_object_story_id || null;
+
+    if (!ad.creative?.id) return null;
+
+    // Step 2: Fetch effective_object_story_id from the creative directly
+    const creative = await metaApi<{
+      effective_object_story_id?: string;
+      object_story_id?: string;
+    }>(
+      `/${ad.creative.id}`,
+      { params: { fields: "effective_object_story_id,object_story_id" } }
+    );
+
+    return creative.effective_object_story_id || creative.object_story_id || null;
   } catch {
     return null;
   }

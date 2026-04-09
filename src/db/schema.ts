@@ -427,6 +427,7 @@ export const evolveSettings = pgTable("evolve_settings", {
   zombieCostCapDiscount: real("zombie_cost_cap_discount").default(0.20).notNull(),
   maxAdSetsPerCampaign: integer("max_ad_sets_per_campaign").default(5).notNull(),
   surfModeEnabled: boolean("surf_mode_enabled").default(false).notNull(),
+  surfModeCampaignIds: text("surf_mode_campaign_ids"),
   surfIntervalHours: integer("surf_interval_hours").default(4).notNull(),
   graveyardCampaignId: text("graveyard_campaign_id"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -499,53 +500,70 @@ export const shareLinks = pgTable("share_links", {
   index("sl_assignment_idx").on(table.assignmentId),
 ]);
 
-// ─── BookKeeper: Settings (key-value store) ─────────────────────────────────
+// ─── Strategy Framework ─────────────────────────────────────────────────────
 
-export const settings = pgTable("settings", {
-  key: text("key").primaryKey(),
-  value: jsonb("value"),
+export const strategyDesires = pgTable("strategy_desires", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// ─── BookKeeper: Vouchers (SIE import + Fortnox sync) ───────────────────────
-
-export const vouchers = pgTable("vouchers", {
+export const strategySubAvatars = pgTable("strategy_sub_avatars", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  series: text("series").notNull(),
-  number: integer("number").notNull(),
-  date: date("date").notNull(),
-  description: text("description"),
-  fortnoxId: text("fortnox_id"),
-  syncError: text("sync_error"),
+  desireId: text("desire_id").notNull(),
+  name: text("name").notNull(),
+  behavior: text("behavior"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  unique("vouchers_series_number_date_uniq").on(table.series, table.number, table.date),
-  index("vouchers_fortnox_id_idx").on(table.fortnoxId),
+  index("strategy_sub_avatars_desire_id_idx").on(table.desireId),
 ]);
 
-export const voucherLines = pgTable("voucher_lines", {
+export const strategyAngles = pgTable("strategy_angles", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  voucherId: text("voucher_id").notNull(),
-  account: text("account").notNull(),
-  amount: real("amount").notNull(),
+  subAvatarId: text("sub_avatar_id").notNull(),
+  name: text("name").notNull(),
   description: text("description"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  index("voucher_lines_voucher_id_idx").on(table.voucherId),
+  index("strategy_angles_sub_avatar_id_idx").on(table.subAvatarId),
 ]);
 
-// ─── BookKeeper: Bank Transactions ──────────────────────────────────────────
-
-export const bankTransactions = pgTable("bank_transactions", {
+export const creativeRoadmap = pgTable("creative_roadmap", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  bankDate: date("bank_date").notNull(),
-  description: text("description").notNull(),
-  amount: real("amount").notNull(),
-  balance: real("balance"),
-  bankFormat: text("bank_format"),
-  matchedVoucherId: text("matched_voucher_id"),
-  imported: boolean("imported").default(false).notNull(),
+  batchNumber: integer("batch_number"),
+  conceptName: text("concept_name").notNull(),
+  authorId: text("author_id"),
+  desireId: text("desire_id"),
+  subAvatarId: text("sub_avatar_id"),
+  angleId: text("angle_id"),
+  awarenessLevel: text("awareness_level"), // unaware | problem_aware | solution_aware | product_aware | most_aware
+  fileType: text("file_type"), // video | image | carousel
+  status: text("status").notNull().default("ideation"), // ideation | in_production | uploaded | learning | breakthrough | loser
+  hypothesis: text("hypothesis"),
+  variableTested: text("variable_tested"),
+  whatHappened: text("what_happened"),
+  whatWeLearned: text("what_we_learned"),
+  metaAdId: text("meta_ad_id"),
+  assignmentId: text("assignment_id"),
+  lastClassification: text("last_classification"),
+  lastSpend: real("last_spend"),
+  lastRoas: real("last_roas"),
+  lastCpa: real("last_cpa"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  index("bank_tx_date_idx").on(table.bankDate),
-  index("bank_tx_matched_idx").on(table.matchedVoucherId),
+  index("creative_roadmap_status_idx").on(table.status),
+  index("creative_roadmap_author_id_idx").on(table.authorId),
+  index("creative_roadmap_meta_ad_id_idx").on(table.metaAdId),
+  index("creative_roadmap_desire_id_idx").on(table.desireId),
 ]);

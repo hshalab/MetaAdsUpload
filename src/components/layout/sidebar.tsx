@@ -27,11 +27,20 @@ import {
   BarChart3,
   ClipboardCheck,
   Sun,
-  Building2,
+  Users2,
+  Route,
+  TrendingUp,
+  ScrollText,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
-const navSections = [
+type NavSection = {
+  label: string;
+  requiredRole?: "admin";
+  items: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
+};
+
+const navSections: NavSection[] = [
   {
     label: "OVERVIEW",
     items: [
@@ -60,6 +69,16 @@ const navSections = [
     ],
   },
   {
+    label: "STRATEGI",
+    requiredRole: "admin",
+    items: [
+      { href: "/strategy/avatars", label: "Avatar-bibliotek", icon: Users2 },
+      { href: "/strategy/roadmap", label: "Creative Roadmap", icon: Route },
+      { href: "/strategy/hit-rate", label: "Hit Rate", icon: TrendingUp },
+      { href: "/strategy/log", label: "Aktivitetslogg", icon: ScrollText },
+    ],
+  },
+  {
     label: "WORKFLOW",
     items: [
       { href: "/assignments", label: "Assignments", icon: LayoutGrid },
@@ -68,15 +87,10 @@ const navSections = [
       { href: "/timer", label: "Timer", icon: Timer },
     ],
   },
-  {
-    label: "BOKFÖRING",
-    items: [
-      { href: "/bank", label: "Bankimport", icon: Building2 },
-      { href: "/settings?tab=import", label: "SIE Import", icon: FileText },
-    ],
-  },
+
   {
     label: "ADMIN",
+    requiredRole: "admin",
     items: [
       { href: "/options", label: "Options", icon: SlidersHorizontal },
       { href: "/editors", label: "Editors", icon: Users },
@@ -87,8 +101,12 @@ const navSections = [
   },
 ];
 
-function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
+function SidebarContent({ onNavClick, userRole }: { onNavClick?: () => void; userRole: "admin" | "editor" }) {
   const pathname = usePathname();
+
+  const filteredSections = navSections.filter(
+    (s) => !s.requiredRole || s.requiredRole === userRole
+  );
 
   return (
     <>
@@ -108,7 +126,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-4 overflow-auto">
-        {navSections.map((section) => (
+        {filteredSections.map((section) => (
           <div key={section.label}>
             <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
               {section.label}
@@ -157,14 +175,14 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ userRole = "editor" }: { userRole?: "admin" | "editor" }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <>
       {/* Desktop sidebar — always visible at md+ */}
       <div className="hidden md:flex h-screen w-56 flex-col bg-[#0f1629] border-r border-white/5 shrink-0">
-        <SidebarContent />
+        <SidebarContent userRole={userRole} />
       </div>
 
       {/* Mobile drawer backdrop */}
@@ -191,7 +209,7 @@ export function Sidebar() {
           <X className="h-5 w-5" />
         </button>
 
-        <SidebarContent onNavClick={() => setMobileOpen(false)} />
+        <SidebarContent onNavClick={() => setMobileOpen(false)} userRole={userRole} />
       </div>
 
       {/* Mobile top bar */}
