@@ -78,8 +78,10 @@ export async function POST(request: NextRequest) {
       let newDaysBelowTarget = 0;
       let newStatus: string;
 
-      if (settings.surfModeEnabled) {
-        // Surf mode
+      const isSurfCampaign = settings.surfModeCampaignIds.includes(adset.campaign_id);
+
+      if (isSurfCampaign) {
+        // Surf mode for this campaign
         const decision = evaluateSurfScaling({ roas: metrics.roas, spend: metrics.spend, dailyBudget }, settings);
         actionLabel = decision.reason;
         newStatus = "monitoring";
@@ -148,7 +150,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      mode: settings.surfModeEnabled ? "surf" : "normal",
+      mode: settings.surfModeCampaignIds.length > 0 ? "mixed" : "normal",
+      surfCampaigns: settings.surfModeCampaignIds,
       evaluated: results.length,
       results,
     });

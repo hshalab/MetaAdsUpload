@@ -110,8 +110,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter ad sets
+    // Filter ad sets — only active ad sets in active campaigns
     const filteredAdsets = adsets
+      .filter((as) => as.status === "ACTIVE")
       .filter((as) => activeCampaignIds.has(as.campaign_id))
       .filter((as) => !campaignFilter || as.campaign_id === campaignFilter);
 

@@ -183,7 +183,8 @@ export async function GET(request: NextRequest) {
         holdRoas: settings.holdRoas,
         breakevenRoas: settings.breakevenRoas,
         targetCpa: settings.targetCpa,
-        surfModeEnabled: settings.surfModeEnabled,
+        surfModeEnabled: settings.surfModeCampaignIds.length > 0,
+        surfModeCampaignIds: settings.surfModeCampaignIds,
       },
       summary: {
         totalSpend,

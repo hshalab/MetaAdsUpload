@@ -41,7 +41,12 @@ export async function PUT(request: NextRequest) {
       scalingProtocolDays: body.scalingProtocolDays ?? current.scalingProtocolDays,
       zombieCostCapDiscount: body.zombieCostCapDiscount ?? current.zombieCostCapDiscount,
       maxAdSetsPerCampaign: body.maxAdSetsPerCampaign ?? current.maxAdSetsPerCampaign,
-      surfModeEnabled: body.surfModeEnabled ?? current.surfModeEnabled,
+      surfModeEnabled: body.surfModeCampaignIds !== undefined
+        ? body.surfModeCampaignIds.length > 0
+        : body.surfModeEnabled ?? current.surfModeEnabled,
+      surfModeCampaignIds: body.surfModeCampaignIds !== undefined
+        ? JSON.stringify(body.surfModeCampaignIds)
+        : (current.surfModeCampaignIds ? JSON.stringify(current.surfModeCampaignIds) : null),
       surfIntervalHours: body.surfIntervalHours ?? current.surfIntervalHours,
       graveyardCampaignId: body.graveyardCampaignId !== undefined ? body.graveyardCampaignId : current.graveyardCampaignId,
       updatedAt: new Date(),

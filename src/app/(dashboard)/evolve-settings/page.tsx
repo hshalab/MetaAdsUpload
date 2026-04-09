@@ -16,6 +16,7 @@ interface Settings {
   zombieCostCapDiscount: number;
   maxAdSetsPerCampaign: number;
   surfModeEnabled: boolean;
+  surfModeCampaignIds: string[];
   surfIntervalHours: number;
   graveyardCampaignId: string | null;
 }
@@ -343,25 +344,58 @@ export default function EvolveSettingsPage() {
         </div>
 
         <div className="divide-y divide-white/5">
-          <div className="flex items-center justify-between gap-4 py-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white">Aktivera Surf Mode</p>
-              <p className="text-xs text-slate-500 mt-0.5">Ersätter det vanliga scaling-protokollet med aggressivare regler</p>
-            </div>
-            <button
-              onClick={() => update("surfModeEnabled", !settings.surfModeEnabled)}
-              className={cn(
-                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                settings.surfModeEnabled ? "bg-cyan-500" : "bg-white/10"
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                  settings.surfModeEnabled ? "translate-x-6" : "translate-x-1"
-                )}
-              />
-            </button>
+          <div className="py-3">
+            <p className="text-sm font-medium text-white mb-1">Välj kampanjer för Surf Mode</p>
+            <p className="text-xs text-slate-500 mb-3">Markera de kampanjer som ska köra med aggressivare scaling-regler</p>
+            {campaigns.filter((c) => c.status === "ACTIVE" && c.id !== settings.graveyardCampaignId).length === 0 ? (
+              <p className="text-xs text-slate-500 italic">Inga aktiva kampanjer hittade</p>
+            ) : (
+              <div className="space-y-2">
+                {campaigns
+                  .filter((c) => c.status === "ACTIVE" && c.id !== settings.graveyardCampaignId)
+                  .map((c) => {
+                    const isSelected = settings.surfModeCampaignIds.includes(c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => {
+                          const ids = isSelected
+                            ? settings.surfModeCampaignIds.filter((id) => id !== c.id)
+                            : [...settings.surfModeCampaignIds, c.id];
+                          setSettings({ ...settings, surfModeCampaignIds: ids, surfModeEnabled: ids.length > 0 });
+                        }}
+                        className={cn(
+                          "flex items-center gap-3 w-full rounded-lg border px-4 py-2.5 text-left transition-all",
+                          isSelected
+                            ? "border-cyan-500/30 bg-cyan-500/10"
+                            : "border-white/5 bg-white/[0.02] hover:bg-white/5"
+                        )}
+                      >
+                        <div className={cn(
+                          "flex h-5 w-5 items-center justify-center rounded border transition-colors shrink-0",
+                          isSelected ? "border-cyan-500 bg-cyan-500" : "border-white/20"
+                        )}>
+                          {isSelected && (
+                            <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className={cn("text-sm", isSelected ? "text-cyan-400 font-medium" : "text-slate-300")}>
+                          {c.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
+            {settings.surfModeCampaignIds.length > 0 && (
+              <div className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-4 py-2">
+                <p className="text-xs text-cyan-400">
+                  Surf Mode aktiv på {settings.surfModeCampaignIds.length} kampanj{settings.surfModeCampaignIds.length > 1 ? "er" : ""}
+                </p>
+              </div>
+            )}
           </div>
           <SettingField
             label="Surf Interval"

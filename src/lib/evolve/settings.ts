@@ -13,6 +13,7 @@ export interface EvolveSettings {
   zombieCostCapDiscount: number;
   maxAdSetsPerCampaign: number;
   surfModeEnabled: boolean;
+  surfModeCampaignIds: string[];
   surfIntervalHours: number;
   graveyardCampaignId: string | null;
 }
@@ -28,6 +29,7 @@ const DEFAULTS: EvolveSettings = {
   zombieCostCapDiscount: 0.20,
   maxAdSetsPerCampaign: 5,
   surfModeEnabled: false,
+  surfModeCampaignIds: [],
   surfIntervalHours: 4,
   graveyardCampaignId: null,
 };
@@ -54,6 +56,7 @@ export async function getEvolveSettings(): Promise<EvolveSettings> {
     zombieCostCapDiscount: row.zombieCostCapDiscount,
     maxAdSetsPerCampaign: row.maxAdSetsPerCampaign,
     surfModeEnabled: row.surfModeEnabled,
+    surfModeCampaignIds: row.surfModeCampaignIds ? JSON.parse(row.surfModeCampaignIds) : [],
     surfIntervalHours: row.surfIntervalHours,
     graveyardCampaignId: row.graveyardCampaignId || null,
   };
