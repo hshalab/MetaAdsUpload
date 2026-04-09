@@ -33,11 +33,10 @@ export async function GET(request: NextRequest) {
 
     const settings = await getEvolveSettings();
 
-    // Fetch all data in parallel
-    const [campaigns, adsets, ads, insightsData, adInsightsData] = await Promise.all([
+    // Fetch campaigns, adsets, insights in parallel
+    const [campaigns, adsets, insightsData, adInsightsData] = await Promise.all([
       getCampaigns(200),
       getAdSets(undefined, 500),
-      getAds(undefined, 500),
       getInsights({
         level: "adset",
         dateRange: { since, until },
@@ -58,6 +57,12 @@ export async function GET(request: NextRequest) {
         .filter((c) => c.status === "ACTIVE" && c.id !== settings.graveyardCampaignId)
         .map((c) => c.id)
     );
+
+    // Fetch ads per active campaign (avoids 500-limit issue with account-level query)
+    const adsPerCampaign = await Promise.all(
+      Array.from(activeCampaignIds).map((cid) => getAds(cid, 500))
+    );
+    const ads = adsPerCampaign.flat();
 
     // Build insights lookup by adset_id
     const insightsMap = new Map<string, {
@@ -145,7 +150,6 @@ export async function GET(request: NextRequest) {
       spend: number; roas: number; purchases: number; cpa: number;
     }>>();
     for (const ad of ads) {
-      if (!activeCampaignIds.has(ad.campaign_id)) continue;
       const metrics = adInsightsMap.get(ad.id) || { spend: 0, roas: 0, purchases: 0, purchaseValue: 0, cpa: 0 };
       const existing = adsByAdset.get(ad.adset_id) || [];
       existing.push({
