@@ -14,6 +14,7 @@ export interface EvolveSettings {
   maxAdSetsPerCampaign: number;
   surfModeEnabled: boolean;
   surfIntervalHours: number;
+  graveyardCampaignId: string | null;
 }
 
 const DEFAULTS: EvolveSettings = {
@@ -28,6 +29,7 @@ const DEFAULTS: EvolveSettings = {
   maxAdSetsPerCampaign: 5,
   surfModeEnabled: false,
   surfIntervalHours: 4,
+  graveyardCampaignId: null,
 };
 
 export async function getEvolveSettings(): Promise<EvolveSettings> {
@@ -53,6 +55,7 @@ export async function getEvolveSettings(): Promise<EvolveSettings> {
     maxAdSetsPerCampaign: row.maxAdSetsPerCampaign,
     surfModeEnabled: row.surfModeEnabled,
     surfIntervalHours: row.surfIntervalHours,
+    graveyardCampaignId: row.graveyardCampaignId || null,
   };
 }
 

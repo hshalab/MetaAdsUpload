@@ -29,6 +29,7 @@ interface AdsetInfo {
   status: string;
   daily_budget?: string;
   bid_strategy?: string;
+  targeting?: Record<string, unknown>;
 }
 
 interface AdInfo {
@@ -130,19 +131,34 @@ export function auditZombieCampaign(
 ): AuditFinding[] {
   const findings: AuditFinding[] = [];
 
-  const zombieCampaigns = campaigns.filter((c) =>
-    c.status === "ACTIVE" &&
-    (c.name.toLowerCase().includes("zombie") ||
-     c.name.toLowerCase().includes("graveyard") ||
-     c.name.toLowerCase().includes("grave"))
-  );
+  // Prefer configured graveyard campaign; fall back to name matching
+  let zombieCampaigns: CampaignInfo[];
+  if (settings.graveyardCampaignId) {
+    zombieCampaigns = campaigns.filter((c) => c.id === settings.graveyardCampaignId);
+    if (zombieCampaigns.length === 0) {
+      findings.push({
+        category: "zombie",
+        severity: "fail",
+        title: "Konfigurerad Graveyard-kampanj hittades inte",
+        description: "Kampanjen som valts i Evolve Settings kunde inte hittas. Kontrollera inställningarna.",
+      });
+      return findings;
+    }
+  } else {
+    zombieCampaigns = campaigns.filter((c) =>
+      c.status === "ACTIVE" &&
+      (c.name.toLowerCase().includes("zombie") ||
+       c.name.toLowerCase().includes("graveyard") ||
+       c.name.toLowerCase().includes("grave"))
+    );
+  }
 
   if (zombieCampaigns.length === 0) {
     findings.push({
       category: "zombie",
       severity: "warning",
-      title: "No Zombie campaign to audit",
-      description: "Create a Zombie/Graveyard campaign to audit its configuration.",
+      title: "Ingen Graveyard-kampanj konfigurerad",
+      description: "Gå till Evolve KPI Settings och välj din Graveyard-kampanj, eller skapa en CBO-kampanj med cost cap.",
     });
     return findings;
   }
@@ -192,16 +208,36 @@ export function auditZombieCampaign(
       }
     }
 
-    // Check total ads in zombie
+    // Graveyard ad set count — CBO + cost cap handles distribution automatically,
+    // so number of ad sets doesn't matter. Just report status.
+    const activeZombieAdsets = zombieAdsets.filter((a) => a.status === "ACTIVE");
     const activeZombieAds = zombieAds.filter((a) => a.status === "ACTIVE").length;
+
+    // Check that all ad sets have cost cap (not just "some")
+    const adsetsWithoutCostCap = activeZombieAdsets.filter((a) =>
+      a.bid_strategy !== "LOWEST_COST_WITH_BID_CAP" && a.bid_strategy !== "COST_CAP"
+    );
+    if (adsetsWithoutCostCap.length > 0) {
+      for (const adset of adsetsWithoutCostCap) {
+        findings.push({
+          category: "zombie",
+          severity: "fail",
+          title: `Graveyard ad set "${adset.name}" saknar cost cap`,
+          description: `Alla ad sets i Graveyard måste ha cost cap (${expectedCostCap.toFixed(0)} SEK). Utan cost cap riskerar du okontrollerad spend.`,
+          entityId: adset.id,
+          entityType: "adset",
+        });
+      }
+    }
+
     findings.push({
       category: "zombie",
       severity: "pass",
-      title: `Zombie has ${activeZombieAds} active ads in ${zombieAdsets.length} ad set(s)`,
-      description: `Total ads: ${zombieAds.length} (active: ${activeZombieAds})`,
+      title: `Graveyard: ${activeZombieAds} aktiva ads i ${activeZombieAdsets.length} ad set(s)`,
+      description: `CBO + cost cap styr budgeten automatiskt. Totalt: ${zombieAds.length} ads (aktiva: ${activeZombieAds}).`,
       entityId: zombieCampaign.id,
       entityType: "campaign",
-      details: { totalAds: zombieAds.length, activeAds: activeZombieAds },
+      details: { totalAds: zombieAds.length, activeAds: activeZombieAds, activeAdsets: activeZombieAdsets.length },
     });
   }
 
@@ -215,23 +251,47 @@ export function auditAdSetCount(
 ): AuditFinding[] {
   const findings: AuditFinding[] = [];
 
+  // Skip the Graveyard campaign — CBO + cost cap handles it, no ad set limit needed
+  const graveyardId = settings.graveyardCampaignId;
+  const isGraveyard = (c: CampaignInfo) =>
+    c.id === graveyardId ||
+    c.name.toLowerCase().includes("zombie") ||
+    c.name.toLowerCase().includes("graveyard") ||
+    c.name.toLowerCase().includes("grave");
+
   for (const campaign of campaigns.filter((c) => c.status === "ACTIVE")) {
+    if (isGraveyard(campaign)) continue; // Graveyard audited separately
+
     const campaignAdsets = adsets.filter((a) => a.campaign_id === campaign.id && a.status === "ACTIVE");
-    if (campaignAdsets.length > settings.maxAdSetsPerCampaign) {
+
+    // Dynamic max: Budget / Target CPA (Evolve formula)
+    // If campaign has a daily budget, use it. Otherwise fall back to settings.maxAdSetsPerCampaign
+    const dailyBudget = campaign.daily_budget ? parseFloat(campaign.daily_budget) / 100 : 0;
+    const dynamicMax = dailyBudget > 0 && settings.targetCpa > 0
+      ? Math.floor(dailyBudget / settings.targetCpa)
+      : settings.maxAdSetsPerCampaign;
+    const effectiveMax = Math.max(dynamicMax, 3); // minimum 3 ad sets
+
+    if (campaignAdsets.length > effectiveMax) {
       findings.push({
         category: "ad_count",
         severity: "warning",
-        title: `"${campaign.name}" has ${campaignAdsets.length} active ad sets`,
-        description: `Exceeds limit of ${settings.maxAdSetsPerCampaign}. Too many ad sets can dilute budget and slow learning.`,
+        title: `"${campaign.name}" har ${campaignAdsets.length} aktiva ad sets`,
+        description: dailyBudget > 0
+          ? `Budget ${dailyBudget.toFixed(0)} SEK / ${settings.targetCpa} SEK CPA = max ~${effectiveMax} ad sets. ${campaignAdsets.length} ad sets sprider budgeten för tunt.`
+          : `Över gränsen på ${effectiveMax}. Formel: Budget / Target CPA = max ad sets.`,
         entityId: campaign.id,
         entityType: "campaign",
+        details: { dailyBudget, targetCpa: settings.targetCpa, dynamicMax: effectiveMax, actual: campaignAdsets.length },
       });
     } else {
       findings.push({
         category: "ad_count",
         severity: "pass",
         title: `"${campaign.name}": ${campaignAdsets.length} ad sets`,
-        description: `Within ${settings.maxAdSetsPerCampaign} limit.`,
+        description: dailyBudget > 0
+          ? `Inom gränsen (${dailyBudget.toFixed(0)} SEK / ${settings.targetCpa} SEK CPA = max ~${effectiveMax}).`
+          : `Inom gränsen på ${effectiveMax}.`,
         entityId: campaign.id,
         entityType: "campaign",
       });
@@ -349,6 +409,44 @@ export function auditBudgetDistribution(
       severity: "pass",
       title: `Total daily budget: ${totalBudget.toFixed(0)} SEK across ${adsets.filter((a) => a.status === "ACTIVE").length} ad sets`,
       description: `Across ${activeCampaigns.length} active campaigns.`,
+    });
+  }
+
+  return findings;
+}
+
+export function auditCustomerExclusion(
+  adsets: AdsetInfo[],
+  settings: EvolveSettings
+): AuditFinding[] {
+  const findings: AuditFinding[] = [];
+
+  // Check if any active prospecting ad sets have custom audience exclusions
+  const activeAdsets = adsets.filter((a) => a.status === "ACTIVE");
+
+  // Look for custom audience exclusions in targeting
+  let hasExclusion = false;
+  for (const adset of activeAdsets) {
+    const targeting = adset.targeting as Record<string, unknown> | undefined;
+    if (targeting?.exclusions || targeting?.excluded_custom_audiences) {
+      hasExclusion = true;
+      break;
+    }
+  }
+
+  if (!hasExclusion && activeAdsets.length > 0) {
+    findings.push({
+      category: "structure",
+      severity: "warning",
+      title: "Ingen customer exclusion hittad",
+      description: "Med hög återköpsfrekvens bör du excluda befintliga kunder från prospecting-kampanjer. Skapa en Custom Audience av köpare (180 dagar) och lägg som exclusion på dina ad sets.",
+    });
+  } else if (hasExclusion) {
+    findings.push({
+      category: "structure",
+      severity: "pass",
+      title: "Customer exclusion aktiv",
+      description: "Ad sets har custom audience exclusions konfigurerade.",
     });
   }
 

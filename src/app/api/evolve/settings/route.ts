@@ -43,6 +43,7 @@ export async function PUT(request: NextRequest) {
       maxAdSetsPerCampaign: body.maxAdSetsPerCampaign ?? current.maxAdSetsPerCampaign,
       surfModeEnabled: body.surfModeEnabled ?? current.surfModeEnabled,
       surfIntervalHours: body.surfIntervalHours ?? current.surfIntervalHours,
+      graveyardCampaignId: body.graveyardCampaignId !== undefined ? body.graveyardCampaignId : current.graveyardCampaignId,
       updatedAt: new Date(),
     };
 

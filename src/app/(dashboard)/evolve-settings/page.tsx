@@ -17,6 +17,13 @@ interface Settings {
   maxAdSetsPerCampaign: number;
   surfModeEnabled: boolean;
   surfIntervalHours: number;
+  graveyardCampaignId: string | null;
+}
+
+interface Campaign {
+  id: string;
+  name: string;
+  status: string;
 }
 
 function SettingField({
@@ -58,16 +65,24 @@ function SettingField({
 
 export default function EvolveSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/evolve/settings");
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
+      const [settingsRes, campaignsRes] = await Promise.all([
+        fetch("/api/evolve/settings"),
+        fetch("/api/meta/campaigns"),
+      ]);
+      if (!settingsRes.ok) throw new Error("Failed to fetch settings");
+      const data = await settingsRes.json();
       setSettings(data);
+      if (campaignsRes.ok) {
+        const campData = await campaignsRes.json();
+        setCampaigns(campData.data || []);
+      }
     } catch {
       toast.error("Failed to load settings");
     } finally {
@@ -226,12 +241,40 @@ export default function EvolveSettingsPage() {
 
       {/* Zombie Config */}
       <div className="rounded-xl border border-white/5 bg-[#111827] p-6">
-        <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-1">Zombie Campaign</h2>
-        <p className="text-xs text-slate-500 mb-4">Settings for the Graveyard / Zombie CBO campaign</p>
+        <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-1">Graveyard / Zombie Campaign</h2>
+        <p className="text-xs text-slate-500 mb-4">Välj din Graveyard-kampanj och konfigurera cost cap. Annonser som flyttas hit dupliceras med post-ID så att all engagement (likes, kommentarer) bevaras.</p>
         <div className="divide-y divide-white/5">
+          {/* Campaign selector */}
+          <div className="flex items-center justify-between gap-4 py-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white">Graveyard Campaign</p>
+              <p className="text-xs text-slate-500 mt-0.5">CBO-kampanjen med cost cap dit spend winners och losers flyttas</p>
+            </div>
+            <select
+              value={settings.graveyardCampaignId || ""}
+              onChange={(e) => setSettings({ ...settings, graveyardCampaignId: e.target.value || null })}
+              className="w-64 rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-white [color-scheme:dark] focus:border-cyan-500/50 focus:outline-none transition-colors"
+            >
+              <option value="">Välj kampanj...</option>
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.status !== "ACTIVE" ? `(${c.status})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          {settings.graveyardCampaignId && (
+            <div className="py-3">
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2.5">
+                <p className="text-xs text-emerald-400">
+                  Graveyard kopplad: annonser som flyttas dit pausas i CBO → dupliceras med post-ID till Graveyard automatiskt.
+                </p>
+              </div>
+            </div>
+          )}
           <SettingField
             label="Cost Cap Discount"
-            description="% below target CPA for zombie cost cap (0.20 = 20% below)"
+            description="% under target CPA för zombie cost cap (0.20 = 20% under)"
             value={settings.zombieCostCapDiscount}
             onChange={(v) => update("zombieCostCapDiscount", v)}
             step="0.05"

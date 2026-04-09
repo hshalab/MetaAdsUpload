@@ -91,10 +91,25 @@ export async function GET(request: NextRequest) {
       campaigns.filter((c) => c.status === "ACTIVE").map((c) => c.id)
     );
 
-    // Classify each ad
-    const classifiedAds = ads
+    // Find top spender per campaign (Evolve rule: never turn off top spender at KPI)
+    const filteredAds = ads
       .filter((ad) => activeCampaignIds.has(ad.campaign_id))
-      .filter((ad) => !campaignFilter || ad.campaign_id === campaignFilter)
+      .filter((ad) => !campaignFilter || ad.campaign_id === campaignFilter);
+
+    const topSpenderPerCampaign = new Map<string, string>();
+    const totalSpendPerCampaign = new Map<string, number>();
+    for (const ad of filteredAds) {
+      const spend = insightsMap.get(ad.id)?.spend || 0;
+      totalSpendPerCampaign.set(ad.campaign_id, (totalSpendPerCampaign.get(ad.campaign_id) || 0) + spend);
+      const currentTopId = topSpenderPerCampaign.get(ad.campaign_id);
+      const currentTopSpend = currentTopId ? (insightsMap.get(currentTopId)?.spend || 0) : 0;
+      if (spend > currentTopSpend) {
+        topSpenderPerCampaign.set(ad.campaign_id, ad.id);
+      }
+    }
+
+    // Classify each ad
+    const classifiedAds = filteredAds
       .map((ad) => {
         const metrics = insightsMap.get(ad.id) || {
           spend: 0, impressions: 0, reach: 0, clicks: 0,
@@ -114,10 +129,18 @@ export async function GET(request: NextRequest) {
           ? 0  // We don't have 3s data per ad in this response; will be 0
           : 0;
 
+        const isTopSpender = topSpenderPerCampaign.get(ad.campaign_id) === ad.id;
+        const campTotalSpend = totalSpendPerCampaign.get(ad.campaign_id) || 0;
+        const spendShare = campTotalSpend > 0 ? metrics.spend / campTotalSpend : 0;
+
         const { classification, recommendation } = classifyAd(
-          { spend: metrics.spend, roas: metrics.roas, cpa, purchases: metrics.purchases, ageDays },
+          { spend: metrics.spend, roas: metrics.roas, cpa, purchases: metrics.purchases, ageDays, isTopSpender, spendShare },
           settings
         );
+
+        // 3x CPA spend progress — Evolve rule: spend 3x your target CPA before judging an ad
+        const spendThreshold = settings.targetCpa * 3;
+        const spendProgress = spendThreshold > 0 ? Math.min(metrics.spend / spendThreshold, 1) : 0;
 
         return {
           id: ad.id,
@@ -133,6 +156,8 @@ export async function GET(request: NextRequest) {
           ageDays,
           classification,
           recommendation,
+          spendProgress,
+          spendThreshold,
         };
       })
       .sort((a, b) => {
@@ -154,6 +179,34 @@ export async function GET(request: NextRequest) {
       new: classifiedAds.filter((a) => a.classification === "new").length,
     };
 
+    // Per-campaign summary (CBO-level view)
+    const campaignSummaries = campaigns
+      .filter((c) => c.status === "ACTIVE")
+      .map((c) => {
+        const campAds = classifiedAds.filter((a) => a.campaignId === c.id);
+        const campSpend = campAds.reduce((s, a) => s + a.spend, 0);
+        const campRevenue = campAds.reduce((s, a) => s + a.purchaseValue, 0);
+        const campPurchases = campAds.reduce((s, a) => s + a.purchases, 0);
+        const campRoas = campSpend > 0 ? campRevenue / campSpend : 0;
+        const campCpa = campPurchases > 0 ? campSpend / campPurchases : 0;
+        const adsetCount = new Set(campAds.map((a) => a.adsetId)).size;
+        const dailyBudget = c.daily_budget ? parseFloat(String(c.daily_budget)) : 0;
+
+        return {
+          id: c.id,
+          name: c.name,
+          spend: campSpend,
+          revenue: campRevenue,
+          purchases: campPurchases,
+          roas: campRoas,
+          cpa: campCpa,
+          adCount: campAds.length,
+          adsetCount,
+          dailyBudget,
+          maxAdSets: settings.maxAdSetsPerCampaign,
+        };
+      });
+
     return NextResponse.json({
       settings: {
         targetRoas: settings.targetRoas,
@@ -169,6 +222,7 @@ export async function GET(request: NextRequest) {
         classificationCounts,
       },
       ads: classifiedAds,
+      campaignSummaries,
       dateRange: { since, until },
       campaigns: campaigns.filter((c) => c.status === "ACTIVE").map((c) => ({ id: c.id, name: c.name })),
     });

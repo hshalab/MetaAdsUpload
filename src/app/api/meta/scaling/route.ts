@@ -130,6 +130,7 @@ export async function GET(request: NextRequest) {
             dailyBudget,
             consecutiveDaysAboveTarget: 0, // Would need historical tracking
             consecutiveDaysBelowBreakeven: 0,
+            consecutiveDaysBelowTarget: 0,
           },
           settings
         );

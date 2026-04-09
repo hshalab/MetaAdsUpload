@@ -29,6 +29,13 @@
       "when": 1775591856741,
       "tag": "0003_faithful_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1775667328243,
+      "tag": "0004_hot_wasp",
+      "breakpoints": true
     }
   ]
 }

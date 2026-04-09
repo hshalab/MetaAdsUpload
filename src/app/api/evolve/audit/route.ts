@@ -13,6 +13,7 @@ import {
   auditAdSetCount,
   auditFrequency,
   auditBudgetDistribution,
+  auditCustomerExclusion,
   type AuditFinding,
 } from "@/lib/evolve/audit";
 import { format, subDays } from "date-fns";
@@ -87,6 +88,17 @@ export async function POST(request: NextRequest) {
       status: a.status,
     }));
 
+    // Cast adsets with targeting for exclusion audit
+    const adsetInfosWithTargeting = adsets.map((a) => ({
+      id: a.id,
+      name: a.name,
+      campaign_id: a.campaign_id,
+      status: a.status,
+      daily_budget: a.daily_budget,
+      bid_strategy: a.bid_strategy,
+      targeting: a.targeting,
+    }));
+
     // Run all audit checks
     const allFindings: AuditFinding[] = [
       ...auditCampaignStructure(campaignInfos, settings),
@@ -94,6 +106,7 @@ export async function POST(request: NextRequest) {
       ...auditAdSetCount(campaignInfos, adsetInfos, settings),
       ...auditFrequency(adsetMetrics, adsetInfos, settings),
       ...auditBudgetDistribution(campaignInfos, adsetInfos),
+      ...auditCustomerExclusion(adsetInfosWithTargeting, settings),
     ];
 
     // Save to DB

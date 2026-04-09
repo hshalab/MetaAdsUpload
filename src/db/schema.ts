@@ -1,4 +1,4 @@
-import { pgTable, text, integer, real, boolean, timestamp, jsonb, serial, varchar, date, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, boolean, timestamp, jsonb, serial, varchar, date, index, uniqueIndex, unique } from "drizzle-orm/pg-core";
 
 // ─── Users & Auth ────────────────────────────────────────────────────────────
 
@@ -428,6 +428,7 @@ export const evolveSettings = pgTable("evolve_settings", {
   maxAdSetsPerCampaign: integer("max_ad_sets_per_campaign").default(5).notNull(),
   surfModeEnabled: boolean("surf_mode_enabled").default(false).notNull(),
   surfIntervalHours: integer("surf_interval_hours").default(4).notNull(),
+  graveyardCampaignId: text("graveyard_campaign_id"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -496,4 +497,55 @@ export const shareLinks = pgTable("share_links", {
 }, (table) => [
   index("sl_token_idx").on(table.token),
   index("sl_assignment_idx").on(table.assignmentId),
+]);
+
+// ─── BookKeeper: Settings (key-value store) ─────────────────────────────────
+
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── BookKeeper: Vouchers (SIE import + Fortnox sync) ───────────────────────
+
+export const vouchers = pgTable("vouchers", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  series: text("series").notNull(),
+  number: integer("number").notNull(),
+  date: date("date").notNull(),
+  description: text("description"),
+  fortnoxId: text("fortnox_id"),
+  syncError: text("sync_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique("vouchers_series_number_date_uniq").on(table.series, table.number, table.date),
+  index("vouchers_fortnox_id_idx").on(table.fortnoxId),
+]);
+
+export const voucherLines = pgTable("voucher_lines", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  voucherId: text("voucher_id").notNull(),
+  account: text("account").notNull(),
+  amount: real("amount").notNull(),
+  description: text("description"),
+}, (table) => [
+  index("voucher_lines_voucher_id_idx").on(table.voucherId),
+]);
+
+// ─── BookKeeper: Bank Transactions ──────────────────────────────────────────
+
+export const bankTransactions = pgTable("bank_transactions", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bankDate: date("bank_date").notNull(),
+  description: text("description").notNull(),
+  amount: real("amount").notNull(),
+  balance: real("balance"),
+  bankFormat: text("bank_format"),
+  matchedVoucherId: text("matched_voucher_id"),
+  imported: boolean("imported").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("bank_tx_date_idx").on(table.bankDate),
+  index("bank_tx_matched_idx").on(table.matchedVoucherId),
 ]);

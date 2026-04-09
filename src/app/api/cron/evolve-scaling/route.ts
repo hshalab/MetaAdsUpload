@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
       let actionLabel: string;
       let newDaysAbove = daysAbove;
       let newDaysBelow = daysBelow;
+      let newDaysBelowTarget = 0;
       let newStatus: string;
 
       if (settings.surfModeEnabled) {
@@ -91,10 +92,14 @@ export async function POST(request: NextRequest) {
         if (metrics.roas >= settings.targetRoas) {
           newDaysAbove = daysAbove + 1;
           newDaysBelow = 0;
+          newDaysBelowTarget = 0;
         } else if (metrics.roas < settings.breakevenRoas) {
           newDaysBelow = daysBelow + 1;
           newDaysAbove = 0;
+          newDaysBelowTarget = 0;
         } else {
+          // Between breakeven and target
+          newDaysBelowTarget += 1;
           newDaysAbove = 0;
           newDaysBelow = 0;
         }
@@ -106,6 +111,7 @@ export async function POST(request: NextRequest) {
             dailyBudget,
             consecutiveDaysAboveTarget: newDaysAbove,
             consecutiveDaysBelowBreakeven: newDaysBelow,
+            consecutiveDaysBelowTarget: newDaysBelowTarget,
           },
           settings
         );
