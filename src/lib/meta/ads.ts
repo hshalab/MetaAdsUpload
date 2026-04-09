@@ -126,6 +126,31 @@ export async function updateAd(adId: string, params: Record<string, unknown>) {
   return metaApi(`/${adId}`, { method: "POST", body: params });
 }
 
+/**
+ * Create an ad using an existing post ID (object_story_id).
+ * This preserves all engagement (likes, comments, shares) from the original ad.
+ * Used when moving ads to Graveyard campaign.
+ */
+export async function createAdWithPostId(params: {
+  adset_id: string;
+  name: string;
+  postId: string;
+  status?: string;
+}) {
+  const form = new FormData();
+  form.append("adset_id", params.adset_id);
+  form.append("name", params.name);
+  form.append("status", params.status || "ACTIVE");
+  form.append("creative", JSON.stringify({
+    object_story_id: params.postId,
+  }));
+
+  return metaApi<{ id: string }>(`/${await getAdAccountId()}/ads`, {
+    method: "POST",
+    body: form,
+  });
+}
+
 export async function getAdPostId(adId: string): Promise<string | null> {
   try {
     const data = await metaApi<{ effective_object_story_id?: string }>(
