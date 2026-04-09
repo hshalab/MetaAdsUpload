@@ -26,6 +26,8 @@ import {
   History,
   BarChart3,
   ClipboardCheck,
+  Sun,
+  Building2,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -50,7 +52,9 @@ const navSections = [
   {
     label: "EVOLVE",
     items: [
-      { href: "/ad-analyzer", label: "Ad Analyzer", icon: BarChart3 },
+      { href: "/daily-summary", label: "Daglig Sammanfattning", icon: Sun },
+      { href: "/adset-analyzer", label: "Ad Set Analyzer", icon: BarChart3 },
+      { href: "/ad-analyzer", label: "Creative Analyzer", icon: Eye },
       { href: "/audit", label: "Audit", icon: ClipboardCheck },
       { href: "/evolve-settings", label: "KPI Settings", icon: SlidersHorizontal },
     ],
@@ -62,6 +66,13 @@ const navSections = [
       { href: "/my-work", label: "My Work", icon: ClipboardList },
       { href: "/review", label: "Review", icon: Eye },
       { href: "/timer", label: "Timer", icon: Timer },
+    ],
+  },
+  {
+    label: "BOKFÖRING",
+    items: [
+      { href: "/bank", label: "Bankimport", icon: Building2 },
+      { href: "/settings?tab=import", label: "SIE Import", icon: FileText },
     ],
   },
   {
