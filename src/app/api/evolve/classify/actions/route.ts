@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { updateAd, getAdPostId, createAdWithPostId } from "@/lib/meta/ads";
-import { createAdSet, updateAdSet } from "@/lib/meta/adsets";
+import { createAdSet } from "@/lib/meta/adsets";
 import { metaApi } from "@/lib/meta/client";
 import { getEvolveSettings } from "@/lib/evolve/settings";
 
@@ -90,11 +90,10 @@ export async function POST(request: NextRequest) {
           optimization_goal: sourceAdset.optimization_goal,
           billing_event: sourceAdset.billing_event,
           bid_strategy: "LOWEST_COST_WITH_BID_CAP",
+          bid_amount: costCapValue,
           status: "ACTIVE",
           ...(sourceAdset.promoted_object && { promoted_object: sourceAdset.promoted_object }),
         });
-
-        await updateAdSet(newAdset.id, { bid_amount: costCapValue });
 
         // 4. Pause the original ad
         await updateAd(adId, { status: "PAUSED" });

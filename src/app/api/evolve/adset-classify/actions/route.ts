@@ -83,12 +83,10 @@ export async function POST(request: NextRequest) {
           optimization_goal: sourceAdset.optimization_goal,
           billing_event: sourceAdset.billing_event,
           bid_strategy: "LOWEST_COST_WITH_BID_CAP",
+          bid_amount: costCapValue,
           status: "ACTIVE",
           ...(sourceAdset.promoted_object && { promoted_object: sourceAdset.promoted_object }),
         });
-
-        // Set the bid/cost cap after creation (bid_amount in cents)
-        await updateAdSet(newAdset.id, { bid_amount: costCapValue });
 
         // 4. For each ad: get post ID, create in graveyard ad set
         const results: string[] = [];

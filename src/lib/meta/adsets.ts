@@ -35,6 +35,7 @@ export async function createAdSet(params: {
   optimization_goal: string;
   billing_event: string;
   bid_strategy?: string;
+  bid_amount?: number;
   start_time?: string;
   end_time?: string;
   status?: string;
