@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { getAds, getAdPostId, createAdWithPostId } from "@/lib/meta/ads";
-import { updateAdSet, getAdSets } from "@/lib/meta/adsets";
+import { updateAdSet, createAdSet } from "@/lib/meta/adsets";
+import { metaApi } from "@/lib/meta/client";
 import { getEvolveSettings } from "@/lib/evolve/settings";
 
 export const dynamic = "force-dynamic";
@@ -60,17 +61,36 @@ export async function POST(request: NextRequest) {
           }, { status: 400 });
         }
 
-        // 2. Find target adset in graveyard
-        const graveyardAdsets = await getAdSets(settings.graveyardCampaignId);
-        const targetAdset = graveyardAdsets.find((a) => a.status === "ACTIVE") || graveyardAdsets[0];
+        // 2. Fetch the source ad set's targeting + settings to copy
+        const sourceAdset = await metaApi<{
+          name: string;
+          targeting: Record<string, unknown>;
+          optimization_goal: string;
+          billing_event: string;
+          promoted_object?: Record<string, unknown>;
+        }>(`/${adsetId}`, {
+          params: { fields: "name,targeting,optimization_goal,billing_event,promoted_object" },
+        });
 
-        if (!targetAdset) {
-          return NextResponse.json({
-            error: "Ingen ad set hittad i Graveyard-kampanjen. Skapa en ad set med cost cap först.",
-          }, { status: 400 });
-        }
+        // 3. Create a NEW ad set in Graveyard with cost cap = targetCPA × 0.80
+        const costCapValue = Math.round(settings.targetCpa * (1 - settings.zombieCostCapDiscount) * 100); // in cents
+        const gyAdsetName = `[GY] ${sourceAdset.name}`;
 
-        // 3. For each ad: get post ID, create in graveyard
+        const newAdset = await createAdSet({
+          campaign_id: settings.graveyardCampaignId,
+          name: gyAdsetName,
+          targeting: sourceAdset.targeting,
+          optimization_goal: sourceAdset.optimization_goal,
+          billing_event: sourceAdset.billing_event,
+          bid_strategy: "LOWEST_COST_WITH_BID_CAP",
+          status: "ACTIVE",
+          ...(sourceAdset.promoted_object && { promoted_object: sourceAdset.promoted_object }),
+        });
+
+        // Set the bid/cost cap after creation (bid_amount in cents)
+        await updateAdSet(newAdset.id, { bid_amount: costCapValue });
+
+        // 4. For each ad: get post ID, create in graveyard ad set
         const results: string[] = [];
         const errors: string[] = [];
 
@@ -83,8 +103,8 @@ export async function POST(request: NextRequest) {
             }
 
             const result = await createAdWithPostId({
-              adset_id: targetAdset.id,
-              name: `[GY] ${ad.name}`,
+              adset_id: newAdset.id,
+              name: ad.name,
               postId,
               status: "ACTIVE",
             });
@@ -96,10 +116,10 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 4. Pause the entire ad set
+        // 5. Pause the original ad set
         await updateAdSet(adsetId, { status: "PAUSED" });
 
-        actionDescription = `Ad set pausad. ${results.length}/${activeAds.length} ads duplicerade till Graveyard (${targetAdset.name}).`;
+        actionDescription = `Ad set pausad → nytt GY ad set "${gyAdsetName}" (cost cap ${costCapValue / 100} kr). ${results.length}/${activeAds.length} ads duplicerade.`;
         if (errors.length > 0) {
           actionDescription += ` Fel: ${errors.join("; ")}`;
         }
