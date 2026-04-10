@@ -9,6 +9,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface DailyStat {
   id: number;
@@ -96,7 +97,9 @@ export default function ShopifyPage() {
       // Refresh data after sync
       await fetchData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sync failed");
+      const msg = err instanceof Error ? err.message : "Sync failed";
+      toast.error(`Shopify sync misslyckades: ${msg}`);
+      console.error("Shopify sync error:", err);
     } finally {
       setSyncing(false);
     }
