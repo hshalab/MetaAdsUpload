@@ -74,6 +74,9 @@ interface SummaryData {
     roas: number;
     cpa: number;
     date: string;
+    ncRoas: number | null;
+    newCustomerRevenue: number | null;
+    newCustomerPct: number | null;
   };
   week: {
     spend: number;
@@ -218,6 +221,48 @@ export default function DailySummaryPage() {
           </div>
         ))}
       </div>
+
+      {/* ncROAS Cards */}
+      {data.yesterday.ncRoas !== null && (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className={cn(
+            "rounded-xl border p-4",
+            data.yesterday.ncRoas >= data.settings.targetRoas
+              ? "border-emerald-500/20 bg-emerald-500/5"
+              : "border-red-500/20 bg-red-500/5"
+          )}>
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider">ncROAS igår</span>
+            <div className={cn(
+              "text-2xl font-bold mt-1",
+              data.yesterday.ncRoas >= data.settings.targetRoas ? "text-emerald-400" : "text-red-400"
+            )}>
+              {data.yesterday.ncRoas.toFixed(2)}x
+            </div>
+            <div className="text-[10px] text-slate-600 mt-0.5">New Customer ROAS (Shopify)</div>
+          </div>
+
+          <div className="rounded-xl border border-white/5 bg-[#111827] p-4">
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Nykund-revenue igår</span>
+            <div className="text-2xl font-bold mt-1 text-emerald-400">
+              {(data.yesterday.newCustomerRevenue ?? 0).toLocaleString("sv-SE", { maximumFractionDigits: 0 })} SEK
+            </div>
+            <div className="text-[10px] text-slate-600 mt-0.5">
+              Ny-kund {(data.yesterday.newCustomerPct ?? 0).toFixed(0)}% av total
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/5 bg-[#111827] p-4">
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Blended vs ncROAS</span>
+            <div className="text-xl font-bold mt-1 text-white">
+              {data.yesterday.roas.toFixed(2)}x <span className="text-slate-500 text-sm">→</span>{" "}
+              <span className={data.yesterday.ncRoas >= data.settings.targetRoas ? "text-emerald-400" : "text-red-400"}>
+                {data.yesterday.ncRoas.toFixed(2)}x
+              </span>
+            </div>
+            <div className="text-[10px] text-slate-600 mt-0.5">Blended → ncROAS</div>
+          </div>
+        </div>
+      )}
 
       {/* Campaign-Level CBO Budget Recommendations */}
       <div className="space-y-3">

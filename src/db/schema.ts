@@ -281,6 +281,8 @@ export const insights = pgTable("insights", {
   holdRate: real("hold_rate").default(0),
   breakdownKey: text("breakdown_key"), // e.g., "age:25-34" or "placement:feed"
   breakdownValue: text("breakdown_value"),
+  newCustomerRevenue: real("new_customer_revenue"), // Shopify new-customer revenue matched to same day
+  ncRoas: real("nc_roas"), // newCustomerRevenue / spend
   syncedAt: timestamp("synced_at").defaultNow().notNull(),
 }, (table) => [
   index("insights_entity_date_idx").on(table.entityId, table.entityType, table.dateStart),
@@ -555,6 +557,11 @@ export const creativeRoadmap = pgTable("creative_roadmap", {
   whatWeLearned: text("what_we_learned"),
   metaAdId: text("meta_ad_id"),
   assignmentId: text("assignment_id"),
+  adType: text("ad_type"), // "ideation" | "iteration"
+  breakthroughMemo: text("breakthrough_memo"),
+  linkToBrief: text("link_to_brief"),
+  linkToAd: text("link_to_ad"),
+  upvotes: integer("upvotes").default(0).notNull(),
   lastClassification: text("last_classification"),
   lastSpend: real("last_spend"),
   lastRoas: real("last_roas"),
@@ -567,3 +574,112 @@ export const creativeRoadmap = pgTable("creative_roadmap", {
   index("creative_roadmap_meta_ad_id_idx").on(table.metaAdId),
   index("creative_roadmap_desire_id_idx").on(table.desireId),
 ]);
+
+// ─── BookKeeper: Kontoplan ──────────────────────────────────────────────────
+
+export const accounts = pgTable("accounts", {
+  number: text("number").primaryKey(), // "1930"
+  name: text("name").notNull(), // "Företagskonto"
+  sruCode: text("sru_code"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ─── BookKeeper: SIE-import ─────────────────────────────────────────────────
+
+export const sieImports = pgTable("sie_imports", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  filename: text("filename").notNull(),
+  companyName: text("company_name"),
+  fiscalYearStart: text("fiscal_year_start"),
+  fiscalYearEnd: text("fiscal_year_end"),
+  vouchersCount: integer("vouchers_count").default(0),
+  accountsCount: integer("accounts_count").default(0),
+  status: text("status").notNull().default("completed"), // "completed" | "error"
+  error: text("error"),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+});
+
+// ─── BookKeeper: Verifikationer ─────────────────────────────────────────────
+
+export const vouchers = pgTable("vouchers", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  series: text("series").notNull().default("A"), // A, B, K etc.
+  number: integer("number").notNull(),
+  date: text("date").notNull(), // YYYYMMDD or YYYY-MM-DD
+  description: text("description").notNull(),
+  sieImportId: text("sie_import_id"),
+  fortnoxId: text("fortnox_id"),
+  fortnoxStatus: text("fortnox_status").default("pending"), // pending | synced | error
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("vouchers_date_idx").on(table.date),
+  index("vouchers_series_idx").on(table.series),
+]);
+
+export const voucherLines = pgTable("voucher_lines", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  voucherId: text("voucher_id").notNull(),
+  accountNumber: text("account_number").notNull(),
+  debit: real("debit").default(0).notNull(),
+  credit: real("credit").default(0).notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("voucher_lines_voucher_id_idx").on(table.voucherId),
+  index("voucher_lines_account_idx").on(table.accountNumber),
+]);
+
+// ─── BookKeeper: AI-chatt ───────────────────────────────────────────────────
+
+export const chatSessions = pgTable("chat_sessions", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull().default("Ny konversation"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const chatMessages = pgTable("chat_messages", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  sessionId: text("session_id").notNull(),
+  role: text("role").notNull(), // "user" | "assistant"
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("chat_messages_session_idx").on(table.sessionId),
+]);
+
+// ─── Shopify ncROAS ─────────────────────────────────────────────────────────
+
+export const shopifyOrders = pgTable("shopify_orders", {
+  id: serial("id").primaryKey(),
+  shopifyOrderId: text("shopify_order_id").notNull().unique(),
+  orderDate: date("order_date").notNull(),
+  totalPrice: real("total_price").notNull(),
+  isNewCustomer: boolean("is_new_customer").notNull(),
+  customerId: text("customer_id"),
+  customerEmail: text("customer_email"),
+
+  // UTM attribution (from note_attributes)
+  utmCampaign: text("utm_campaign"),   // Meta campaign ID
+  utmAdset: text("utm_adset"),         // Meta ad set ID (utm_term)
+  utmAd: text("utm_ad"),              // Meta ad ID (utm_content)
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+
+  syncedAt: timestamp("synced_at").defaultNow().notNull(),
+}, (table) => [
+  index("shopify_orders_date_idx").on(table.orderDate),
+  index("shopify_orders_adset_idx").on(table.utmAdset),
+  index("shopify_orders_campaign_idx").on(table.utmCampaign),
+]);
+
+export const shopifyDailyStats = pgTable("shopify_daily_stats", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull().unique(),
+  totalOrders: integer("total_orders").default(0),
+  totalRevenue: real("total_revenue").default(0),
+  newCustomerOrders: integer("new_customer_orders").default(0),
+  newCustomerRevenue: real("new_customer_revenue").default(0),
+  returningCustomerOrders: integer("returning_customer_orders").default(0),
+  returningCustomerRevenue: real("returning_customer_revenue").default(0),
+  syncedAt: timestamp("synced_at").defaultNow().notNull(),
+});

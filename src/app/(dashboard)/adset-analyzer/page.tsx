@@ -47,6 +47,8 @@ interface ClassifiedAdset {
   spendThreshold: number;
   classification: Classification;
   recommendation: string;
+  ncRoas: number | null;
+  ncRevenue: number;
 }
 
 interface AdsetAnalyzerData {
@@ -290,6 +292,8 @@ export default function AdSetAnalyzerPage() {
                       <Metric label="Spend" value={`${adset.spend.toFixed(0)}`} />
                       <Metric label="ROAS" value={`${adset.roas.toFixed(2)}x`}
                         color={adset.roas >= data.settings.targetRoas ? "text-emerald-400" : adset.roas >= data.settings.breakevenRoas ? "text-amber-400" : adset.spend > 0 ? "text-red-400" : "text-slate-500"} />
+                      <Metric label="ncROAS" value={adset.ncRoas != null ? `${adset.ncRoas.toFixed(2)}x` : "—"}
+                        color={adset.ncRoas != null && adset.ncRoas >= data.settings.targetRoas ? "text-emerald-400" : adset.ncRoas != null && adset.ncRoas >= data.settings.breakevenRoas ? "text-amber-400" : adset.ncRoas != null ? "text-red-400" : "text-slate-600"} />
                       <Metric label="CPA" value={adset.cpa > 0 ? adset.cpa.toFixed(0) : "-"}
                         color={adset.cpa > 0 && adset.cpa <= data.settings.targetCpa ? "text-emerald-400" : adset.cpa > 0 ? "text-red-400" : "text-slate-500"} />
                       <Metric label="Köp" value={String(adset.purchases)} />

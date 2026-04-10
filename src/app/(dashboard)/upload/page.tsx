@@ -36,6 +36,7 @@ import {
   Globe,
   Crosshair,
   Pencil,
+  Route,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -238,6 +239,10 @@ export default function UploadPage() {
   const [pixelId, setPixelId] = useState("");
   const [loadingConnection, setLoadingConnection] = useState(true);
 
+  // Concept linking
+  const [linkableConcepts, setLinkableConcepts] = useState<Array<{ id: string; conceptName: string; batchNumber: number | null; upvotes: number }>>([]);
+  const [selectedConceptId, setSelectedConceptId] = useState("");
+
   // New adset config
   const [newAdsetName, setNewAdsetName] = useState("");
   const [newAdsetBudget, setNewAdsetBudget] = useState(50);
@@ -359,6 +364,11 @@ export default function UploadPage() {
           if (!prefs.pageId && active?.activePageId) setSelectedPageId(active.activePageId);
           if (!prefs.pixelId && active?.pixelId) setPixelId(active.pixelId);
         }
+        // Fetch linkable concepts
+        fetch("/api/strategy/roadmap/linkable")
+          .then((r) => (r.ok ? r.json() : []))
+          .then((d) => setLinkableConcepts(Array.isArray(d) ? d : []))
+          .catch(() => {});
       } catch {
         toast.error("Failed to load data");
       } finally {
@@ -1133,6 +1143,19 @@ export default function UploadPage() {
       }
     }
 
+    // Link concept if selected
+    if (selectedConceptId) {
+      const completedJobs = jobs.filter((j) => j.status === "completed" && j.result?.adId);
+      const firstAdId = completedJobs[0]?.result?.adId;
+      if (firstAdId) {
+        fetch(`/api/strategy/roadmap/${selectedConceptId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ metaAdId: firstAdId, status: "uploaded" }),
+        }).catch(() => {});
+      }
+    }
+
     setIsUploading(false);
     toast.success(`Bearbetade ${pending.length + (adsetMode === "new" ? 1 : 0)} fil(er)`);
   };
@@ -1484,6 +1507,26 @@ export default function UploadPage() {
             </select>
           )}
         </div>
+      </div>
+
+      {/* ─── Concept Link ─── */}
+      <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+        <div className="flex items-center gap-2 mb-2.5">
+          <Route className="h-4 w-4 text-indigo-400" />
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Koppla till koncept</h3>
+        </div>
+        <select
+          value={selectedConceptId}
+          onChange={(e) => setSelectedConceptId(e.target.value)}
+          className={inputCls}
+        >
+          <option value="">Inget koncept (valfritt)</option>
+          {linkableConcepts.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.conceptName}{c.batchNumber ? ` (Batch #${c.batchNumber})` : ""}{c.upvotes > 0 ? ` +${c.upvotes}` : ""}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* ─── Page + Pixel Row ─── */}

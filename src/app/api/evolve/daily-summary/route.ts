@@ -8,7 +8,7 @@ import { getAdSets } from "@/lib/meta/adsets";
 import { getEvolveSettings } from "@/lib/evolve/settings";
 import { classifyAd } from "@/lib/evolve/classifier";
 import { format, subDays } from "date-fns";
-import { desc, gte } from "drizzle-orm";
+import { desc, gte, eq, and, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -222,6 +222,29 @@ export async function GET(request: NextRequest) {
       new: classifiedAds.filter((a) => a.classification === "new").length,
     };
 
+    // ── ncROAS from Shopify daily stats ──
+    let ncRoas: number | null = null;
+    let newCustomerRevenue: number | null = null;
+    let newCustomerPct: number | null = null;
+
+    try {
+      const yesterdayShopify = await db
+        .select()
+        .from(schema.shopifyDailyStats)
+        .where(eq(schema.shopifyDailyStats.date, yesterday))
+        .limit(1);
+
+      if (yesterdayShopify.length > 0) {
+        const shopDay = yesterdayShopify[0];
+        newCustomerRevenue = shopDay.newCustomerRevenue ?? 0;
+        const totalShopRevenue = shopDay.totalRevenue ?? 0;
+        newCustomerPct = totalShopRevenue > 0 ? (newCustomerRevenue / totalShopRevenue) * 100 : 0;
+        ncRoas = yesterdaySpend > 0 ? newCustomerRevenue / yesterdaySpend : null;
+      }
+    } catch {
+      // shopify_daily_stats table might not exist yet — ignore
+    }
+
     return NextResponse.json({
       yesterday: {
         spend: yesterdaySpend,
@@ -230,6 +253,9 @@ export async function GET(request: NextRequest) {
         roas: yesterdayRoas,
         cpa: yesterdayCpa,
         date: yesterday,
+        ncRoas,
+        newCustomerRevenue,
+        newCustomerPct,
       },
       week: {
         spend: weekSpend,

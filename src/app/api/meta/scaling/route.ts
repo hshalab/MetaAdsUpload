@@ -7,6 +7,7 @@ import { getInsights, extractPurchases, extractPurchaseValue, calculateROAS } fr
 import { getEvolveSettings } from "@/lib/evolve/settings";
 import { evaluateScalingProtocol } from "@/lib/evolve/scaling-protocol";
 import { format, subDays } from "date-fns";
+import { getAdsetNcRoas } from "@/lib/shopify/ncroas";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +109,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Fetch per-adset ncROAS from Shopify orders
+    const ncRoasMap = await getAdsetNcRoas(since, until);
+
     const enrichedAdsets = allAdsets
       .filter((adset) => statusFilter === "ALL" || adset.status === statusFilter)
       .map((adset) => {
@@ -135,6 +139,11 @@ export async function GET(request: NextRequest) {
           settings
         );
 
+        // ncROAS: per-adset new customer revenue / adset spend
+        const ncData = ncRoasMap.get(adset.id);
+        const ncRevenue = ncData?.newCustomerRevenue || 0;
+        const ncRoas = metrics.spend > 0 && ncRevenue > 0 ? ncRevenue / metrics.spend : null;
+
         return {
           id: adset.id,
           name: adset.name,
@@ -147,6 +156,8 @@ export async function GET(request: NextRequest) {
           cpa,
           zone,
           suggestion,
+          ncRoas,
+          ncRevenue,
           protocol: {
             action: protocol.action,
             reason: protocol.reason,

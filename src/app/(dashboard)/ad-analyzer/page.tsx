@@ -47,6 +47,8 @@ interface ClassifiedAd {
   ageDays: number;
   classification: Classification;
   recommendation: string;
+  ncRoas: number | null;
+  ncRevenue: number;
 }
 
 interface CampaignSummary {
@@ -112,6 +114,7 @@ interface AdSetGroup {
   spendThreshold: number;
   bestClassification: Classification;
   classificationCounts: Partial<Record<Classification, number>>;
+  ncRoas: number | null;
 }
 
 type DateMode = "preset" | "today" | "custom";
@@ -232,6 +235,9 @@ export default function AdAnalyzerPage() {
           classificationCounts[ad.classification] = (classificationCounts[ad.classification] || 0) + 1;
         }
 
+        // ncROAS: use first ad's ncRoas (same per adset)
+        const ncRoas = ads[0]?.ncRoas ?? null;
+
         return {
           adsetId,
           adsetName: ads[0]?.adsetName || "Unknown",
@@ -249,6 +255,7 @@ export default function AdAnalyzerPage() {
           spendThreshold,
           bestClassification,
           classificationCounts,
+          ncRoas,
         };
       })
       .sort((a, b) => {
@@ -489,6 +496,7 @@ export default function AdAnalyzerPage() {
                   <th className="text-center text-[10px] font-medium text-slate-500 uppercase tracking-wider px-2 py-3">Class</th>
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Spend</th>
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">ROAS</th>
+                  <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">ncROAS</th>
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">CPA</th>
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Purch.</th>
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">CTR</th>
@@ -518,7 +526,7 @@ export default function AdAnalyzerPage() {
                 })}
                 {adSetGroups.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="py-12 text-center text-slate-500">
+                    <td colSpan={12} className="py-12 text-center text-slate-500">
                       {data.ads.length === 0
                         ? "No ads found. Make sure you have active campaigns."
                         : "No ad sets in this category."}
@@ -589,6 +597,16 @@ function AdSetGroupRows({
             {group.roas.toFixed(2)}x
           </span>
         </td>
+        <td className="px-4 py-3 text-right">
+          <span className={cn(
+            "font-bold",
+            group.ncRoas != null && group.ncRoas >= settings.targetRoas ? "text-emerald-400" :
+            group.ncRoas != null && group.ncRoas >= settings.breakevenRoas ? "text-amber-400" :
+            group.ncRoas != null ? "text-red-400" : "text-slate-600"
+          )}>
+            {group.ncRoas != null ? `${group.ncRoas.toFixed(2)}x` : "—"}
+          </span>
+        </td>
         <td className="px-4 py-3 text-right text-slate-400">{group.cpa > 0 ? group.cpa.toFixed(0) : "-"}</td>
         <td className="px-4 py-3 text-right text-slate-300">{group.purchases}</td>
         <td className="px-4 py-3 text-right text-slate-400">{group.ctr.toFixed(2)}%</td>
@@ -648,6 +666,16 @@ function AdSetGroupRows({
                 ad.spend > 50 ? "text-red-400" : "text-slate-500"
               )}>
                 {ad.roas.toFixed(2)}x
+              </span>
+            </td>
+            <td className="px-4 py-2.5 text-right">
+              <span className={cn(
+                "text-xs font-bold",
+                ad.ncRoas != null && ad.ncRoas >= settings.targetRoas ? "text-emerald-400" :
+                ad.ncRoas != null && ad.ncRoas >= settings.breakevenRoas ? "text-amber-400" :
+                ad.ncRoas != null ? "text-red-400" : "text-slate-600"
+              )}>
+                {ad.ncRoas != null ? `${ad.ncRoas.toFixed(2)}x` : "—"}
               </span>
             </td>
             <td className="px-4 py-2.5 text-right text-xs text-slate-500">{ad.cpa > 0 ? ad.cpa.toFixed(0) : "-"}</td>

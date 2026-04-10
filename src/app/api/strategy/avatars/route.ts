@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -28,12 +28,36 @@ export async function GET() {
       .where(eq(schema.strategyAngles.isActive, true))
       .orderBy(asc(schema.strategyAngles.sortOrder));
 
+    // Count concepts per desire and sub-avatar
+    const desireCounts = await db
+      .select({
+        desireId: schema.creativeRoadmap.desireId,
+        count: sql<number>`count(*)`,
+      })
+      .from(schema.creativeRoadmap)
+      .where(sql`${schema.creativeRoadmap.desireId} is not null`)
+      .groupBy(schema.creativeRoadmap.desireId);
+
+    const subAvatarCounts = await db
+      .select({
+        subAvatarId: schema.creativeRoadmap.subAvatarId,
+        count: sql<number>`count(*)`,
+      })
+      .from(schema.creativeRoadmap)
+      .where(sql`${schema.creativeRoadmap.subAvatarId} is not null`)
+      .groupBy(schema.creativeRoadmap.subAvatarId);
+
+    const desireCountMap = Object.fromEntries(desireCounts.map((d) => [d.desireId, Number(d.count)]));
+    const subAvatarCountMap = Object.fromEntries(subAvatarCounts.map((s) => [s.subAvatarId, Number(s.count)]));
+
     const tree = desires.map((d) => ({
       ...d,
+      conceptCount: desireCountMap[d.id] || 0,
       subAvatars: subAvatars
         .filter((sa) => sa.desireId === d.id)
         .map((sa) => ({
           ...sa,
+          conceptCount: subAvatarCountMap[sa.id] || 0,
           angles: angles.filter((a) => a.subAvatarId === sa.id),
         })),
     }));

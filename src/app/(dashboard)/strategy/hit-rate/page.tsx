@@ -1,8 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, X } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+
+type BreakthroughItem = {
+  adId: string;
+  spend: number;
+  roas: number;
+  adName?: string;
+};
 
 type HitRateData = {
   totalTested: number;
@@ -12,12 +19,15 @@ type HitRateData = {
   weeklyTrend: { week: string; tested: number; breakthroughs: number; hitRate: number }[];
   perAuthor: { name: string; tested: number; breakthroughs: number; hitRate: number }[];
   perDesire: { name: string; tested: number; breakthroughs: number; hitRate: number }[];
+  trendDelta: number;
+  breakthroughList: BreakthroughItem[];
 };
 
 export default function HitRatePage() {
   const [data, setData] = useState<HitRateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState(3);
+  const [showBreakthroughs, setShowBreakthroughs] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -36,6 +46,9 @@ export default function HitRatePage() {
   if (loading || !data) {
     return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-cyan-400" /></div>;
   }
+
+  const TrendIcon = data.trendDelta > 1 ? TrendingUp : data.trendDelta < -1 ? TrendingDown : Minus;
+  const trendColor = data.trendDelta > 1 ? "text-emerald-400" : data.trendDelta < -1 ? "text-red-400" : "text-slate-400";
 
   return (
     <div className="space-y-6">
@@ -66,16 +79,27 @@ export default function HitRatePage() {
       <div className="grid grid-cols-4 gap-4">
         <div className="rounded-xl border border-white/10 bg-[#111827] p-4">
           <div className="text-xs text-slate-500 mb-1">Hit Rate</div>
-          <div className="text-2xl font-bold text-emerald-400">{data.hitRate.toFixed(1)}%</div>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-emerald-400">{data.hitRate.toFixed(1)}%</span>
+            <div className={`flex items-center gap-0.5 ${trendColor}`}>
+              <TrendIcon className="h-4 w-4" />
+              <span className="text-xs font-medium">{data.trendDelta > 0 ? "+" : ""}{data.trendDelta.toFixed(1)}%</span>
+            </div>
+          </div>
+          <div className="text-[10px] text-slate-600 mt-1">vs förra veckan</div>
         </div>
         <div className="rounded-xl border border-white/10 bg-[#111827] p-4">
           <div className="text-xs text-slate-500 mb-1">Totalt Testade</div>
           <div className="text-2xl font-bold text-white">{data.totalTested}</div>
         </div>
-        <div className="rounded-xl border border-white/10 bg-[#111827] p-4">
-          <div className="text-xs text-slate-500 mb-1">Breakthroughs</div>
+        <button
+          onClick={() => setShowBreakthroughs(true)}
+          className="rounded-xl border border-white/10 bg-[#111827] p-4 text-left hover:border-emerald-500/30 transition-colors group"
+        >
+          <div className="text-xs text-slate-500 mb-1 group-hover:text-emerald-400/60">Breakthroughs</div>
           <div className="text-2xl font-bold text-emerald-400">{data.breakthroughs}</div>
-        </div>
+          <div className="text-[10px] text-slate-600 mt-1 group-hover:text-slate-400">Klicka för detaljer</div>
+        </button>
         <div className="rounded-xl border border-white/10 bg-[#111827] p-4">
           <div className="text-xs text-slate-500 mb-1">Denna Månad</div>
           <div className="text-2xl font-bold text-white">
@@ -83,6 +107,40 @@ export default function HitRatePage() {
           </div>
         </div>
       </div>
+
+      {/* Breakthrough drill-down modal */}
+      {showBreakthroughs && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowBreakthroughs(false)}>
+          <div className="bg-[#111827] border border-white/10 rounded-xl p-6 w-full max-w-lg max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-white">Breakthroughs ({data.breakthroughList.length})</h2>
+              <button onClick={() => setShowBreakthroughs(false)} className="text-slate-400 hover:text-white"><X className="h-5 w-5" /></button>
+            </div>
+            {data.breakthroughList.length === 0 ? (
+              <p className="text-sm text-slate-500">Inga breakthroughs hittades för denna period.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left pb-2 text-xs text-slate-500">Ad ID</th>
+                    <th className="text-right pb-2 text-xs text-slate-500">Spend</th>
+                    <th className="text-right pb-2 text-xs text-slate-500">ROAS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.breakthroughList.map((bt) => (
+                    <tr key={bt.adId} className="border-b border-white/5">
+                      <td className="py-2 text-slate-300 font-mono text-xs">{bt.adId}</td>
+                      <td className="py-2 text-right text-slate-400">{bt.spend?.toFixed(0)} kr</td>
+                      <td className="py-2 text-right text-emerald-400 font-medium">{bt.roas?.toFixed(2)}x</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Trend Chart */}
       {data.weeklyTrend.length > 0 && (

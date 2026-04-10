@@ -7,6 +7,7 @@ import { getAdSets } from "@/lib/meta/adsets";
 import { getEvolveSettings } from "@/lib/evolve/settings";
 import { classifyAd } from "@/lib/evolve/classifier";
 import { format, subDays, differenceInDays, parseISO } from "date-fns";
+import { getAdsetNcRoas } from "@/lib/shopify/ncroas";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,9 @@ export async function GET(request: NextRequest) {
 
     const ageDays = differenceInDays(parseISO(until), parseISO(since)) + 1;
 
+    // Fetch per-adset ncROAS from Shopify orders
+    const ncRoasMap = await getAdsetNcRoas(since, until);
+
     // Build ad-level insights for expanded view
     const adInsightsMap = new Map<string, {
       spend: number; roas: number; purchases: number; purchaseValue: number; cpa: number;
@@ -188,6 +192,11 @@ export async function GET(request: NextRequest) {
         const spendThreshold = settings.targetCpa * 3;
         const spendProgress = spendThreshold > 0 ? Math.min(metrics.spend / spendThreshold, 1) : 0;
 
+        // ncROAS: per-adset new customer revenue / adset spend
+        const ncData = ncRoasMap.get(as.id);
+        const ncRevenue = ncData?.newCustomerRevenue || 0;
+        const ncRoas = metrics.spend > 0 && ncRevenue > 0 ? ncRevenue / metrics.spend : null;
+
         return {
           id: as.id,
           name: as.name,
@@ -205,6 +214,8 @@ export async function GET(request: NextRequest) {
           spendThreshold,
           isTopSpender,
           spendShare,
+          ncRoas,
+          ncRevenue,
         };
       })
       .sort((a, b) => {

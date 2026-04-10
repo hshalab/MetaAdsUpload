@@ -13,16 +13,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const desireId = searchParams.get("desireId");
+    const awarenessLevel = searchParams.get("awarenessLevel");
 
     const conditions = [];
     if (status) conditions.push(eq(schema.creativeRoadmap.status, status));
     if (desireId) conditions.push(eq(schema.creativeRoadmap.desireId, desireId));
+    if (awarenessLevel) conditions.push(eq(schema.creativeRoadmap.awarenessLevel, awarenessLevel));
 
     const entries = await db
       .select()
       .from(schema.creativeRoadmap)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(schema.creativeRoadmap.createdAt));
+      .orderBy(desc(schema.creativeRoadmap.upvotes), desc(schema.creativeRoadmap.createdAt));
 
     return NextResponse.json(entries);
   } catch (error) {
@@ -53,6 +55,11 @@ export async function POST(request: Request) {
       variableTested: body.variableTested || null,
       metaAdId: body.metaAdId || null,
       assignmentId: body.assignmentId || null,
+      adType: body.adType || null,
+      breakthroughMemo: body.breakthroughMemo || null,
+      linkToBrief: body.linkToBrief || null,
+      linkToAd: body.linkToAd || null,
+      upvotes: body.upvotes || 0,
     }).returning();
 
     return NextResponse.json(result);

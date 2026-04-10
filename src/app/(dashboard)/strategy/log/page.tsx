@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ScrollText, ChevronLeft, ChevronRight } from "lucide-react";
+import { ScrollText, ChevronLeft, ChevronRight, Pause, Skull, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type LogEntry = {
@@ -16,6 +16,12 @@ type LogEntry = {
   adName: string | null;
   adsetName: string | null;
   recommendation: string | null;
+};
+
+type Summary = {
+  pausedThisWeek: number;
+  graveyardThisWeek: number;
+  breakthroughsThisWeek: number;
 };
 
 const classColors: Record<string, string> = {
@@ -33,12 +39,32 @@ const actionLabels: Record<string, string> = {
   reviewed: "Granskad",
 };
 
+const ACTION_OPTIONS = [
+  { value: "", label: "Alla åtgärder" },
+  { value: "pause", label: "Pausad" },
+  { value: "move_zombie", label: "Graveyard" },
+  { value: "let_run", label: "Låter köra" },
+  { value: "reviewed", label: "Granskad" },
+];
+
+const CLASS_OPTIONS = [
+  { value: "", label: "Alla klassificeringar" },
+  { value: "breakthrough", label: "Breakthrough" },
+  { value: "spend_winner", label: "Spend Winner" },
+  { value: "kpi_winner", label: "KPI Winner" },
+  { value: "loser", label: "Loser" },
+  { value: "new", label: "New" },
+];
+
 export default function ActivityLogPage() {
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState<Summary>({ pausedThisWeek: 0, graveyardThisWeek: 0, breakthroughsThisWeek: 0 });
   const [loading, setLoading] = useState(true);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+  const [classFilter, setClassFilter] = useState("");
   const [offset, setOffset] = useState(0);
   const limit = 50;
 
@@ -48,18 +74,21 @@ export default function ActivityLogPage() {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
       if (from) params.set("from", from);
       if (to) params.set("to", to);
+      if (actionFilter) params.set("action", actionFilter);
+      if (classFilter) params.set("classification", classFilter);
       const res = await fetch(`/api/strategy/log?${params}`);
       if (res.ok) {
         const data = await res.json();
         setEntries(data.entries);
         setTotal(data.total);
+        if (data.summary) setSummary(data.summary);
       }
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [from, to, offset]);
+  }, [from, to, actionFilter, classFilter, offset]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -68,12 +97,9 @@ export default function ActivityLogPage() {
     return new Date(d).toLocaleDateString("sv-SE", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
-  // Extract a readable name from recommendation or fallback to adsetName/adId
   const getDisplayName = (e: LogEntry) => {
-    // recommendation often contains the ad set name in quotes like "[GY] Name..." or "Graveyard (Name)"
     if (e.adsetName) return e.adsetName;
     if (e.adName) return e.adName;
-    // Try to extract name from recommendation
     if (e.recommendation) {
       const match = e.recommendation.match(/["""]([^"""]+)["""]/);
       if (match) return match[1];
@@ -90,6 +116,37 @@ export default function ActivityLogPage() {
         <div>
           <h1 className="text-xl font-bold text-white">Aktivitetslogg</h1>
           <p className="text-sm text-slate-400">Historik över alla kill/post/pause-åtgärder</p>
+        </div>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="rounded-xl border border-white/10 bg-[#111827] p-4 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+            <Pause className="h-4 w-4 text-red-400" />
+          </div>
+          <div>
+            <div className="text-xs text-slate-500">Pausade denna vecka</div>
+            <div className="text-xl font-bold text-white">{summary.pausedThisWeek}</div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-[#111827] p-4 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
+            <Skull className="h-4 w-4 text-purple-400" />
+          </div>
+          <div>
+            <div className="text-xs text-slate-500">Till Graveyard</div>
+            <div className="text-xl font-bold text-white">{summary.graveyardThisWeek}</div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-[#111827] p-4 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+            <Zap className="h-4 w-4 text-emerald-400" />
+          </div>
+          <div>
+            <div className="text-xs text-slate-500">Breakthroughs</div>
+            <div className="text-xl font-bold text-emerald-400">{summary.breakthroughsThisWeek}</div>
+          </div>
         </div>
       </div>
 
@@ -113,6 +170,20 @@ export default function ActivityLogPage() {
             className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]"
           />
         </div>
+        <select
+          value={actionFilter}
+          onChange={(e) => { setActionFilter(e.target.value); setOffset(0); }}
+          className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]"
+        >
+          {ACTION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select
+          value={classFilter}
+          onChange={(e) => { setClassFilter(e.target.value); setOffset(0); }}
+          className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]"
+        >
+          {CLASS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
         <span className="text-xs text-slate-500">{total} åtgärder totalt</span>
       </div>
 

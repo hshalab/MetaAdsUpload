@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -29,6 +29,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         ...(body.whatHappened !== undefined && { whatHappened: body.whatHappened }),
         ...(body.whatWeLearned !== undefined && { whatWeLearned: body.whatWeLearned }),
         ...(body.metaAdId !== undefined && { metaAdId: body.metaAdId }),
+        ...(body.assignmentId !== undefined && { assignmentId: body.assignmentId }),
+        ...(body.adType !== undefined && { adType: body.adType }),
+        ...(body.breakthroughMemo !== undefined && { breakthroughMemo: body.breakthroughMemo }),
+        ...(body.linkToBrief !== undefined && { linkToBrief: body.linkToBrief }),
+        ...(body.linkToAd !== undefined && { linkToAd: body.linkToAd }),
         updatedAt: new Date(),
       })
       .where(eq(schema.creativeRoadmap.id, id))
@@ -38,6 +43,34 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   } catch (error) {
     console.error("Roadmap PUT error:", error);
     return NextResponse.json({ error: "Failed to update" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+
+    if (body.action === "upvote") {
+      const [result] = await db.update(schema.creativeRoadmap)
+        .set({
+          upvotes: sql`${schema.creativeRoadmap.upvotes} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.creativeRoadmap.id, id))
+        .returning();
+      return NextResponse.json(result);
+    }
+
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (error) {
+    console.error("Roadmap PATCH error:", error);
+    return NextResponse.json({ error: "Failed to patch" }, { status: 500 });
   }
 }
 

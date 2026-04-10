@@ -131,6 +131,12 @@ export function PublishDialog({
   const [optimizationGoal, setOptimizationGoal] = useState("OFFSITE_CONVERSIONS");
   const [conversionEvent, setConversionEvent] = useState("PURCHASE");
 
+  // Concept linking
+  const [linkableConcepts, setLinkableConcepts] = useState<Array<{ id: string; conceptName: string; batchNumber: number | null; upvotes: number }>>([]);
+  const [selectedConceptId, setSelectedConceptId] = useState("");
+  const [createNewConcept, setCreateNewConcept] = useState(false);
+  const [newConceptName, setNewConceptName] = useState("");
+
   // Load campaigns and templates
   useEffect(() => {
     if (open) {
@@ -144,10 +150,18 @@ export function PublishDialog({
         .then((d) => setTemplates(Array.isArray(d) ? d : d.templates || []))
         .catch(() => {});
 
+      fetch("/api/strategy/roadmap/linkable")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((d) => setLinkableConcepts(Array.isArray(d) ? d : []))
+        .catch(() => {});
+
       // Reset state
       setStep(0);
       setResult(null);
       setPublishing(false);
+      setSelectedConceptId("");
+      setCreateNewConcept(false);
+      setNewConceptName("");
       setAdsetName(assignment.autoName || assignment.title);
       setLandingPages([assignment.landingPage || ""]);
 
@@ -251,6 +265,25 @@ export function PublishDialog({
 
       setResult(data);
       toast.success(`Published ${data.meta.totalAds} ads to Meta!`);
+
+      // Link concept to published ad
+      const firstAdId = data.meta?.ads?.[0]?.adId;
+      if (firstAdId) {
+        if (selectedConceptId && selectedConceptId !== "none") {
+          await fetch(`/api/strategy/roadmap/${selectedConceptId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ metaAdId: firstAdId, assignmentId: assignment.id, status: "uploaded" }),
+          }).catch(() => {});
+        } else if (createNewConcept && newConceptName.trim()) {
+          await fetch("/api/strategy/roadmap", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ conceptName: newConceptName.trim(), metaAdId: firstAdId, assignmentId: assignment.id, status: "uploaded" }),
+          }).catch(() => {});
+        }
+      }
+
       onPublished?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to publish");
@@ -474,6 +507,48 @@ export function PublishDialog({
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+
+                {/* Concept linking */}
+                <div className="border-t border-white/10 pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Link2 className="h-3.5 w-3.5" /> Koppla till koncept
+                    </label>
+                    <button
+                      onClick={() => { setCreateNewConcept(!createNewConcept); setSelectedConceptId(""); }}
+                      className={cn(
+                        "text-[10px] px-2 py-1 rounded-lg border transition-all",
+                        createNewConcept
+                          ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-400"
+                          : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
+                      )}
+                    >
+                      {createNewConcept ? "Välj befintligt" : "Skapa nytt"}
+                    </button>
+                  </div>
+                  {createNewConcept ? (
+                    <Input
+                      value={newConceptName}
+                      onChange={(e) => setNewConceptName(e.target.value)}
+                      placeholder="Nytt konceptnamn..."
+                      className="bg-white/5 border-white/10 placeholder:text-slate-600"
+                    />
+                  ) : (
+                    <Select value={selectedConceptId} onValueChange={setSelectedConceptId}>
+                      <SelectTrigger className="bg-white/5 border-white/10">
+                        <SelectValue placeholder="Inget koncept (valfritt)" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#111827] border-white/10">
+                        <SelectItem value="none">Inget koncept</SelectItem>
+                        {linkableConcepts.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.conceptName}{c.batchNumber ? ` (Batch #${c.batchNumber})` : ""}{c.upvotes > 0 ? ` +${c.upvotes}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
             )}

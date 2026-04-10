@@ -60,6 +60,8 @@ interface AdsetData {
   cpm: number;
   zone: "scale" | "hold" | "watch" | "kill" | "new";
   suggestion: string;
+  ncRoas: number | null;
+  ncRevenue: number;
 }
 
 interface ScalingData {
@@ -519,6 +521,7 @@ export default function ScalingPage() {
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Spend</th>
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Revenue</th>
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">ROAS</th>
+                  <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">ncROAS</th>
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Purch.</th>
                   <th className="text-right text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">CPA</th>
                   <th className="text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Suggestion</th>
@@ -579,6 +582,16 @@ export default function ScalingPage() {
                           adset.spend > 50 ? "text-red-400" : "text-slate-500"
                         )}>
                           {adset.roas.toFixed(2)}x
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={cn(
+                          "font-bold",
+                          adset.ncRoas != null && adset.ncRoas >= (data?.thresholds.target ?? 2.0) ? "text-emerald-400" :
+                          adset.ncRoas != null && adset.ncRoas >= (data?.thresholds.breakeven ?? 1.42) ? "text-amber-400" :
+                          adset.ncRoas != null ? "text-red-400" : "text-slate-600"
+                        )}>
+                          {adset.ncRoas != null ? `${adset.ncRoas.toFixed(2)}x` : "—"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-300">{adset.purchases}</td>
@@ -674,7 +687,7 @@ export default function ScalingPage() {
                 })}
                 {filteredAdsets.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-slate-500">
+                    <td colSpan={13} className="py-12 text-center text-slate-500">
                       {data.adsets.length === 0
                         ? "No ad sets found. Connect your Meta account and create campaigns first."
                         : "No ad sets in this zone."}

@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { ChevronRight, ChevronDown, Plus, Pencil, Trash2, Users2 } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { ChevronRight, ChevronDown, Plus, Pencil, Trash2, Users2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Angle = { id: string; name: string; description: string | null; subAvatarId: string };
-type SubAvatar = { id: string; name: string; behavior: string | null; desireId: string; angles: Angle[] };
-type Desire = { id: string; name: string; description: string | null; subAvatars: SubAvatar[] };
+type SubAvatar = { id: string; name: string; behavior: string | null; desireId: string; conceptCount?: number; angles: Angle[] };
+type Desire = { id: string; name: string; description: string | null; conceptCount?: number; subAvatars: SubAvatar[] };
 
 export default function AvatarLibraryPage() {
   const [desires, setDesires] = useState<Desire[]>([]);
@@ -17,6 +17,7 @@ export default function AvatarLibraryPage() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [editing, setEditing] = useState<{ id: string; type: string; name: string; desc: string } | null>(null);
+  const [search, setSearch] = useState("");
 
   const fetchData = useCallback(async () => {
     try {
@@ -30,6 +31,32 @@ export default function AvatarLibraryPage() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const filteredDesires = useMemo(() => {
+    if (!search.trim()) return desires;
+    const q = search.toLowerCase();
+    return desires
+      .map((d) => {
+        const matchDesire = d.name.toLowerCase().includes(q) || d.description?.toLowerCase().includes(q);
+        const filteredSubs = d.subAvatars
+          .map((sa) => {
+            const matchSub = sa.name.toLowerCase().includes(q) || sa.behavior?.toLowerCase().includes(q);
+            const filteredAngles = sa.angles.filter(
+              (a) => a.name.toLowerCase().includes(q) || a.description?.toLowerCase().includes(q)
+            );
+            if (matchSub || filteredAngles.length > 0) {
+              return { ...sa, angles: matchSub ? sa.angles : filteredAngles };
+            }
+            return null;
+          })
+          .filter(Boolean) as SubAvatar[];
+        if (matchDesire || filteredSubs.length > 0) {
+          return { ...d, subAvatars: matchDesire ? d.subAvatars : filteredSubs };
+        }
+        return null;
+      })
+      .filter(Boolean) as Desire[];
+  }, [desires, search]);
 
   const toggleDesire = (id: string) => {
     setExpandedDesires((prev) => {
@@ -108,6 +135,18 @@ export default function AvatarLibraryPage() {
         </button>
       </div>
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Sök kundproblem, sub avatars, vinklar..."
+          className="w-full pl-10 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 placeholder:text-slate-600"
+        />
+      </div>
+
       {/* Add/Edit modals */}
       {(addingTo || editing) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setAddingTo(null); setEditing(null); }}>
@@ -140,14 +179,14 @@ export default function AvatarLibraryPage() {
         </div>
       )}
 
-      {desires.length === 0 ? (
+      {filteredDesires.length === 0 ? (
         <div className="text-center py-16 text-slate-500">
           <Users2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Inga kundproblem ännu. Klicka &quot;Nytt Kundproblem&quot; för att börja.</p>
+          <p>{search ? "Inga resultat hittades." : "Inga kundproblem ännu. Klicka \"Nytt Kundproblem\" för att börja."}</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {desires.map((desire) => (
+          {filteredDesires.map((desire) => (
             <div key={desire.id} className="rounded-xl border border-purple-500/20 bg-purple-500/5 overflow-hidden">
               {/* Desire row */}
               <div className="flex items-center gap-3 px-4 py-3 group">
@@ -159,6 +198,11 @@ export default function AvatarLibraryPage() {
                   <span className="text-sm font-medium text-purple-300">{desire.name}</span>
                   {desire.description && <span className="ml-2 text-xs text-slate-500">{desire.description}</span>}
                 </div>
+                {(desire.conceptCount ?? 0) > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    {desire.conceptCount} koncept
+                  </span>
+                )}
                 <span className="text-xs text-slate-500">{desire.subAvatars.length} sub avatars</span>
                 <div className="hidden group-hover:flex items-center gap-1">
                   <button onClick={() => setEditing({ id: desire.id, type: "desire", name: desire.name, desc: desire.description || "" })} className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors">
@@ -184,6 +228,11 @@ export default function AvatarLibraryPage() {
                           <span className="text-sm text-blue-300">{sa.name}</span>
                           {sa.behavior && <span className="ml-2 text-xs text-slate-500">{sa.behavior}</span>}
                         </div>
+                        {(sa.conceptCount ?? 0) > 0 && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                            {sa.conceptCount} koncept
+                          </span>
+                        )}
                         <span className="text-xs text-slate-500">{sa.angles.length} vinklar</span>
                         <div className="hidden group-hover:flex items-center gap-1">
                           <button onClick={() => setEditing({ id: sa.id, type: "sub_avatar", name: sa.name, desc: sa.behavior || "" })} className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors">

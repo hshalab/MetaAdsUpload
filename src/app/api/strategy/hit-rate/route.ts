@@ -117,6 +117,36 @@ export async function GET(request: NextRequest) {
       .map((d) => ({ ...d, hitRate: d.tested > 0 ? (d.breakthroughs / d.tested) * 100 : 0 }))
       .sort((a, b) => b.hitRate - a.hitRate);
 
+    // Trend arrow: compare last 2 weeks
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const lastWeekRows = rows.filter((r) => new Date(r.classified_at) >= oneWeekAgo);
+    const prevWeekRows = rows.filter((r) => {
+      const d = new Date(r.classified_at);
+      return d >= twoWeeksAgo && d < oneWeekAgo;
+    });
+
+    const lastWeekRate = lastWeekRows.length > 0
+      ? (lastWeekRows.filter((r) => r.classification === "breakthrough").length / lastWeekRows.length) * 100
+      : 0;
+    const prevWeekRate = prevWeekRows.length > 0
+      ? (prevWeekRows.filter((r) => r.classification === "breakthrough").length / prevWeekRows.length) * 100
+      : 0;
+    const trendDelta = lastWeekRate - prevWeekRate;
+
+    // Breakthrough details for drill-down
+    const breakthroughList = rows
+      .filter((r) => r.classification === "breakthrough")
+      .map((r) => ({
+        adId: r.ad_id,
+        spend: r.spend,
+        roas: r.roas,
+      }))
+      .sort((a, b) => (b.roas || 0) - (a.roas || 0));
+
     return NextResponse.json({
       totalTested,
       breakthroughs,
@@ -125,6 +155,8 @@ export async function GET(request: NextRequest) {
       weeklyTrend,
       perAuthor,
       perDesire,
+      trendDelta,
+      breakthroughList,
     });
   } catch (error) {
     console.error("Hit rate GET error:", error);

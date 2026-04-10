@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { and, desc, gte, lte, isNotNull, sql } from "drizzle-orm";
+import { and, desc, gte, lte, eq, isNotNull, sql } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
+    const action = searchParams.get("action");
+    const classification = searchParams.get("classification");
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
@@ -24,8 +26,17 @@ export async function GET(request: NextRequest) {
     if (to) {
       conditions.push(lte(schema.adClassifications.actionTakenAt, new Date(to + "T23:59:59")));
     }
+    if (action) {
+      conditions.push(eq(schema.adClassifications.actionTaken, action));
+    }
+    if (classification) {
+      conditions.push(eq(schema.adClassifications.classification, classification));
+    }
 
-    const [entries, countResult] = await Promise.all([
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const [entries, countResult, summaryResult] = await Promise.all([
       db
         .select({
           id: schema.adClassifications.id,
@@ -39,9 +50,7 @@ export async function GET(request: NextRequest) {
           adsetId: schema.adClassifications.adsetId,
           campaignId: schema.adClassifications.campaignId,
           recommendation: schema.adClassifications.recommendation,
-          // Join ad name from cache
           adName: schema.adsCache.name,
-          // Join adset name — try adsetId first, fallback to adId (adset actions store adsetId in adId)
           adsetName: sql<string>`COALESCE(
             (SELECT name FROM adsets_cache WHERE id = ${schema.adClassifications.adsetId}),
             (SELECT name FROM adsets_cache WHERE id = ${schema.adClassifications.adId})
@@ -57,6 +66,14 @@ export async function GET(request: NextRequest) {
         .select({ count: sql<number>`count(*)` })
         .from(schema.adClassifications)
         .where(and(...conditions)),
+      db
+        .select({
+          pausedThisWeek: sql<number>`count(*) filter (where ${schema.adClassifications.actionTaken} = 'pause' and ${schema.adClassifications.actionTakenAt} >= ${sevenDaysAgo})`,
+          graveyardThisWeek: sql<number>`count(*) filter (where ${schema.adClassifications.actionTaken} = 'move_zombie' and ${schema.adClassifications.actionTakenAt} >= ${sevenDaysAgo})`,
+          breakthroughsThisWeek: sql<number>`count(*) filter (where ${schema.adClassifications.classification} = 'breakthrough' and ${schema.adClassifications.actionTakenAt} >= ${sevenDaysAgo})`,
+        })
+        .from(schema.adClassifications)
+        .where(isNotNull(schema.adClassifications.actionTaken)),
     ]);
 
     return NextResponse.json({
@@ -64,6 +81,11 @@ export async function GET(request: NextRequest) {
       total: Number(countResult[0]?.count || 0),
       limit,
       offset,
+      summary: {
+        pausedThisWeek: Number(summaryResult[0]?.pausedThisWeek || 0),
+        graveyardThisWeek: Number(summaryResult[0]?.graveyardThisWeek || 0),
+        breakthroughsThisWeek: Number(summaryResult[0]?.breakthroughsThisWeek || 0),
+      },
     });
   } catch (error) {
     console.error("Strategy log GET error:", error);
