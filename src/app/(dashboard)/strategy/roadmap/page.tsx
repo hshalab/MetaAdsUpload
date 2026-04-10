@@ -224,7 +224,7 @@ export default function RoadmapPage() {
                       value={entry.status}
                       onChange={(e) => { e.stopPropagation(); handleStatusChange(entry.id, e.target.value); }}
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full text-[10px] bg-white/5 border border-white/10 rounded px-1.5 py-1 text-slate-400 focus:outline-none"
+                      className="w-full text-[10px] bg-white/5 border border-white/10 rounded px-1.5 py-1 text-slate-400 focus:outline-none [color-scheme:dark]"
                     >
                       {COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                     </select>
@@ -247,30 +247,30 @@ export default function RoadmapPage() {
             <input placeholder="Konceptnamn *" value={form.conceptName} onChange={(e) => setForm({ ...form, conceptName: e.target.value })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50" />
             <div className="grid grid-cols-2 gap-3">
               <input placeholder="Batch #" type="number" value={form.batchNumber} onChange={(e) => setForm({ ...form, batchNumber: e.target.value })} className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50" />
-              <select value={form.fileType} onChange={(e) => setForm({ ...form, fileType: e.target.value })} className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50">
+              <select value={form.fileType} onChange={(e) => setForm({ ...form, fileType: e.target.value })} className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]">
                 <option value="">Filtyp</option>
                 <option value="video">Video</option>
                 <option value="image">Bild</option>
                 <option value="carousel">Carousel</option>
               </select>
             </div>
-            <select value={form.desireId} onChange={(e) => setForm({ ...form, desireId: e.target.value, subAvatarId: "", angleId: "" })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50">
+            <select value={form.desireId} onChange={(e) => setForm({ ...form, desireId: e.target.value, subAvatarId: "", angleId: "" })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]">
               <option value="">Kundproblem (valfritt)</option>
               {desires.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
             {selectedDesire && (
-              <select value={form.subAvatarId} onChange={(e) => setForm({ ...form, subAvatarId: e.target.value, angleId: "" })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50">
+              <select value={form.subAvatarId} onChange={(e) => setForm({ ...form, subAvatarId: e.target.value, angleId: "" })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]">
                 <option value="">Sub Avatar (valfritt)</option>
                 {selectedDesire.subAvatars.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
             {selectedSub && (
-              <select value={form.angleId} onChange={(e) => setForm({ ...form, angleId: e.target.value })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50">
+              <select value={form.angleId} onChange={(e) => setForm({ ...form, angleId: e.target.value })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]">
                 <option value="">Vinkel (valfritt)</option>
                 {selectedSub.angles.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             )}
-            <select value={form.awarenessLevel} onChange={(e) => setForm({ ...form, awarenessLevel: e.target.value })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50">
+            <select value={form.awarenessLevel} onChange={(e) => setForm({ ...form, awarenessLevel: e.target.value })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]">
               <option value="">Awareness Level</option>
               {Object.entries(awarenessLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>

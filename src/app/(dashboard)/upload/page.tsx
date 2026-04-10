@@ -1196,8 +1196,8 @@ export default function UploadPage() {
   const isDynamic = headlines.filter(Boolean).length > 1 || primaryTexts.filter(Boolean).length > 1;
 
   // ─── Input class ────────────────────────────────────────────────────────
-  const inputCls = "w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none";
-  const inputSmCls = "w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-1.5 focus:border-cyan-500/50 focus:outline-none";
+  const inputCls = "w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-2 placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none [color-scheme:dark]";
+  const inputSmCls = "w-full rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white px-3 py-1.5 focus:border-cyan-500/50 focus:outline-none [color-scheme:dark]";
   const labelCls = "text-[10px] text-slate-500 mb-0.5 block";
 
   // ─── Render ─────────────────────────────────────────────────────────────

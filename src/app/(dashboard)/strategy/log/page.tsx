@@ -15,6 +15,7 @@ type LogEntry = {
   cpa: number;
   adName: string | null;
   adsetName: string | null;
+  recommendation: string | null;
 };
 
 const classColors: Record<string, string> = {
@@ -23,6 +24,13 @@ const classColors: Record<string, string> = {
   kpi_winner: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
   loser: "bg-red-500/10 text-red-400 border-red-500/20",
   new: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+};
+
+const actionLabels: Record<string, string> = {
+  move_zombie: "Graveyard",
+  pause: "Pausad",
+  let_run: "Låter köra",
+  reviewed: "Granskad",
 };
 
 export default function ActivityLogPage() {
@@ -60,6 +68,19 @@ export default function ActivityLogPage() {
     return new Date(d).toLocaleDateString("sv-SE", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
+  // Extract a readable name from recommendation or fallback to adsetName/adId
+  const getDisplayName = (e: LogEntry) => {
+    // recommendation often contains the ad set name in quotes like "[GY] Name..." or "Graveyard (Name)"
+    if (e.adsetName) return e.adsetName;
+    if (e.adName) return e.adName;
+    // Try to extract name from recommendation
+    if (e.recommendation) {
+      const match = e.recommendation.match(/["""]([^"""]+)["""]/);
+      if (match) return match[1];
+    }
+    return e.adId;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -80,7 +101,7 @@ export default function ActivityLogPage() {
             type="date"
             value={from}
             onChange={(e) => { setFrom(e.target.value); setOffset(0); }}
-            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50"
+            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -89,7 +110,7 @@ export default function ActivityLogPage() {
             type="date"
             value={to}
             onChange={(e) => { setTo(e.target.value); setOffset(0); }}
-            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50"
+            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]"
           />
         </div>
         <span className="text-xs text-slate-500">{total} åtgärder totalt</span>
@@ -105,6 +126,7 @@ export default function ActivityLogPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Ad Set / Ad</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Klassificering</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Åtgärd</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Detaljer</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Spend</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">ROAS</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">CPA</th>
@@ -113,28 +135,34 @@ export default function ActivityLogPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                     <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-cyan-400 mx-auto" />
                   </td>
                 </tr>
               ) : entries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">Inga åtgärder hittades</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">Inga åtgärder hittades</td>
                 </tr>
               ) : (
                 entries.map((e) => (
                   <tr key={e.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
                     <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{formatDate(e.actionTakenAt)}</td>
                     <td className="px-4 py-3">
-                      <div className="text-slate-300 truncate max-w-[200px]">{e.adsetName || "-"}</div>
-                      <div className="text-xs text-slate-500 truncate max-w-[200px]">{e.adName || e.adId}</div>
+                      <div className="text-slate-200 font-medium truncate max-w-[250px]">{getDisplayName(e)}</div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={cn("px-2 py-0.5 rounded-full text-xs border", classColors[e.classification] || "text-slate-400")}>
                         {e.classification}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-300">{e.actionTaken}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-slate-300">{actionLabels[e.actionTaken] || e.actionTaken}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs text-slate-500 truncate max-w-[300px]" title={e.recommendation || ""}>
+                        {e.recommendation || "-"}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-right text-slate-300">{e.spend?.toFixed(0)} kr</td>
                     <td className="px-4 py-3 text-right text-slate-300">{e.roas?.toFixed(2)}</td>
                     <td className="px-4 py-3 text-right text-slate-300">{e.cpa?.toFixed(0)} kr</td>

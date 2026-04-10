@@ -38,12 +38,17 @@ export async function GET(request: NextRequest) {
           cpa: schema.adClassifications.cpa,
           adsetId: schema.adClassifications.adsetId,
           campaignId: schema.adClassifications.campaignId,
+          recommendation: schema.adClassifications.recommendation,
+          // Join ad name from cache
           adName: schema.adsCache.name,
-          adsetName: schema.adsetsCache.name,
+          // Join adset name — try adsetId first, fallback to adId (adset actions store adsetId in adId)
+          adsetName: sql<string>`COALESCE(
+            (SELECT name FROM adsets_cache WHERE id = ${schema.adClassifications.adsetId}),
+            (SELECT name FROM adsets_cache WHERE id = ${schema.adClassifications.adId})
+          )`,
         })
         .from(schema.adClassifications)
         .leftJoin(schema.adsCache, sql`${schema.adClassifications.adId} = ${schema.adsCache.id}`)
-        .leftJoin(schema.adsetsCache, sql`${schema.adClassifications.adsetId} = ${schema.adsetsCache.id}`)
         .where(and(...conditions))
         .orderBy(desc(schema.adClassifications.actionTakenAt))
         .limit(limit)
