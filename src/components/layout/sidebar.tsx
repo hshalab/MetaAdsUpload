@@ -31,15 +31,6 @@ import {
   Route,
   TrendingUp,
   ScrollText,
-  BookOpen,
-  PlusCircle,
-  List,
-  TrendingDown,
-  Scale,
-  MessageSquare,
-  Link2,
-  Bot,
-  Landmark,
   ShoppingBag,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
@@ -52,43 +43,9 @@ type NavSection = {
 
 const navSections: NavSection[] = [
   {
-    label: "ÖVERSIKT",
+    label: "OVERVIEW",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    ],
-  },
-  {
-    label: "BOKFÖRING",
-    items: [
-      { href: "/vouchers", label: "Verifikationer", icon: BookOpen },
-      { href: "/vouchers/new", label: "Ny verifikation", icon: PlusCircle },
-      { href: "/accounts", label: "Kontoplan", icon: List },
-    ],
-  },
-  {
-    label: "RAPPORTER",
-    items: [
-      { href: "/reports/income", label: "Resultaträkning", icon: TrendingUp },
-      { href: "/reports/balance", label: "Balansräkning", icon: Scale },
-    ],
-  },
-  {
-    label: "IMPORT",
-    items: [
-      { href: "/sie-import", label: "SIE-import", icon: FileText },
-      { href: "/bank", label: "Bankimport", icon: Landmark },
-    ],
-  },
-  {
-    label: "AI",
-    items: [
-      { href: "/chat", label: "Bokföringsassistent", icon: Bot },
-    ],
-  },
-  {
-    label: "KOPPLINGAR",
-    items: [
-      { href: "/settings", label: "Inställningar", icon: Settings },
     ],
   },
   {
@@ -140,6 +97,7 @@ const navSections: NavSection[] = [
       { href: "/editors", label: "Editors", icon: Users },
       { href: "/trueprofit", label: "TrueProfit", icon: DollarSign },
       { href: "/rules", label: "Rules", icon: Zap },
+      { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
 ];
@@ -156,14 +114,14 @@ function SidebarContent({ onNavClick, userRole }: { onNavClick?: () => void; use
       {/* Logo */}
       <div className="flex h-16 items-center px-5 gap-2.5 shrink-0">
         <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center">
-          <BookOpen className="h-4 w-4 text-white" />
+          <Megaphone className="h-4 w-4 text-white" />
         </div>
         <Link
           href="/dashboard"
           className="font-bold text-base text-white tracking-tight"
           onClick={onNavClick}
         >
-          BookKeeper
+          MetaAds
         </Link>
       </div>
 
@@ -277,10 +235,10 @@ export function MobileHeader({
       </button>
       <div className="flex items-center gap-2">
         <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center">
-          <BookOpen className="h-3.5 w-3.5 text-white" />
+          <Megaphone className="h-3.5 w-3.5 text-white" />
         </div>
         <span className="font-bold text-sm text-white tracking-tight">
-          BookKeeper
+          MetaAds
         </span>
       </div>
     </div>
