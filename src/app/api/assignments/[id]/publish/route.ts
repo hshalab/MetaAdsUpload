@@ -153,21 +153,10 @@ export async function POST(
       promoted_object: pixelId
         ? { pixel_id: pixelId, custom_event_type: config.conversionEvent || "PURCHASE" }
         : undefined,
+      // UTM url_tags — Meta appends these to all ad URLs automatically.
+      // Meta replaces {{...}} dynamic templates per ad at serve time.
+      url_tags: `utm_source=fb&utm_medium=paid&utm_campaign={{campaign.id}}&utm_term={{adset.id}}&utm_content={{ad.id}}`,
     });
-
-    // Set UTM url_tags on the ad set — Meta appends these to all ad URLs automatically.
-    // {{ad.id}} is a Meta dynamic template replaced per ad at serve time.
-    try {
-      const { metaApi } = await import("@/lib/meta/client");
-      await metaApi(`/${adset.id}`, {
-        method: "POST",
-        params: {
-          url_tags: `utm_source=fb&utm_medium=paid&utm_campaign=${campaignId}&utm_term=${adset.id}&utm_content={{ad.id}}`,
-        },
-      });
-    } catch (e) {
-      console.warn("Failed to set url_tags on adset:", e);
-    }
 
     // --- Step 3: Upload creatives & create ads (creatives × landing pages) ---
     const createdAds: Array<{
