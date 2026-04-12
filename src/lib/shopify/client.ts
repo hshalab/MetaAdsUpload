@@ -25,37 +25,41 @@ interface ShopifyOrdersResponse {
   orders: ShopifyOrder[];
 }
 
-function getShopifyConfig() {
+function getStore(): string {
   const store = process.env.SHOPIFY_STORE;
-  const clientId = process.env.SHOPIFY_CLIENT_ID;
-  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
-  if (!store || !clientId || !clientSecret) {
-    throw new Error("Missing SHOPIFY_STORE, SHOPIFY_CLIENT_ID, or SHOPIFY_CLIENT_SECRET env vars");
-  }
-  return { store, clientId, clientSecret };
+  if (!store) throw new Error("Missing SHOPIFY_STORE env var");
+  return store;
 }
 
-// In-memory token cache (24h tokens)
-let cachedToken: { token: string; expiresAt: number } | null = null;
-
 /**
- * Get a valid access token, refreshing via client_credentials if needed.
+ * Get a valid Shopify access token.
+ * Supports two modes:
+ *   1. SHOPIFY_ACCESS_TOKEN — permanent Admin API token (custom apps, starts with shpat_)
+ *   2. SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET — client_credentials OAuth (newer apps)
  */
 async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 5 * 60 * 1000) {
-    return cachedToken.token;
+  // Mode 1: permanent access token (simplest, most common for custom apps)
+  const permanentToken = process.env.SHOPIFY_ACCESS_TOKEN;
+  if (permanentToken) return permanentToken;
+
+  // Mode 2: client_credentials OAuth
+  const clientId = process.env.SHOPIFY_CLIENT_ID;
+  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      "Missing Shopify credentials. Set SHOPIFY_ACCESS_TOKEN (recommended) or SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET."
+    );
   }
 
-  const { store, clientId, clientSecret } = getShopifyConfig();
-
+  const store = getStore();
   const res = await fetch(`https://${store}/admin/oauth/access_token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
       grant_type: "client_credentials",
       client_id: clientId,
       client_secret: clientSecret,
-    }),
+    }).toString(),
   });
 
   if (!res.ok) {
@@ -64,19 +68,14 @@ async function getAccessToken(): Promise<string> {
   }
 
   const data = await res.json();
-  cachedToken = {
-    token: data.access_token,
-    expiresAt: Date.now() + (data.expires_in || 86400) * 1000,
-  };
-
-  return cachedToken.token;
+  return data.access_token;
 }
 
 export async function shopifyApi<T = unknown>(
   endpoint: string,
   options: ShopifyRequestOptions = {}
 ): Promise<T> {
-  const { store } = getShopifyConfig();
+  const store = getStore();
   const accessToken = await getAccessToken();
   const baseUrl = `https://${store}/admin/api/${SHOPIFY_API_VERSION}`;
   const url = new URL(`${baseUrl}${endpoint}`);
@@ -165,7 +164,7 @@ export async function fetchOrdersInRange(
   from: string,
   to: string
 ): Promise<ClassifiedOrder[]> {
-  const { store } = getShopifyConfig();
+  const store = getStore();
   const accessToken = await getAccessToken();
   const baseUrl = `https://${store}/admin/api/${SHOPIFY_API_VERSION}`;
 
