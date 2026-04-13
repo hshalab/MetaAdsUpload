@@ -1202,16 +1202,48 @@ export default function UploadPage() {
     });
   };
 
-  const retryHistoryJob = async (h: DbJob) => {
-    if (!h.r2Key || !h.r2Url || !h.campaignId) {
-      toast.error("Kan inte retrya — saknar R2-data eller campaign ID");
-      return;
-    }
+  // Hidden file input for step-0 retry (R2 upload failed, need to re-pick the file)
+  const retryFileInputRef = useRef<HTMLInputElement>(null);
+  const pendingRetryJobRef = useRef<DbJob | null>(null);
 
+  const retryHistoryJob = async (h: DbJob, file?: File) => {
     const hConfig = h.config as Record<string, unknown> | null;
     const adCopy = hConfig?.adCopy as Record<string, unknown> | undefined;
     const adsetConfig = hConfig?.adsetConfig as Record<string, unknown> | undefined;
     const adName = (hConfig?.adName as string) || h.filename.replace(/\.[^.]+$/, "");
+
+    // Step 0 failure: no R2 file — need to re-upload to R2 first
+    if (!h.r2Key || !h.r2Url) {
+      if (!file) {
+        // Open file picker — user selects the file, then we continue in onRetryFileSelected
+        pendingRetryJobRef.current = h;
+        retryFileInputRef.current?.click();
+        return;
+      }
+
+      // File provided — upload to R2 first
+      setIsUploading(true);
+      try {
+        const { key, url } = await uploadFileToR2(file);
+        h = { ...h, r2Key: key, r2Url: url };
+        // Update the DB job with the R2 data
+        await fetch("/api/upload-jobs", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: h.id, r2Key: key, r2Url: url, status: "uploading_meta", stepLabel: "Laddar upp till Meta..." }),
+        });
+      } catch (e) {
+        toast.error(`R2-uppladdning misslyckades: ${e instanceof Error ? e.message : "Okänt fel"}`);
+        setIsUploading(false);
+        fetchHistory();
+        return;
+      }
+    }
+
+    if (!h.campaignId) {
+      toast.error("Kan inte retrya — saknar campaign ID");
+      return;
+    }
 
     if (!adCopy) {
       toast.error("Kan inte retrya — saknar ad copy-konfiguration");
@@ -1252,6 +1284,16 @@ export default function UploadPage() {
     }
   };
 
+  const onRetryFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const job = pendingRetryJobRef.current;
+    if (file && job) {
+      retryHistoryJob(job, file);
+    }
+    pendingRetryJobRef.current = null;
+    e.target.value = "";
+  };
+
   const toggleHistoryError = (id: number) => {
     setExpandedHistoryErrors((prev) => {
       const next = new Set(prev);
@@ -1279,6 +1321,14 @@ export default function UploadPage() {
 
   return (
     <div className="space-y-5">
+      {/* Hidden file input for step-0 retry */}
+      <input
+        ref={retryFileInputRef}
+        type="file"
+        accept="video/mp4,video/quicktime,video/webm,image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={onRetryFileSelected}
+      />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1373,16 +1423,15 @@ export default function UploadPage() {
                       <div className="flex items-center gap-2 shrink-0">
                         {h.status === "failed" && (
                           <div className="flex items-center gap-1">
-                            {h.r2Key && h.campaignId && (
-                              <button
-                                onClick={() => retryHistoryJob(h)}
-                                disabled={isUploading}
-                                className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 px-1.5 py-1 rounded bg-cyan-500/5 border border-cyan-500/10 hover:bg-cyan-500/10 transition-all disabled:opacity-50"
-                              >
-                                <RefreshCw className="h-3 w-3" />
-                                Retry
-                              </button>
-                            )}
+                            <button
+                              onClick={() => retryHistoryJob(h)}
+                              disabled={isUploading}
+                              className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 px-1.5 py-1 rounded bg-cyan-500/5 border border-cyan-500/10 hover:bg-cyan-500/10 transition-all disabled:opacity-50"
+                              title={h.r2Key ? "Retry från R2" : "Välj fil och retry"}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              Retry
+                            </button>
                             <button
                               onClick={() => toggleHistoryError(h.id)}
                               className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 px-1.5 py-1 rounded bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-all"
