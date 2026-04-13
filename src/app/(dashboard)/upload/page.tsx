@@ -1202,6 +1202,56 @@ export default function UploadPage() {
     });
   };
 
+  const retryHistoryJob = async (h: DbJob) => {
+    if (!h.r2Key || !h.r2Url || !h.campaignId) {
+      toast.error("Kan inte retrya — saknar R2-data eller campaign ID");
+      return;
+    }
+
+    const hConfig = h.config as Record<string, unknown> | null;
+    const adCopy = hConfig?.adCopy as Record<string, unknown> | undefined;
+    const adsetConfig = hConfig?.adsetConfig as Record<string, unknown> | undefined;
+    const adName = (hConfig?.adName as string) || h.filename.replace(/\.[^.]+$/, "");
+
+    if (!adCopy) {
+      toast.error("Kan inte retrya — saknar ad copy-konfiguration");
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      const res = await fetch("/api/meta/upload-from-r2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          r2Key: h.r2Key,
+          r2Url: h.r2Url,
+          filename: h.filename,
+          mediaType: h.mediaType,
+          campaignId: h.campaignId,
+          adsetId: h.adsetId || undefined,
+          adsetConfig: adsetConfig || undefined,
+          adCopy,
+          adName,
+          existingJobId: h.id,
+        }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        toast.error(`Retry misslyckades: ${result.error || "Okänt fel"}`);
+      } else {
+        toast.success(`${h.filename} uppladdad!`);
+      }
+    } catch (e) {
+      toast.error(`Retry misslyckades: ${e instanceof Error ? e.message : "Nätverksfel"}`);
+    } finally {
+      setIsUploading(false);
+      fetchHistory();
+    }
+  };
+
   const toggleHistoryError = (id: number) => {
     setExpandedHistoryErrors((prev) => {
       const next = new Set(prev);
@@ -1322,13 +1372,25 @@ export default function UploadPage() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {h.status === "failed" && (
-                          <button
-                            onClick={() => toggleHistoryError(h.id)}
-                            className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 px-1.5 py-1 rounded bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-all"
-                          >
-                            <Bug className="h-3 w-3" />
-                            <ChevronDown className={cn("h-3 w-3 transition-transform", hExpanded && "rotate-180")} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            {h.r2Key && h.campaignId && (
+                              <button
+                                onClick={() => retryHistoryJob(h)}
+                                disabled={isUploading}
+                                className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 px-1.5 py-1 rounded bg-cyan-500/5 border border-cyan-500/10 hover:bg-cyan-500/10 transition-all disabled:opacity-50"
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                                Retry
+                              </button>
+                            )}
+                            <button
+                              onClick={() => toggleHistoryError(h.id)}
+                              className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 px-1.5 py-1 rounded bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-all"
+                            >
+                              <Bug className="h-3 w-3" />
+                              <ChevronDown className={cn("h-3 w-3 transition-transform", hExpanded && "rotate-180")} />
+                            </button>
+                          </div>
                         )}
                         <div className="text-right">
                           <div className="flex items-center gap-1 text-[10px] text-slate-500">
