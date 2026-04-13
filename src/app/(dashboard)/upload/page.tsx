@@ -1137,6 +1137,31 @@ export default function UploadPage() {
     toast.success(`Bearbetade ${pending.length + (adsetMode === "new" ? 1 : 0)} fil(er)`);
   };
 
+  const retryJob = async (jobId: string) => {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job || job.status !== "failed") return;
+
+    // Reset job status to pending, keeping file and config
+    setJobs((prev) =>
+      prev.map((j) =>
+        j.id === jobId
+          ? { ...j, status: "pending" as const, step: "Väntar...", error: undefined, errorDetails: undefined, dbJobId: undefined, result: undefined, r2Key: undefined, r2Url: undefined }
+          : j
+      )
+    );
+
+    // Get the adset to use (from a completed sibling job, or selected)
+    const completedSibling = jobs.find((j) => j.id !== jobId && j.status === "completed" && j.result?.adsetId);
+    const adsetOverride = completedSibling?.result?.adsetId || selectedAdsetId;
+
+    // Re-process
+    setIsUploading(true);
+    // Read the reset job from state
+    const resetJob = { ...job, status: "pending" as const, step: "Väntar...", error: undefined, errorDetails: undefined, dbJobId: undefined, result: undefined, r2Key: undefined, r2Url: undefined };
+    await processSingleJob(resetJob, adsetOverride);
+    setIsUploading(false);
+  };
+
   const clearCompleted = () => {
     setJobs((prev) => prev.filter((j) => j.status !== "completed" && j.status !== "failed"));
   };
@@ -2245,14 +2270,24 @@ export default function UploadPage() {
                       </button>
                     )}
                     {job.status === "failed" && (
-                      <button
-                        onClick={() => toggleError(job.id)}
-                        className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 px-2 py-1 rounded-md bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-all"
-                      >
-                        <Bug className="h-3 w-3" />
-                        Detaljer
-                        <ChevronDown className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-180")} />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => retryJob(job.id)}
+                          disabled={isUploading}
+                          className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 px-2 py-1 rounded-md bg-cyan-500/5 border border-cyan-500/10 hover:bg-cyan-500/10 transition-all disabled:opacity-50"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Retry
+                        </button>
+                        <button
+                          onClick={() => toggleError(job.id)}
+                          className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 px-2 py-1 rounded-md bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-all"
+                        >
+                          <Bug className="h-3 w-3" />
+                          Detaljer
+                          <ChevronDown className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-180")} />
+                        </button>
+                      </div>
                     )}
                   </div>
 
