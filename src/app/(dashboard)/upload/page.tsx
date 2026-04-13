@@ -887,12 +887,12 @@ export default function UploadPage() {
   };
 
   // Helper: create a DB job record immediately
-  const createDbJob = async (filename: string, mediaType: string, campaignId: string): Promise<number | undefined> => {
+  const createDbJob = async (filename: string, mediaType: string, campaignId: string, config?: Record<string, unknown>): Promise<number | undefined> => {
     try {
       const res = await fetch("/api/upload-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename, mediaType, campaignId }),
+        body: JSON.stringify({ filename, mediaType, campaignId, config }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -918,8 +918,40 @@ export default function UploadPage() {
   const processSingleJob = async (job: UploadJob, overrideAdsetId?: string): Promise<{ adsetId?: string }> => {
     let dbJobId: number | undefined;
 
+    // Build config upfront so it's saved to DB (needed for retry on step 0 failures)
+    const filteredHL = headlines.filter(Boolean);
+    const filteredPT = primaryTexts.filter(Boolean);
+    const resolvedLink = job.linkUrl || landingPages[0]?.url || "";
+    const resolvedAdName = job.adName
+      || (job.lpLabel ? `${job.filename.replace(/\.[^.]+$/, "")} - ${job.lpLabel}` : job.filename.replace(/\.[^.]+$/, ""));
+    const jobConfig: Record<string, unknown> = {
+      adCopy: {
+        headlines: filteredHL,
+        primaryTexts: filteredPT,
+        linkUrl: resolvedLink,
+        ctaType,
+      },
+      adName: resolvedAdName,
+    };
+    if (overrideAdsetId) {
+      jobConfig.adsetId = overrideAdsetId;
+    } else if (adsetMode === "existing" && selectedAdsetId) {
+      jobConfig.adsetId = selectedAdsetId;
+    } else if (adsetMode === "new") {
+      jobConfig.adsetConfig = {
+        name: newAdsetName || `AdSet ${new Date().toLocaleDateString("sv")}`,
+        dailyBudget: newAdsetBudget,
+        targeting: { geo_locations: { countries: [newAdsetCountry] } },
+        optimizationGoal: newAdsetOptGoal,
+        bidStrategy: newAdsetBidStrategy,
+        conversionEvent: newAdsetConvEvent,
+      };
+    }
+    if (selectedPageId) jobConfig.pageId = selectedPageId;
+    if (pixelId) jobConfig.pixelId = pixelId;
+
     try {
-      dbJobId = await createDbJob(job.filename, job.mediaType, selectedCampaignId);
+      dbJobId = await createDbJob(job.filename, job.mediaType, selectedCampaignId, jobConfig);
 
       // Step 0: Upload to R2 if file is from computer
       if (job.file && !job.r2Key) {
@@ -943,6 +975,7 @@ export default function UploadPage() {
               error: errMsg,
               stepLabel: "Misslyckades: R2-uppladdning",
               config: {
+                ...jobConfig,
                 errorDetails: {
                   message: errMsg,
                   failedStep: 0,
@@ -1082,6 +1115,7 @@ export default function UploadPage() {
           error: errMsg,
           stepLabel: "Oväntat fel",
           config: {
+            ...jobConfig,
             errorDetails: {
               message: errMsg,
               failedStep: 0,
@@ -1262,10 +1296,12 @@ export default function UploadPage() {
           filename: h.filename,
           mediaType: h.mediaType,
           campaignId: h.campaignId,
-          adsetId: h.adsetId || undefined,
+          adsetId: h.adsetId || (hConfig?.adsetId as string) || undefined,
           adsetConfig: adsetConfig || undefined,
           adCopy,
           adName,
+          pageId: (hConfig?.pageId as string) || undefined,
+          pixelId: (hConfig?.pixelId as string) || undefined,
           existingJobId: h.id,
         }),
       });
