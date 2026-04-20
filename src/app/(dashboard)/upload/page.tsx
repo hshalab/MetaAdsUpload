@@ -695,14 +695,22 @@ export default function UploadPage() {
     const { uploadUrl, publicUrl, key } = presignData;
 
     // Step 2: PUT file directly to R2 via presigned URL
-    const putRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: file,
-    });
+    let putRes: Response;
+    try {
+      putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+    } catch (fetchErr) {
+      console.error("R2 PUT fetch error:", fetchErr, "URL:", uploadUrl?.substring(0, 100));
+      throw new Error(`R2 PUT nätverksfel: ${fetchErr instanceof Error ? fetchErr.message : "Unknown"}`);
+    }
 
     if (!putRes.ok) {
-      throw new Error(`R2 PUT misslyckades: ${putRes.status} ${putRes.statusText}`);
+      const errBody = await putRes.text().catch(() => "");
+      console.error("R2 PUT error response:", putRes.status, errBody);
+      throw new Error(`R2 PUT misslyckades: ${putRes.status} ${putRes.statusText} — ${errBody.substring(0, 200)}`);
     }
 
     return { key, url: publicUrl };
@@ -969,6 +977,8 @@ export default function UploadPage() {
           if (dbJobId) await updateDbJob(dbJobId, { r2Key: key, r2Url: url });
         } catch (r2Error) {
           const errMsg = r2Error instanceof Error ? r2Error.message : "R2 upload failed";
+          console.error("R2 upload failed:", errMsg, r2Error);
+          toast.error(`R2-fel: ${errMsg}`);
           if (dbJobId) {
             await updateDbJob(dbJobId, {
               status: "failed",
@@ -982,7 +992,7 @@ export default function UploadPage() {
                   failedStepName: "Ladda upp till R2",
                   suggestion: errMsg.includes("presign")
                     ? "Kunde inte hämta presigned URL. Kontrollera R2-konfigurationen i miljövariabler."
-                    : "Uppladdning till Cloudflare R2 misslyckades. Kontrollera filstorlek och internetanslutning.",
+                    : `R2-uppladdning misslyckades: ${errMsg}`,
                   timestamp: new Date().toISOString(),
                 },
               },
