@@ -687,12 +687,12 @@ export default function UploadPage() {
       }),
     });
 
+    const presignData = await presignRes.json();
     if (!presignRes.ok) {
-      const err = await presignRes.json();
-      throw new Error(err.error || "Kunde inte hämta presigned URL");
+      throw new Error(presignData.error || "Kunde inte hämta presigned URL");
     }
 
-    const { uploadUrl, publicUrl, key } = await presignRes.json();
+    const { uploadUrl, publicUrl, key } = presignData;
 
     // Step 2: PUT file directly to R2 via presigned URL
     const putRes = await fetch(uploadUrl, {
@@ -717,12 +717,12 @@ export default function UploadPage() {
       body: formData,
     });
 
+    const uploadData = await res.json();
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Kunde inte ladda upp till R2");
+      throw new Error(uploadData.error || "Kunde inte ladda upp till R2");
     }
 
-    const { key, publicUrl } = await res.json();
+    const { key, publicUrl } = uploadData;
     return { key, url: publicUrl };
   };
 
