@@ -185,6 +185,7 @@ export async function POST(request: NextRequest) {
         optimizationGoal: string;
         bidStrategy: string;
         conversionEvent?: string;
+        startTime?: string;
       };
       adCopy: AdCopyInput;
       adName: string;
