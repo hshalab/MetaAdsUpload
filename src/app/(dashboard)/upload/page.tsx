@@ -245,6 +245,7 @@ export default function UploadPage() {
   const [newAdsetOptGoal, setNewAdsetOptGoal] = useState("OFFSITE_CONVERSIONS");
   const [newAdsetBidStrategy, setNewAdsetBidStrategy] = useState("LOWEST_COST_WITHOUT_CAP");
   const [newAdsetConvEvent, setNewAdsetConvEvent] = useState("PURCHASE");
+  const [scheduleForTomorrow, setScheduleForTomorrow] = useState(false);
 
   // Ad copy — arrays for multi-variant
   const [headlines, setHeadlines] = useState<string[]>(["", ""]);
@@ -946,7 +947,7 @@ export default function UploadPage() {
     } else if (adsetMode === "existing" && selectedAdsetId) {
       jobConfig.adsetId = selectedAdsetId;
     } else if (adsetMode === "new") {
-      jobConfig.adsetConfig = {
+      const adsetConfig: Record<string, unknown> = {
         name: newAdsetName || `AdSet ${new Date().toLocaleDateString("sv")}`,
         dailyBudget: newAdsetBudget,
         targeting: { geo_locations: { countries: [newAdsetCountry] } },
@@ -954,6 +955,13 @@ export default function UploadPage() {
         bidStrategy: newAdsetBidStrategy,
         conversionEvent: newAdsetConvEvent,
       };
+      if (scheduleForTomorrow) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(2, 0, 0, 0);
+        adsetConfig.startTime = tomorrow.toISOString();
+      }
+      jobConfig.adsetConfig = adsetConfig;
     }
     if (selectedPageId) jobConfig.pageId = selectedPageId;
     if (pixelId) jobConfig.pixelId = pixelId;
@@ -2207,6 +2215,16 @@ export default function UploadPage() {
                     </select>
                   </div>
                 </div>
+                <label className="flex items-center gap-2 cursor-pointer group mt-1">
+                  <input
+                    type="checkbox"
+                    checked={scheduleForTomorrow}
+                    onChange={(e) => setScheduleForTomorrow(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500/30"
+                  />
+                  <Clock className="h-3.5 w-3.5 text-slate-500 group-hover:text-cyan-400 transition-colors" />
+                  <span className="text-xs text-slate-400 group-hover:text-slate-300 transition-colors">Starta 02:00 imorgon</span>
+                </label>
               </div>
             )}
           </div>

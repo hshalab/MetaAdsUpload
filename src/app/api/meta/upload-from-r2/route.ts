@@ -423,6 +423,8 @@ export async function POST(request: NextRequest) {
           ? { pixel_id: pixelId, custom_event_type: adsetConfig.conversionEvent || "PURCHASE" }
           : undefined,
         destination_type: optGoal === "OFFSITE_CONVERSIONS" ? "WEBSITE" : undefined,
+        // Schedule ad set start time (e.g. 02:00 tomorrow)
+        start_time: adsetConfig.startTime || undefined,
       };
 
       try {
