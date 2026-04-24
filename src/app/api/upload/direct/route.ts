@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getR2Client, getR2PublicUrl } from "@/lib/r2";
 
-export const maxDuration = 60; // allow up to 60s for large images
+export const maxDuration = 120; // allow up to 120s for large files
 
 // POST /api/upload/direct — server-side proxy upload to R2 (no CORS issues)
 export async function POST(request: NextRequest) {

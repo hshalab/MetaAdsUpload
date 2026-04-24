@@ -673,7 +673,7 @@ export default function UploadPage() {
 
   // ─── Upload to R2 (presigned URL for large files, proxy fallback for small) ─
 
-  const PROXY_SIZE_LIMIT = 4 * 1024 * 1024; // 4MB — Vercel body limit is 4.5MB
+  const PROXY_SIZE_LIMIT = 95 * 1024 * 1024; // 95MB — server proxy limit
 
   const uploadViaPresignedUrl = async (file: File): Promise<{ key: string; url: string }> => {
     // Step 1: Get presigned URL from server
@@ -736,16 +736,14 @@ export default function UploadPage() {
   };
 
   const uploadFileToR2 = async (file: File): Promise<{ key: string; url: string }> => {
-    // Large files MUST use presigned URLs (Vercel proxy has 4.5MB limit)
-    if (file.size > PROXY_SIZE_LIMIT) {
-      return uploadViaPresignedUrl(file);
-    }
-
-    // Small files: try presigned URL first, fall back to proxy
+    // Try presigned URL first, fall back to server proxy
     try {
       return await uploadViaPresignedUrl(file);
-    } catch {
-      console.warn("Presigned URL upload failed, falling back to proxy");
+    } catch (presignErr) {
+      console.warn("Presigned URL upload failed, falling back to proxy:", presignErr);
+      if (file.size > PROXY_SIZE_LIMIT) {
+        throw new Error(`Uppladdning misslyckades (${(file.size / 1024 / 1024).toFixed(0)}MB). Konfigurera CORS på R2-bucketen eller minska filstorleken.`);
+      }
       return uploadViaProxy(file);
     }
   };
