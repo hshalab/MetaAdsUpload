@@ -673,7 +673,7 @@ export default function UploadPage() {
 
   // ─── Upload to R2 (presigned URL for large files, proxy fallback for small) ─
 
-  const PROXY_SIZE_LIMIT = 95 * 1024 * 1024; // 95MB — server proxy limit
+  const PROXY_SIZE_LIMIT = 200 * 1024 * 1024; // 200MB — server proxy limit
 
   const uploadViaPresignedUrl = async (file: File): Promise<{ key: string; url: string }> => {
     // Step 1: Get presigned URL from server
