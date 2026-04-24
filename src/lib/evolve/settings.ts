@@ -16,6 +16,7 @@ export interface EvolveSettings {
   surfModeCampaignIds: string[];
   surfIntervalHours: number;
   graveyardCampaignId: string | null;
+  graveyardMappings: Record<string, string>; // { cboCampaignId: graveyardCampaignId }
 }
 
 const DEFAULTS: EvolveSettings = {
@@ -32,6 +33,7 @@ const DEFAULTS: EvolveSettings = {
   surfModeCampaignIds: [],
   surfIntervalHours: 4,
   graveyardCampaignId: null,
+  graveyardMappings: {},
 };
 
 export async function getEvolveSettings(): Promise<EvolveSettings> {
@@ -59,6 +61,7 @@ export async function getEvolveSettings(): Promise<EvolveSettings> {
     surfModeCampaignIds: row.surfModeCampaignIds ? JSON.parse(row.surfModeCampaignIds) : [],
     surfIntervalHours: row.surfIntervalHours,
     graveyardCampaignId: row.graveyardCampaignId || null,
+    graveyardMappings: row.graveyardMappings ? JSON.parse(row.graveyardMappings) : {},
   };
 }
 

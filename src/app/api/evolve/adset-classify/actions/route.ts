@@ -45,9 +45,13 @@ export async function POST(request: NextRequest) {
       case "move_zombie": {
         const settings = await getEvolveSettings();
 
-        if (!settings.graveyardCampaignId) {
+        // Look up graveyard for this specific campaign, fall back to global default
+        const targetGraveyardId = (campaignId && settings.graveyardMappings[campaignId])
+          || settings.graveyardCampaignId;
+
+        if (!targetGraveyardId) {
           return NextResponse.json({
-            error: "Ingen Graveyard-kampanj konfigurerad. Gå till Evolve KPI Settings och välj din Graveyard-kampanj.",
+            error: "Ingen Graveyard-kampanj konfigurerad för denna kampanj. Gå till Evolve KPI Settings och koppla en Graveyard.",
           }, { status: 400 });
         }
 
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
         const gyAdsetName = `[GY] ${sourceAdset.name}`;
 
         const newAdset = await createAdSet({
-          campaign_id: settings.graveyardCampaignId,
+          campaign_id: targetGraveyardId,
           name: gyAdsetName,
           targeting: sourceAdset.targeting,
           optimization_goal: sourceAdset.optimization_goal,

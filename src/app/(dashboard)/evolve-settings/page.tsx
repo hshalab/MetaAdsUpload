@@ -19,6 +19,7 @@ interface Settings {
   surfModeCampaignIds: string[];
   surfIntervalHours: number;
   graveyardCampaignId: string | null;
+  graveyardMappings: Record<string, string>;
 }
 
 interface Campaign {
@@ -243,20 +244,84 @@ export default function EvolveSettingsPage() {
       {/* Zombie Config */}
       <div className="rounded-xl border border-white/5 bg-[#111827] p-6">
         <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-1">Graveyard / Zombie Campaign</h2>
-        <p className="text-xs text-slate-500 mb-4">Välj din Graveyard-kampanj och konfigurera cost cap. Annonser som flyttas hit dupliceras med post-ID så att all engagement (likes, kommentarer) bevaras.</p>
+        <p className="text-xs text-slate-500 mb-4">Koppla varje CBO-kampanj till sin Graveyard. Annonser som flyttas dupliceras med post-ID så att all engagement (likes, kommentarer) bevaras.</p>
         <div className="divide-y divide-white/5">
-          {/* Campaign selector */}
+          {/* Per-campaign graveyard mapping */}
+          <div className="py-3">
+            <p className="text-sm font-medium text-white mb-1">CBO → Graveyard mappning</p>
+            <p className="text-xs text-slate-500 mb-3">Välj vilken Graveyard-kampanj varje CBO ska skicka zombies till</p>
+            {(() => {
+              // All campaign IDs currently used as graveyards
+              const graveyardIds = new Set(Object.values(settings.graveyardMappings));
+              // Source campaigns = all campaigns that are NOT used as a graveyard target
+              const sourceCampaigns = campaigns.filter((c) => !graveyardIds.has(c.id));
+              // Graveyard-eligible campaigns = all campaigns (you pick which is a graveyard)
+              const graveyardOptions = campaigns;
+
+              if (sourceCampaigns.length === 0) {
+                return <p className="text-xs text-slate-500 italic">Inga kampanjer hittade</p>;
+              }
+
+              return (
+                <div className="space-y-2">
+                  {sourceCampaigns.map((source) => {
+                    const mappedGraveyardId = settings.graveyardMappings[source.id] || "";
+                    return (
+                      <div key={source.id} className="flex items-center gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white truncate">{source.name}</p>
+                          <p className="text-xs text-slate-500">{source.status !== "ACTIVE" ? source.status : "Aktiv"}</p>
+                        </div>
+                        <span className="text-xs text-slate-500 shrink-0">→</span>
+                        <select
+                          value={mappedGraveyardId}
+                          onChange={(e) => {
+                            const newMappings = { ...settings.graveyardMappings };
+                            if (e.target.value) {
+                              newMappings[source.id] = e.target.value;
+                            } else {
+                              delete newMappings[source.id];
+                            }
+                            setSettings({ ...settings, graveyardMappings: newMappings });
+                          }}
+                          className="w-56 rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-white [color-scheme:dark] focus:border-cyan-500/50 focus:outline-none transition-colors"
+                        >
+                          <option value="">Välj Graveyard...</option>
+                          {graveyardOptions
+                            .filter((g) => g.id !== source.id)
+                            .map((g) => (
+                              <option key={g.id} value={g.id}>
+                                {g.name} {g.status !== "ACTIVE" ? `(${g.status})` : ""}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            {Object.keys(settings.graveyardMappings).length > 0 && (
+              <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2.5">
+                <p className="text-xs text-emerald-400">
+                  {Object.keys(settings.graveyardMappings).length} kampanj{Object.keys(settings.graveyardMappings).length > 1 ? "er" : ""} kopplad{Object.keys(settings.graveyardMappings).length > 1 ? "e" : ""} till Graveyard — flytt med post-ID sker automatiskt.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Legacy fallback */}
           <div className="flex items-center justify-between gap-4 py-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white">Graveyard Campaign</p>
-              <p className="text-xs text-slate-500 mt-0.5">CBO-kampanjen med cost cap dit spend winners och losers flyttas</p>
+              <p className="text-sm font-medium text-white">Standard-Graveyard (fallback)</p>
+              <p className="text-xs text-slate-500 mt-0.5">Används om en kampanj saknar specifik mappning ovan</p>
             </div>
             <select
               value={settings.graveyardCampaignId || ""}
               onChange={(e) => setSettings({ ...settings, graveyardCampaignId: e.target.value || null })}
-              className="w-64 rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-white [color-scheme:dark] focus:border-cyan-500/50 focus:outline-none transition-colors"
+              className="w-56 rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-white [color-scheme:dark] focus:border-cyan-500/50 focus:outline-none transition-colors"
             >
-              <option value="">Välj kampanj...</option>
+              <option value="">Ingen fallback</option>
               {campaigns.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} {c.status !== "ACTIVE" ? `(${c.status})` : ""}
@@ -264,15 +329,7 @@ export default function EvolveSettingsPage() {
               ))}
             </select>
           </div>
-          {settings.graveyardCampaignId && (
-            <div className="py-3">
-              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2.5">
-                <p className="text-xs text-emerald-400">
-                  Graveyard kopplad: annonser som flyttas dit pausas i CBO → dupliceras med post-ID till Graveyard automatiskt.
-                </p>
-              </div>
-            </div>
-          )}
+
           <SettingField
             label="Cost Cap Discount"
             description="% under target CPA för zombie cost cap (0.20 = 20% under)"

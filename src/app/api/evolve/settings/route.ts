@@ -49,6 +49,9 @@ export async function PUT(request: NextRequest) {
         : (current.surfModeCampaignIds ? JSON.stringify(current.surfModeCampaignIds) : null),
       surfIntervalHours: body.surfIntervalHours ?? current.surfIntervalHours,
       graveyardCampaignId: body.graveyardCampaignId !== undefined ? body.graveyardCampaignId : current.graveyardCampaignId,
+      graveyardMappings: body.graveyardMappings !== undefined
+        ? JSON.stringify(body.graveyardMappings)
+        : (current.graveyardMappings ? JSON.stringify(current.graveyardMappings) : null),
       updatedAt: new Date(),
     };
 
