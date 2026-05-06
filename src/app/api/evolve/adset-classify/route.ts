@@ -59,11 +59,9 @@ export async function GET(request: NextRequest) {
         .map((c) => c.id)
     );
 
-    // Fetch ads per active campaign (avoids 500-limit issue with account-level query)
-    const adsPerCampaign = await Promise.all(
-      Array.from(activeCampaignIds).map((cid) => getAds(cid, 500))
-    );
-    const ads = adsPerCampaign.flat();
+    // Fetch all ads at account level with pagination (single request chain instead of N+1)
+    const allAds = await getAds(undefined, 500);
+    const ads = allAds.filter((ad) => activeCampaignIds.has(ad.campaign_id));
 
     // Build insights lookup by adset_id
     const insightsMap = new Map<string, {

@@ -234,51 +234,50 @@ export async function PATCH(request: NextRequest) {
       }>;
     };
 
-    const results: Array<{ adsetId: string; action: string; success: boolean; error?: string }> = [];
-
-    for (const action of actions) {
-      try {
-        switch (action.type) {
-          case "pause":
-            await updateAdSet(action.adsetId, { status: "PAUSED" });
-            results.push({ adsetId: action.adsetId, action: "paused", success: true });
-            break;
-          case "activate":
-            await updateAdSet(action.adsetId, { status: "ACTIVE" });
-            results.push({ adsetId: action.adsetId, action: "activated", success: true });
-            break;
-          case "adjust_budget": {
-            const adsetData = await metaApi<{ daily_budget: string }>(`/${action.adsetId}`, {
-              params: { fields: "daily_budget" },
-            });
-            const currentBudget = parseInt(adsetData.daily_budget || "0");
-            const newBudget = Math.round(currentBudget * (1 + (action.value || 0) / 100));
-            await updateAdSet(action.adsetId, { daily_budget: newBudget });
-            results.push({
-              adsetId: action.adsetId,
-              action: `budget ${action.value! > 0 ? "+" : ""}${action.value}% → ${(newBudget / 100).toFixed(0)} SEK`,
-              success: true,
-            });
-            break;
+    // Process actions concurrently (throttle in metaApi handles rate limiting)
+    const results = await Promise.all(
+      actions.map(async (action): Promise<{ adsetId: string; action: string; success: boolean; error?: string }> => {
+        try {
+          switch (action.type) {
+            case "pause":
+              await updateAdSet(action.adsetId, { status: "PAUSED" });
+              return { adsetId: action.adsetId, action: "paused", success: true };
+            case "activate":
+              await updateAdSet(action.adsetId, { status: "ACTIVE" });
+              return { adsetId: action.adsetId, action: "activated", success: true };
+            case "adjust_budget": {
+              const adsetData = await metaApi<{ daily_budget: string }>(`/${action.adsetId}`, {
+                params: { fields: "daily_budget" },
+              });
+              const currentBudget = parseInt(adsetData.daily_budget || "0");
+              const newBudget = Math.round(currentBudget * (1 + (action.value || 0) / 100));
+              await updateAdSet(action.adsetId, { daily_budget: newBudget });
+              return {
+                adsetId: action.adsetId,
+                action: `budget ${action.value! > 0 ? "+" : ""}${action.value}% → ${(newBudget / 100).toFixed(0)} SEK`,
+                success: true,
+              };
+            }
+            case "set_budget":
+              await updateAdSet(action.adsetId, { daily_budget: action.value });
+              return {
+                adsetId: action.adsetId,
+                action: `budget set to ${((action.value || 0) / 100).toFixed(0)} SEK`,
+                success: true,
+              };
+            default:
+              return { adsetId: action.adsetId, action: action.type, success: false, error: "Unknown action" };
           }
-          case "set_budget":
-            await updateAdSet(action.adsetId, { daily_budget: action.value });
-            results.push({
-              adsetId: action.adsetId,
-              action: `budget set to ${((action.value || 0) / 100).toFixed(0)} SEK`,
-              success: true,
-            });
-            break;
+        } catch (err) {
+          return {
+            adsetId: action.adsetId,
+            action: action.type,
+            success: false,
+            error: err instanceof Error ? err.message : "Unknown error",
+          };
         }
-      } catch (err) {
-        results.push({
-          adsetId: action.adsetId,
-          action: action.type,
-          success: false,
-          error: err instanceof Error ? err.message : "Unknown error",
-        });
-      }
-    }
+      })
+    );
 
     return NextResponse.json({ results });
   } catch (error) {

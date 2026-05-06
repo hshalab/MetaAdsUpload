@@ -1,4 +1,4 @@
-import { metaApi, getAdAccountId } from "./client";
+import { metaApi, metaApiPaginated, getAdAccountId } from "./client";
 
 export interface InsightData {
   date_start: string;
@@ -60,10 +60,9 @@ export async function getInsights(params: {
     queryParams.action_breakdowns = actionBreakdowns.join(",");
   }
 
-  const data = await metaApi<{ data?: InsightData[] }>(endpoint, {
+  return metaApiPaginated<InsightData>(endpoint, {
     params: queryParams,
   });
-  return data.data ?? [];
 }
 
 export function extractPurchases(actions?: Array<{ action_type: string; value: string }>) {

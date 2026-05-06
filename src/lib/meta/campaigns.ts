@@ -1,4 +1,4 @@
-import { metaApi, getAdAccountId } from "./client";
+import { metaApi, metaApiPaginated, getAdAccountId } from "./client";
 
 export interface Campaign {
   id: string;
@@ -17,12 +17,11 @@ export interface Campaign {
 
 const CAMPAIGN_FIELDS = "id,name,status,objective,daily_budget,lifetime_budget,budget_remaining,buying_type,start_time,stop_time,created_time,updated_time";
 
-export async function getCampaigns(limit = 100) {
-  const data = await metaApi<{ data?: Campaign[] }>(
+export async function getCampaigns(limit = 200) {
+  return metaApiPaginated<Campaign>(
     `/${await getAdAccountId()}/campaigns`,
     { params: { fields: CAMPAIGN_FIELDS, limit } }
   );
-  return data.data ?? [];
 }
 
 export async function createCampaign(params: {

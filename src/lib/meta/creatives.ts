@@ -6,6 +6,7 @@ import { metaApi, getAdAccountId } from "./client";
  */
 export async function waitForVideoReady(videoId: string, maxWaitMs = 120000): Promise<void> {
   const start = Date.now();
+  let pollInterval = 5000; // Start at 5s, increase over time
   while (Date.now() - start < maxWaitMs) {
     const result = await metaApi<{ status?: { video_status?: string } }>(
       `/${videoId}`,
@@ -14,8 +15,9 @@ export async function waitForVideoReady(videoId: string, maxWaitMs = 120000): Pr
     const status = result.status?.video_status;
     if (status === "ready") return;
     if (status === "error") throw new Error("Video processing failed on Meta's side");
-    // Still processing — wait 3s and retry
-    await new Promise((r) => setTimeout(r, 3000));
+    // Still processing — wait with increasing intervals (5s, 7s, 10s...)
+    await new Promise((r) => setTimeout(r, pollInterval));
+    pollInterval = Math.min(pollInterval * 1.4, 15000);
   }
   // Timed out but try anyway — sometimes status API lags behind
   console.warn(`Video ${videoId} still not "ready" after ${maxWaitMs}ms, proceeding anyway`);

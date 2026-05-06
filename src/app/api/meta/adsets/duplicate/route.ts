@@ -68,24 +68,22 @@ export async function POST(request: NextRequest) {
       promoted_object: sourceAdset.promoted_object,
     });
 
-    // Recreate each ad in the new ad-set (reusing the same creative)
-    const createdAds: Array<{ id: string; name: string; sourceAdId: string }> = [];
-    for (const srcAd of sourceAds.data || []) {
-      if (!srcAd.creative?.id) continue;
-
-      const newAd = await createAd({
-        adset_id: newAdset.id,
-        name: srcAd.name,
-        creative: { creative_id: srcAd.creative.id },
-        status: "PAUSED",
-      });
-
-      createdAds.push({
-        id: newAd.id,
-        name: srcAd.name,
-        sourceAdId: srcAd.id,
-      });
-    }
+    // Recreate each ad in the new ad-set concurrently (throttle handles rate limiting)
+    const adsToCreate = (sourceAds.data || []).filter((a) => a.creative?.id);
+    const createdAdsResults = await Promise.allSettled(
+      adsToCreate.map(async (srcAd) => {
+        const newAd = await createAd({
+          adset_id: newAdset.id,
+          name: srcAd.name,
+          creative: { creative_id: srcAd.creative.id },
+          status: "PAUSED",
+        });
+        return { id: newAd.id, name: srcAd.name, sourceAdId: srcAd.id };
+      })
+    );
+    const createdAds = createdAdsResults
+      .filter((r): r is PromiseFulfilledResult<{ id: string; name: string; sourceAdId: string }> => r.status === "fulfilled")
+      .map((r) => r.value);
 
     return NextResponse.json({
       success: true,

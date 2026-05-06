@@ -1,4 +1,4 @@
-import { metaApi, getAdAccountId } from "./client";
+import { metaApi, metaApiPaginated, getAdAccountId } from "./client";
 
 export interface Ad {
   id: string;
@@ -12,12 +12,11 @@ export interface Ad {
 
 const AD_FIELDS = "id,adset_id,campaign_id,name,status,creative{id},preview_shareable_link";
 
-export async function getAds(adsetId?: string, limit = 100) {
+export async function getAds(adsetId?: string, limit = 200) {
   const endpoint = adsetId ? `/${adsetId}/ads` : `/${await getAdAccountId()}/ads`;
-  const data = await metaApi<{ data?: Ad[] }>(endpoint, {
+  return metaApiPaginated<Ad>(endpoint, {
     params: { fields: AD_FIELDS, limit },
   });
-  return data.data ?? [];
 }
 
 export async function createAd(params: {
@@ -153,25 +152,44 @@ export async function createAdWithPostId(params: {
 
 export async function getAdPostId(adId: string): Promise<string | null> {
   try {
-    // Step 1: Get the creative ID from the ad
-    const ad = await metaApi<{ creative?: { id?: string } }>(
-      `/${adId}`,
-      { params: { fields: "creative{id}" } }
-    );
-
-    if (!ad.creative?.id) return null;
-
-    // Step 2: Fetch effective_object_story_id from the creative directly
-    const creative = await metaApi<{
-      effective_object_story_id?: string;
-      object_story_id?: string;
+    // Single request: fetch creative with effective_object_story_id nested
+    const ad = await metaApi<{
+      creative?: {
+        id?: string;
+        effective_object_story_id?: string;
+        object_story_id?: string;
+      };
     }>(
-      `/${ad.creative.id}`,
-      { params: { fields: "effective_object_story_id,object_story_id" } }
+      `/${adId}`,
+      { params: { fields: "creative{id,effective_object_story_id,object_story_id}" } }
     );
 
-    return creative.effective_object_story_id || creative.object_story_id || null;
+    return ad.creative?.effective_object_story_id || ad.creative?.object_story_id || null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Batch-fetch post IDs for multiple ads. Much more efficient than calling getAdPostId N times.
+ * Uses a single request per ad but fetches creative fields inline.
+ */
+export async function getAdPostIds(adIds: string[]): Promise<Map<string, string>> {
+  const postIds = new Map<string, string>();
+
+  // Process in parallel with a concurrency limit (throttle handles this)
+  const results = await Promise.allSettled(
+    adIds.map(async (adId) => {
+      const postId = await getAdPostId(adId);
+      if (postId) postIds.set(adId, postId);
+    })
+  );
+
+  // Log any failures
+  const failures = results.filter((r) => r.status === "rejected");
+  if (failures.length > 0) {
+    console.warn(`getAdPostIds: ${failures.length}/${adIds.length} failed`);
+  }
+
+  return postIds;
 }

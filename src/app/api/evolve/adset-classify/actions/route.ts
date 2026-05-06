@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { getAds, getAdPostId, createAdWithPostId } from "@/lib/meta/ads";
+import { getAds, getAdPostIds, createAdWithPostId } from "@/lib/meta/ads";
 import { updateAdSet, createAdSet } from "@/lib/meta/adsets";
 import { metaApi } from "@/lib/meta/client";
 import { getEvolveSettings } from "@/lib/evolve/settings";
@@ -92,13 +92,15 @@ export async function POST(request: NextRequest) {
           ...(sourceAdset.promoted_object && { promoted_object: sourceAdset.promoted_object }),
         });
 
-        // 4. For each ad: get post ID, create in graveyard ad set
+        // 4. Batch-fetch post IDs for all active ads, then create in graveyard
+        const postIdMap = await getAdPostIds(activeAds.map((a) => a.id));
+
         const results: string[] = [];
         const errors: string[] = [];
 
         for (const ad of activeAds) {
           try {
-            const postId = await getAdPostId(ad.id);
+            const postId = postIdMap.get(ad.id);
             if (!postId) {
               errors.push(`${ad.name}: kunde inte hämta post-ID`);
               continue;

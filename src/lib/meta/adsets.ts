@@ -1,4 +1,4 @@
-import { metaApi, getAdAccountId } from "./client";
+import { metaApi, metaApiPaginated, getAdAccountId } from "./client";
 
 export interface AdSet {
   id: string;
@@ -17,14 +17,13 @@ export interface AdSet {
 
 const ADSET_FIELDS = "id,campaign_id,name,status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_strategy,start_time,end_time";
 
-export async function getAdSets(campaignId?: string, limit = 100) {
+export async function getAdSets(campaignId?: string, limit = 200) {
   const endpoint = campaignId
     ? `/${campaignId}/adsets`
     : `/${await getAdAccountId()}/adsets`;
-  const data = await metaApi<{ data?: AdSet[] }>(endpoint, {
+  return metaApiPaginated<AdSet>(endpoint, {
     params: { fields: ADSET_FIELDS, limit },
   });
-  return data.data ?? [];
 }
 
 export async function createAdSet(params: {

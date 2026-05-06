@@ -12,13 +12,15 @@ export default function CampaignsPage() {
       const data = await res.json();
       const active = (data.data || []).filter((c: { status: string }) => c.status === "ACTIVE");
 
-      for (const campaign of active) {
-        await fetch("/api/meta/campaigns", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: campaign.id, status: "PAUSED" }),
-        });
-      }
+      await Promise.all(
+        active.map((campaign: { id: string }) =>
+          fetch("/api/meta/campaigns", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: campaign.id, status: "PAUSED" }),
+          })
+        )
+      );
       toast.success(`Paused ${active.length} campaigns`);
     } catch {
       toast.error("Emergency stop failed");
