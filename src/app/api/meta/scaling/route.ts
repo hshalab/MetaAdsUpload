@@ -65,8 +65,8 @@ export async function GET(request: NextRequest) {
     };
 
     const [campaigns, allAdsets, insightsData] = await Promise.all([
-      getCampaigns(200),
-      getAdSets(undefined, 500),
+      getCampaigns(200, "ACTIVE"),
+      getAdSets(undefined, 500, "ACTIVE"),
       getInsights({
         level: "adset",
         dateRange: { since, until },

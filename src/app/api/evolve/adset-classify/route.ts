@@ -34,10 +34,10 @@ export async function GET(request: NextRequest) {
 
     const settings = await getEvolveSettings();
 
-    // Fetch everything in parallel — minimizes Meta API round-trips
+    // Fetch only ACTIVE entities from Meta — dramatically reduces data volume
     const [campaigns, adsets, insightsData, adInsightsData, allAds, ncRoasMap] = await Promise.all([
-      getCampaigns(200),
-      getAdSets(undefined, 500),
+      getCampaigns(200, "ACTIVE"),
+      getAdSets(undefined, 500, "ACTIVE"),
       getInsights({
         level: "adset",
         dateRange: { since, until },
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         dateRange: { since, until },
         limit: 500,
       }),
-      getAds(undefined, 500),
+      getAds(undefined, 500, "ACTIVE"),
       getAdsetNcRoas(since, until),
     ]);
 

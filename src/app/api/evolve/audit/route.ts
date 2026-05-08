@@ -32,9 +32,9 @@ export async function POST(request: NextRequest) {
 
     // Fetch all data
     const [campaigns, adsets, ads, insightsData] = await Promise.all([
-      getCampaigns(200),
-      getAdSets(undefined, 500),
-      getAds(undefined, 500),
+      getCampaigns(200, "ACTIVE"),
+      getAdSets(undefined, 500, "ACTIVE"),
+      getAds(undefined, 500, "ACTIVE"),
       getInsights({
         level: "adset",
         dateRange: { since, until },

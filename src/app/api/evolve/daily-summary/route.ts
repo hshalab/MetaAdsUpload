@@ -23,11 +23,11 @@ export async function GET(request: NextRequest) {
     const yesterday = format(subDays(new Date(), 1), "yyyy-MM-dd");
     const last7d = format(subDays(new Date(), 7), "yyyy-MM-dd");
 
-    // Fetch all data in parallel — use 7d ad-level insights for both yesterday + week
+    // Fetch only ACTIVE entities in parallel — use 7d ad-level insights for both yesterday + week
     const [ads, campaigns, adsets, yesterdayCampaignInsights, last7dAdInsights, recentActions] = await Promise.all([
-      getAds(undefined, 500),
-      getCampaigns(200),
-      getAdSets(undefined, 500),
+      getAds(undefined, 500, "ACTIVE"),
+      getCampaigns(200, "ACTIVE"),
+      getAdSets(undefined, 500, "ACTIVE"),
       // Campaign-level insights for yesterday (for CBO budget decisions)
       getInsights({ level: "campaign", dateRange: { since: yesterday, until: yesterday }, limit: 200 }),
       // Ad-level insights for last 7 days (includes yesterday — filter in JS)

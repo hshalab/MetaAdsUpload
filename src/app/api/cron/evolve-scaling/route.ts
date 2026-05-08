@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const until = format(new Date(), "yyyy-MM-dd");
 
     const [adsets, insightsData] = await Promise.all([
-      getAdSets(undefined, 500),
+      getAdSets(undefined, 500, "ACTIVE"),
       getInsights({ level: "adset", dateRange: { since, until }, limit: 500 }),
     ]);
 

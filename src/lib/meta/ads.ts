@@ -12,11 +12,13 @@ export interface Ad {
 
 const AD_FIELDS = "id,adset_id,campaign_id,name,status,creative{id},preview_shareable_link";
 
-export async function getAds(adsetId?: string, limit = 200) {
+export async function getAds(adsetId?: string, limit = 200, statusFilter?: "ACTIVE" | "PAUSED" | "ARCHIVED") {
   const endpoint = adsetId ? `/${adsetId}/ads` : `/${await getAdAccountId()}/ads`;
-  return metaApiPaginated<Ad>(endpoint, {
-    params: { fields: AD_FIELDS, limit },
-  });
+  const params: Record<string, string | number> = { fields: AD_FIELDS, limit };
+  if (statusFilter) {
+    params.filtering = JSON.stringify([{ field: "effective_status", operator: "IN", value: [statusFilter] }]);
+  }
+  return metaApiPaginated<Ad>(endpoint, { params });
 }
 
 export async function createAd(params: {

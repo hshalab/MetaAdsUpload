@@ -34,11 +34,11 @@ export async function GET(request: NextRequest) {
 
     const settings = await getEvolveSettings();
 
-    // Fetch all data in parallel
+    // Fetch only ACTIVE entities in parallel
     const [ads, campaigns, adsets, insightsData] = await Promise.all([
-      getAds(undefined, 500),
-      getCampaigns(200),
-      getAdSets(undefined, 500),
+      getAds(undefined, 500, "ACTIVE"),
+      getCampaigns(200, "ACTIVE"),
+      getAdSets(undefined, 500, "ACTIVE"),
       getInsights({
         level: "ad",
         dateRange: { since, until },

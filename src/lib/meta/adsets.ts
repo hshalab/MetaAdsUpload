@@ -17,13 +17,15 @@ export interface AdSet {
 
 const ADSET_FIELDS = "id,campaign_id,name,status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_strategy,start_time,end_time";
 
-export async function getAdSets(campaignId?: string, limit = 200) {
+export async function getAdSets(campaignId?: string, limit = 200, statusFilter?: "ACTIVE" | "PAUSED" | "ARCHIVED") {
   const endpoint = campaignId
     ? `/${campaignId}/adsets`
     : `/${await getAdAccountId()}/adsets`;
-  return metaApiPaginated<AdSet>(endpoint, {
-    params: { fields: ADSET_FIELDS, limit },
-  });
+  const params: Record<string, string | number> = { fields: ADSET_FIELDS, limit };
+  if (statusFilter) {
+    params.filtering = JSON.stringify([{ field: "effective_status", operator: "IN", value: [statusFilter] }]);
+  }
+  return metaApiPaginated<AdSet>(endpoint, { params });
 }
 
 export async function createAdSet(params: {
