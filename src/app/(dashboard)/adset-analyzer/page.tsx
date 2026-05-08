@@ -140,7 +140,21 @@ export default function AdSetAnalyzerPage() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
       toast.success(result.action || "Klart!");
-      fetchData();
+      // Optimistic update: remove paused/moved adset from local state instead of re-fetching
+      if (action === "pause" || action === "move_zombie") {
+        setData((prev) => prev ? {
+          ...prev,
+          adsets: prev.adsets.filter((a) => a.id !== adsetId),
+          summary: {
+            ...prev.summary,
+            totalAdsets: prev.summary.totalAdsets - 1,
+            classificationCounts: {
+              ...prev.summary.classificationCounts,
+              [adset.classification]: Math.max(0, (prev.summary.classificationCounts[adset.classification] || 0) - 1),
+            },
+          },
+        } : prev);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Något gick fel");
     } finally {

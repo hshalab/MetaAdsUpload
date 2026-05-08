@@ -1,4 +1,4 @@
-import { metaApi, metaApiPaginated, getAdAccountId } from "./client";
+import { metaApi, metaApiPaginated, getAdAccountId, getAccessToken } from "./client";
 
 export interface Ad {
   id: string;
@@ -173,24 +173,52 @@ export async function getAdPostId(adId: string): Promise<string | null> {
 }
 
 /**
- * Batch-fetch post IDs for multiple ads. Much more efficient than calling getAdPostId N times.
- * Uses a single request per ad but fetches creative fields inline.
+ * Batch-fetch post IDs for multiple ads using Meta Batch API.
+ * Single HTTP request instead of N individual requests.
  */
 export async function getAdPostIds(adIds: string[]): Promise<Map<string, string>> {
   const postIds = new Map<string, string>();
+  if (adIds.length === 0) return postIds;
 
-  // Process in parallel with a concurrency limit (throttle handles this)
-  const results = await Promise.allSettled(
-    adIds.map(async (adId) => {
-      const postId = await getAdPostId(adId);
-      if (postId) postIds.set(adId, postId);
-    })
-  );
+  // Meta Batch API: up to 50 requests per batch
+  const BATCH_SIZE = 50;
+  const token = await getAccessToken();
 
-  // Log any failures
-  const failures = results.filter((r) => r.status === "rejected");
-  if (failures.length > 0) {
-    console.warn(`getAdPostIds: ${failures.length}/${adIds.length} failed`);
+  for (let i = 0; i < adIds.length; i += BATCH_SIZE) {
+    const chunk = adIds.slice(i, i + BATCH_SIZE);
+    const batch = chunk.map((adId) => ({
+      method: "GET",
+      relative_url: `${adId}?fields=creative{id,effective_object_story_id,object_story_id}`,
+    }));
+
+    try {
+      const response = await metaApi<Array<{ code: number; body: string }>>(
+        "/",
+        {
+          method: "POST",
+          body: { batch: JSON.stringify(batch) },
+          token,
+        }
+      );
+
+      for (let j = 0; j < response.length; j++) {
+        const item = response[j];
+        if (item.code === 200) {
+          try {
+            const data = JSON.parse(item.body);
+            const postId = data.creative?.effective_object_story_id || data.creative?.object_story_id;
+            if (postId) postIds.set(chunk[j], postId);
+          } catch { /* skip parse errors */ }
+        }
+      }
+    } catch (err) {
+      console.warn(`getAdPostIds batch failed, falling back to individual requests:`, err);
+      // Fallback: fetch individually for this chunk
+      for (const adId of chunk) {
+        const postId = await getAdPostId(adId);
+        if (postId) postIds.set(adId, postId);
+      }
+    }
   }
 
   return postIds;
