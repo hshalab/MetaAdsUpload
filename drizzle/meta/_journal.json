@@ -36,6 +36,13 @@
       "when": 1775667328243,
       "tag": "0004_hot_wasp",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778261650428,
+      "tag": "0005_cynical_zodiak",
+      "breakpoints": true
     }
   ]
 }

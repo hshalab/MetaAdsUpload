@@ -116,7 +116,11 @@ export default function AdSetAnalyzerPage() {
     }
   }, [buildUrl]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Debounce filter changes to avoid rapid API calls
+  useEffect(() => {
+    const timer = setTimeout(() => { fetchData(); }, 300);
+    return () => clearTimeout(timer);
+  }, [fetchData]);
 
   const executeAction = async (adsetId: string, action: string, adset: ClassifiedAdset) => {
     setActing(adsetId);

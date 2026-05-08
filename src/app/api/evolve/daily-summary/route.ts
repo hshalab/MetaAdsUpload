@@ -23,16 +23,14 @@ export async function GET(request: NextRequest) {
     const yesterday = format(subDays(new Date(), 1), "yyyy-MM-dd");
     const last7d = format(subDays(new Date(), 7), "yyyy-MM-dd");
 
-    // Fetch all data in parallel
-    const [ads, campaigns, adsets, yesterdayCampaignInsights, yesterdayAdInsights, last7dAdInsights, recentActions] = await Promise.all([
+    // Fetch all data in parallel — use 7d ad-level insights for both yesterday + week
+    const [ads, campaigns, adsets, yesterdayCampaignInsights, last7dAdInsights, recentActions] = await Promise.all([
       getAds(undefined, 500),
       getCampaigns(200),
       getAdSets(undefined, 500),
       // Campaign-level insights for yesterday (for CBO budget decisions)
       getInsights({ level: "campaign", dateRange: { since: yesterday, until: yesterday }, limit: 200 }),
-      // Ad-level insights for yesterday
-      getInsights({ level: "ad", dateRange: { since: yesterday, until: yesterday }, limit: 500 }),
-      // Ad-level insights for last 7 days (for classification)
+      // Ad-level insights for last 7 days (includes yesterday — filter in JS)
       getInsights({ level: "ad", dateRange: { since: last7d, until: today }, limit: 500 }),
       db.select()
         .from(schema.adClassifications)
@@ -40,6 +38,9 @@ export async function GET(request: NextRequest) {
         .orderBy(desc(schema.adClassifications.classifiedAt))
         .limit(50),
     ]);
+
+    // Extract yesterday's ad insights from the 7d dataset
+    const yesterdayAdInsights = last7dAdInsights.filter((i) => i.date_start === yesterday);
 
     const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
     const adsetMap = new Map(adsets.map((a) => [a.id, a]));

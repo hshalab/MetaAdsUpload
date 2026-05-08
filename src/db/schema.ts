@@ -228,7 +228,9 @@ export const campaignsCache = pgTable("campaigns_cache", {
   createdTime: timestamp("created_time"),
   updatedTime: timestamp("updated_time"),
   syncedAt: timestamp("synced_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("campaigns_cache_status_idx").on(table.status),
+]);
 
 export const adsetsCache = pgTable("adsets_cache", {
   id: text("id").primaryKey(),
@@ -244,7 +246,10 @@ export const adsetsCache = pgTable("adsets_cache", {
   startTime: timestamp("start_time"),
   endTime: timestamp("end_time"),
   syncedAt: timestamp("synced_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("adsets_cache_campaign_id_idx").on(table.campaignId),
+  index("adsets_cache_status_idx").on(table.status),
+]);
 
 export const adsCache = pgTable("ads_cache", {
   id: text("id").primaryKey(),
@@ -255,7 +260,10 @@ export const adsCache = pgTable("ads_cache", {
   creativeId: text("creative_id"),
   previewUrl: text("preview_url"),
   syncedAt: timestamp("synced_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("ads_cache_adset_id_idx").on(table.adsetId),
+  index("ads_cache_campaign_id_idx").on(table.campaignId),
+]);
 
 export const insights = pgTable("insights", {
   id: serial("id").primaryKey(),
@@ -298,7 +306,9 @@ export const automationRules = pgTable("automation_rules", {
   cooldownHours: integer("cooldown_hours").default(24),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("automation_rules_enabled_idx").on(table.enabled),
+]);
 
 export const ruleExecutions = pgTable("rule_executions", {
   id: serial("id").primaryKey(),
@@ -599,6 +609,7 @@ export const shopifyOrders = pgTable("shopify_orders", {
   index("shopify_orders_date_idx").on(table.orderDate),
   index("shopify_orders_adset_idx").on(table.utmAdset),
   index("shopify_orders_campaign_idx").on(table.utmCampaign),
+  index("shopify_orders_date_adset_idx").on(table.orderDate, table.utmAdset),
 ]);
 
 export const shopifyDailyStats = pgTable("shopify_daily_stats", {

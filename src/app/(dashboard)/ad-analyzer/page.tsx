@@ -165,7 +165,11 @@ export default function AdAnalyzerPage() {
     }
   }, [buildUrl]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Debounce filter changes to avoid rapid API calls
+  useEffect(() => {
+    const timer = setTimeout(() => { fetchData(); }, 300);
+    return () => clearTimeout(timer);
+  }, [fetchData]);
 
   const executeAction = async (ad: ClassifiedAd, action: string) => {
     setOpenMenu(null);

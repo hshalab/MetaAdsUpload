@@ -192,7 +192,11 @@ export default function ScalingPage() {
     }
   }, [buildUrl]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Debounce filter changes to avoid rapid API calls
+  useEffect(() => {
+    const timer = setTimeout(() => { fetchData(); }, 300);
+    return () => clearTimeout(timer);
+  }, [fetchData]);
 
   // Fetch campaigns for duplicate dialog
   const fetchCampaigns = async () => {

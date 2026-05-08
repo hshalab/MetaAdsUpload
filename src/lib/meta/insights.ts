@@ -20,9 +20,17 @@ export interface InsightData {
   video_p25_watched_actions?: Array<{ action_type: string; value: string }>;
 }
 
+// Core fields only — ctr/cpc/cpm are derivable from spend/clicks/impressions
 const INSIGHT_FIELDS = [
   "campaign_id", "adset_id", "ad_id",
-  "spend", "impressions", "reach", "clicks", "ctr", "cpc", "cpm",
+  "spend", "impressions", "reach", "clicks",
+  "actions", "action_values",
+].join(",");
+
+// Extended fields for dashboard views that need video metrics
+const INSIGHT_FIELDS_WITH_VIDEO = [
+  "campaign_id", "adset_id", "ad_id",
+  "spend", "impressions", "reach", "clicks",
   "actions", "action_values",
   "video_30_sec_watched_actions", "video_avg_time_watched_actions",
 ].join(",");
@@ -34,13 +42,14 @@ export async function getInsights(params: {
   breakdowns?: string[];
   actionBreakdowns?: string[];
   limit?: number;
+  includeVideoMetrics?: boolean;
 }) {
-  const { entityId, level = "campaign", dateRange, breakdowns, actionBreakdowns, limit = 500 } = params;
+  const { entityId, level = "campaign", dateRange, breakdowns, actionBreakdowns, limit = 500, includeVideoMetrics = false } = params;
   const adAccountId = entityId || await getAdAccountId();
   const endpoint = `/${adAccountId}/insights`;
 
   const queryParams: Record<string, string | number | boolean> = {
-    fields: INSIGHT_FIELDS,
+    fields: includeVideoMetrics ? INSIGHT_FIELDS_WITH_VIDEO : INSIGHT_FIELDS,
     level,
     limit,
   };
