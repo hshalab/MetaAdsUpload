@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
 
     const settings = await getEvolveSettings();
 
-    // Fetch campaigns, adsets, insights in parallel
-    const [campaigns, adsets, insightsData, adInsightsData] = await Promise.all([
+    // Fetch everything in parallel — minimizes Meta API round-trips
+    const [campaigns, adsets, insightsData, adInsightsData, allAds, ncRoasMap] = await Promise.all([
       getCampaigns(200),
       getAdSets(undefined, 500),
       getInsights({
@@ -48,6 +48,8 @@ export async function GET(request: NextRequest) {
         dateRange: { since, until },
         limit: 500,
       }),
+      getAds(undefined, 500),
+      getAdsetNcRoas(since, until),
     ]);
 
     const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
@@ -59,8 +61,6 @@ export async function GET(request: NextRequest) {
         .map((c) => c.id)
     );
 
-    // Fetch all ads at account level with pagination (single request chain instead of N+1)
-    const allAds = await getAds(undefined, 500);
     const ads = allAds.filter((ad) => activeCampaignIds.has(ad.campaign_id));
 
     // Build insights lookup by adset_id
@@ -129,9 +129,6 @@ export async function GET(request: NextRequest) {
     }
 
     const ageDays = differenceInDays(parseISO(until), parseISO(since)) + 1;
-
-    // Fetch per-adset ncROAS from Shopify orders
-    const ncRoasMap = await getAdsetNcRoas(since, until);
 
     // Build ad-level insights for expanded view
     const adInsightsMap = new Map<string, {

@@ -189,16 +189,37 @@ async function refreshTokenIfNeeded(
   }
 }
 
+// Cache token + ad account per request lifecycle (serverless function invocation)
+let _cachedToken: string | null = null;
+let _cachedAdAccountId: string | null = null;
+let _cacheTimestamp = 0;
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+function isCacheValid(): boolean {
+  return Date.now() - _cacheTimestamp < CACHE_TTL_MS;
+}
+
 export async function getAccessToken(): Promise<string> {
+  if (_cachedToken && isCacheValid()) return _cachedToken;
+
   // First try DB connection
   const conn = await getActiveConnection();
   if (conn?.accessToken) {
-    return refreshTokenIfNeeded(conn);
+    _cachedToken = await refreshTokenIfNeeded(conn);
+    _cachedAdAccountId = conn.activeAdAccountId
+      ? (conn.activeAdAccountId.startsWith("act_") ? conn.activeAdAccountId : `act_${conn.activeAdAccountId}`)
+      : null;
+    _cacheTimestamp = Date.now();
+    return _cachedToken;
   }
 
   // Fallback to env var
   const envToken = process.env.META_ACCESS_TOKEN;
-  if (envToken) return envToken;
+  if (envToken) {
+    _cachedToken = envToken;
+    _cacheTimestamp = Date.now();
+    return envToken;
+  }
 
   throw new Error("No Meta connection configured. Go to Settings to connect your Meta account.");
 }
@@ -370,17 +391,18 @@ export async function metaApiPaginated<T = unknown>(
 }
 
 export async function getAdAccountId(): Promise<string> {
-  // First try DB connection
-  const conn = await getActiveConnection();
-  if (conn?.activeAdAccountId) {
-    const id = conn.activeAdAccountId;
-    return id.startsWith("act_") ? id : `act_${id}`;
-  }
+  if (_cachedAdAccountId && isCacheValid()) return _cachedAdAccountId;
+
+  // Calling getAccessToken populates the cache from DB
+  await getAccessToken();
+  if (_cachedAdAccountId) return _cachedAdAccountId;
 
   // Fallback to env var
   const id = process.env.META_AD_ACCOUNT_ID;
   if (!id) throw new Error("No ad account selected. Go to Settings to connect your Meta account.");
-  return id.startsWith("act_") ? id : `act_${id}`;
+  const formatted = id.startsWith("act_") ? id : `act_${id}`;
+  _cachedAdAccountId = formatted;
+  return formatted;
 }
 
 export async function getPageId(): Promise<string> {

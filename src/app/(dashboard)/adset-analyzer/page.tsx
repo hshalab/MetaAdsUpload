@@ -103,7 +103,11 @@ export default function AdSetAnalyzerPage() {
     setError(null);
     try {
       const res = await fetch(buildUrl());
-      if (!res.ok) throw new Error((await res.json()).error || "Failed to fetch");
+      if (!res.ok) {
+        let msg = "Failed to fetch";
+        try { const j = await res.json(); msg = j.error || msg; } catch { msg = `Server error (${res.status})`; }
+        throw new Error(msg);
+      }
       setData(await res.json());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
