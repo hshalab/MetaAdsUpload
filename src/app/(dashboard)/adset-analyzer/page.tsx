@@ -94,9 +94,8 @@ export default function AdSetAnalyzerPage() {
     if (dateMode === "today") params.set("days", "0");
     else if (dateMode === "custom") { params.set("since", customFrom); params.set("until", customTo); }
     else params.set("days", String(presetDays));
-    if (campaignFilter) params.set("campaign_id", campaignFilter);
     return `/api/evolve/adset-classify?${params}`;
-  }, [dateMode, presetDays, customFrom, customTo, campaignFilter]);
+  }, [dateMode, presetDays, customFrom, customTo]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -157,7 +156,10 @@ export default function AdSetAnalyzerPage() {
     });
   };
 
-  const filteredAdsets = data?.adsets.filter((a) => !classFilter || a.classification === classFilter) || [];
+  const filteredAdsets = data?.adsets.filter((a) =>
+    (!campaignFilter || a.campaignId === campaignFilter) &&
+    (!classFilter || a.classification === classFilter)
+  ) || [];
 
   return (
     <div className="space-y-5">

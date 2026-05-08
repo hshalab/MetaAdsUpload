@@ -144,9 +144,8 @@ export default function AdAnalyzerPage() {
     } else {
       params.set("days", String(presetDays));
     }
-    if (campaignFilter) params.set("campaign_id", campaignFilter);
     return `/api/evolve/classify?${params}`;
-  }, [dateMode, presetDays, customFrom, customTo, campaignFilter]);
+  }, [dateMode, presetDays, customFrom, customTo]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -203,7 +202,10 @@ export default function AdAnalyzerPage() {
   // Group ads by ad set
   const adSetGroups = useMemo((): AdSetGroup[] => {
     if (!data) return [];
-    const filteredAds = data.ads.filter((a) => !classFilter || a.classification === classFilter);
+    const filteredAds = data.ads.filter((a) =>
+      (!campaignFilter || a.campaignId === campaignFilter) &&
+      (!classFilter || a.classification === classFilter)
+    );
     const groupMap = new Map<string, ClassifiedAd[]>();
 
     for (const ad of filteredAds) {
