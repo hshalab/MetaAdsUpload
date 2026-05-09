@@ -7,7 +7,7 @@ import { getAdSets } from "@/lib/meta/adsets";
 import { getEvolveSettings } from "@/lib/evolve/settings";
 import { classifyAd } from "@/lib/evolve/classifier";
 import { format, subDays, differenceInDays, parseISO } from "date-fns";
-import { getAdsetNcRoas } from "@/lib/shopify/ncroas";
+import { getAdsetNcRoas, getTotalNcRoas } from "@/lib/shopify/ncroas";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const settings = await getEvolveSettings();
 
     // Fetch only ACTIVE entities from Meta — dramatically reduces data volume
-    const [campaigns, adsets, insightsData, adInsightsData, allAds, ncRoasMap] = await Promise.all([
+    const [campaigns, adsets, insightsData, adInsightsData, allAds, ncRoasMap, totalNcData] = await Promise.all([
       getCampaigns(200, "ACTIVE"),
       getAdSets(undefined, 500, "ACTIVE"),
       getInsights({
@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
       }),
       getAds(undefined, 500, "ACTIVE"),
       getAdsetNcRoas(since, until),
+      getTotalNcRoas(since, until),
     ]);
 
     const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
@@ -257,6 +258,10 @@ export async function GET(request: NextRequest) {
         };
       });
 
+    // Total ncROAS for the period
+    const totalNcRoas = totalSpend > 0 && totalNcData.newCustomerRevenue > 0
+      ? totalNcData.newCustomerRevenue / totalSpend : null;
+
     return NextResponse.json({
       settings: {
         targetRoas: settings.targetRoas,
@@ -270,6 +275,9 @@ export async function GET(request: NextRequest) {
         overallRoas,
         totalAdsets: classifiedAdsets.length,
         classificationCounts,
+        ncRoas: totalNcRoas,
+        newCustomerRevenue: totalNcData.newCustomerRevenue,
+        newCustomerOrders: totalNcData.newCustomerOrders,
       },
       adsets: classifiedAdsets,
       campaignSummaries,

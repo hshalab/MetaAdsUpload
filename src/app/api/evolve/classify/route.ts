@@ -7,7 +7,7 @@ import { getAdSets } from "@/lib/meta/adsets";
 import { getEvolveSettings } from "@/lib/evolve/settings";
 import { classifyAd } from "@/lib/evolve/classifier";
 import { format, subDays, differenceInDays, parseISO } from "date-fns";
-import { getAdsetNcRoas } from "@/lib/shopify/ncroas";
+import { getAdNcRoas, getTotalNcRoas } from "@/lib/shopify/ncroas";
 
 export const dynamic = "force-dynamic";
 
@@ -109,8 +109,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch per-adset ncROAS from Shopify orders
-    const ncRoasMap = await getAdsetNcRoas(since, until);
+    // Fetch per-ad + total ncROAS from Shopify orders
+    const [ncRoasMap, totalNcData] = await Promise.all([
+      getAdNcRoas(since, until),
+      getTotalNcRoas(since, until),
+    ]);
 
     // Classify each ad
     const classifiedAds = filteredAds
@@ -146,8 +149,8 @@ export async function GET(request: NextRequest) {
         const spendThreshold = settings.targetCpa * 3;
         const spendProgress = spendThreshold > 0 ? Math.min(metrics.spend / spendThreshold, 1) : 0;
 
-        // ncROAS: per-adset new customer revenue / adset spend
-        const ncData = ncRoasMap.get(ad.adset_id);
+        // ncROAS: per-ad new customer revenue / ad spend (falls back to null if no UTM data)
+        const ncData = ncRoasMap.get(ad.id);
         const ncRevenue = ncData?.newCustomerRevenue || 0;
         const ncRoas = metrics.spend > 0 && ncRevenue > 0 ? ncRevenue / metrics.spend : null;
 
@@ -218,6 +221,10 @@ export async function GET(request: NextRequest) {
         };
       });
 
+    // Total ncROAS for the period
+    const totalNcRoas = totalSpend > 0 && totalNcData.newCustomerRevenue > 0
+      ? totalNcData.newCustomerRevenue / totalSpend : null;
+
     return NextResponse.json({
       settings: {
         targetRoas: settings.targetRoas,
@@ -231,6 +238,9 @@ export async function GET(request: NextRequest) {
         overallRoas,
         totalAds: classifiedAds.length,
         classificationCounts,
+        ncRoas: totalNcRoas,
+        newCustomerRevenue: totalNcData.newCustomerRevenue,
+        newCustomerOrders: totalNcData.newCustomerOrders,
       },
       ads: classifiedAds,
       campaignSummaries,
