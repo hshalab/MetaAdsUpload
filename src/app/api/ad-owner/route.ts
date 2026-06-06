@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
-    const { adId, videoEditorId, creativeStrategistId, adName, campaignId, adsetId, source } = body;
+    const { adId, videoEditorId, creativeStrategistId, adName, campaignId, adsetId, source, angle, problem, templateId, templateName } = body;
 
     if (!adId) return NextResponse.json({ error: "adId is required" }, { status: 400 });
     if (!videoEditorId && !creativeStrategistId) {
@@ -51,6 +51,25 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date();
+
+    // On update, only touch creative metadata when it's actually provided, so a
+    // later owner change in the analyzer doesn't wipe angle/problem/template set
+    // at upload time.
+    const updateSet: Record<string, unknown> = {
+      videoEditorId: videoEditorId || null,
+      creativeStrategistId: creativeStrategistId || null,
+      adName: adName || null,
+      campaignId: campaignId || null,
+      adsetId: adsetId || null,
+      source: source || "analyzer",
+      assignedById: session.user.id,
+      updatedAt: now,
+    };
+    if (angle !== undefined) updateSet.angle = angle || null;
+    if (problem !== undefined) updateSet.problem = problem || null;
+    if (templateId !== undefined) updateSet.templateId = templateId || null;
+    if (templateName !== undefined) updateSet.templateName = templateName || null;
+
     const [row] = await db
       .insert(schema.adOwners)
       .values({
@@ -60,22 +79,17 @@ export async function POST(request: NextRequest) {
         adName: adName || null,
         campaignId: campaignId || null,
         adsetId: adsetId || null,
+        angle: angle || null,
+        problem: problem || null,
+        templateId: templateId || null,
+        templateName: templateName || null,
         source: source || "analyzer",
         assignedById: session.user.id,
         updatedAt: now,
       })
       .onConflictDoUpdate({
         target: schema.adOwners.adId,
-        set: {
-          videoEditorId: videoEditorId || null,
-          creativeStrategistId: creativeStrategistId || null,
-          adName: adName || null,
-          campaignId: campaignId || null,
-          adsetId: adsetId || null,
-          source: source || "analyzer",
-          assignedById: session.user.id,
-          updatedAt: now,
-        },
+        set: updateSet,
       })
       .returning();
 

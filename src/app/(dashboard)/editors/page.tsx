@@ -45,6 +45,8 @@ import {
   ExternalLink,
   Medal,
   Flame,
+  BarChart3,
+  Skull,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -71,6 +73,10 @@ interface EditorAd {
   lifetimeSpend: number;
   lifetimeRoas: number;
   isWinner: boolean;
+  angle: string | null;
+  problem: string | null;
+  graveyardOutcome: string | null;
+  templateName: string | null;
 }
 
 interface Payout {
@@ -105,12 +111,16 @@ interface EditorData {
   unpaidAmount: number;
   adCount: number;
   winnerCount: number;
+  graveyardSpendWinners: number;
+  graveyardLosers: number;
+  angleStats: Array<{ angle: string; ads: number; winners: number }>;
   ads: EditorAd[];
   payouts: Payout[];
 }
 
 interface LeaderEntry { editorId: string; name: string; slug: string | null; winners: number; hookRate: number; earned: number }
 interface StrategistStat { id: string; name: string; slug: string | null; ads: number; winners: number; winRate: number }
+interface TemplateStat { templateId: number; templateName: string; ads: number; winners: number; winRate: number; spend: number; roas: number }
 type Series = Array<{ date: string; spend: number; revenue: number; roas: number; purchases: number }>;
 
 function fmt(n: number, decimals = 0): string {
@@ -252,23 +262,41 @@ function EditorRow({
               )}
             </div>
 
+            {/* Graveyard + angle summary */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-[11px] text-blue-400">
+                <Skull className="h-3 w-3" /> {editor.graveyardSpendWinners} spend winners
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-2.5 py-1 text-[11px] text-red-400">
+                <Skull className="h-3 w-3" /> {editor.graveyardLosers} losers
+              </span>
+              {editor.angleStats.slice(0, 4).map((a) => (
+                <span key={a.angle} className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-400">
+                  {a.angle}: <span className="text-amber-400">{a.winners}</span>/{a.ads}
+                </span>
+              ))}
+            </div>
+
             {/* Ads */}
             <div className="rounded-xl border border-white/5 overflow-hidden">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/5 bg-white/[0.02]">
-                    {["Annons", "Spend", "Livstid", "ROAS", "Hook", "Köp", "Bonus"].map((h, i) => (
-                      <th key={h} className={cn("px-3 py-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider", i > 0 ? "text-right" : "text-left")}>{h}</th>
+                    {["Annons", "Angle", "Spend", "Livstid", "ROAS", "Hook", "Köp", "Bonus"].map((h, i) => (
+                      <th key={h} className={cn("px-3 py-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider", i > 1 ? "text-right" : "text-left")}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {editor.ads.map((ad) => (
                     <tr key={ad.id} className="border-b border-white/[0.03]">
-                      <td className="px-3 py-2 text-xs text-slate-400 max-w-[260px] truncate">
+                      <td className="px-3 py-2 text-xs text-slate-400 max-w-[220px] truncate">
                         {ad.name}
                         {ad.strategistName && <span className="ml-2 text-[10px] text-purple-400/70">💡 {ad.strategistName}</span>}
+                        {ad.graveyardOutcome === "spend_winner" && <span className="ml-2 text-[10px] text-blue-400">⚰ spend winner</span>}
+                        {ad.graveyardOutcome === "loser" && <span className="ml-2 text-[10px] text-red-400">⚰ loser</span>}
                       </td>
+                      <td className="px-3 py-2 text-xs text-slate-500 max-w-[120px] truncate" title={ad.problem || undefined}>{ad.angle || "—"}</td>
                       <td className="px-3 py-2 text-right text-xs text-slate-400">${fmt(ad.spend)}</td>
                       <td className="px-3 py-2 text-right text-[11px] text-slate-500">${fmt(ad.lifetimeSpend)} / {ad.lifetimeRoas.toFixed(1)}x</td>
                       <td className="px-3 py-2 text-right text-xs">
@@ -321,6 +349,7 @@ export default function EditorsPage() {
   const [editors, setEditors] = useState<EditorData[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
   const [strategists, setStrategists] = useState<StrategistStat[]>([]);
+  const [templates, setTemplates] = useState<TemplateStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [seriesByEditor, setSeriesByEditor] = useState<Record<string, Series>>({});
 
@@ -351,6 +380,7 @@ export default function EditorsPage() {
       setEditors(data.editors || []);
       setLeaderboard(data.leaderboard || []);
       setStrategists(data.strategists || []);
+      setTemplates(data.templates || []);
       setSeriesByEditor({});
     } catch (err) {
       console.error(err);
@@ -578,6 +608,50 @@ export default function EditorsPage() {
           </div>
         </div>
       </div>
+
+      {/* Template Performance */}
+      {templates.length > 0 && (
+        <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
+            <BarChart3 className="h-4 w-4 text-cyan-400" />
+            <h3 className="text-sm font-semibold text-white">Template Performance</h3>
+            <span className="text-xs text-slate-600">bäst → sämst (livstid-ROAS på annonser med vald template)</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/5">
+                  {["Template", "Annonser", "Vinnare", "Win-rate", "Spend", "ROAS"].map((h, i) => (
+                    <th key={h} className={cn("px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider", i > 0 && "text-right")}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map((t, i) => {
+                  const isBest = i === 0 && templates.length > 1 && t.roas > 0;
+                  const isWorst = i === templates.length - 1 && templates.length > 1;
+                  return (
+                    <tr key={t.templateId} className="border-b border-white/5 hover:bg-white/[0.02]">
+                      <td className="px-4 py-3 text-sm text-slate-200">
+                        {t.templateName}
+                        {isBest && <span className="ml-2 text-[10px] text-emerald-400">▲ bäst</span>}
+                        {isWorst && <span className="ml-2 text-[10px] text-red-400">▼ sämst</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-slate-400">{t.ads}</td>
+                      <td className="px-4 py-3 text-right text-sm text-amber-400">{t.winners}</td>
+                      <td className="px-4 py-3 text-right text-sm text-slate-400">{t.winRate.toFixed(0)}%</td>
+                      <td className="px-4 py-3 text-right text-sm text-slate-400">${fmt(t.spend)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold">
+                        <span className={t.roas >= 2.5 ? "text-emerald-400" : t.roas >= 2.0 ? "text-amber-400" : t.roas > 0 ? "text-red-400" : "text-slate-600"}>{t.roas.toFixed(2)}x</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Bonus Tiers */}
       <div className="rounded-xl border border-white/5 bg-[#111827] p-5">

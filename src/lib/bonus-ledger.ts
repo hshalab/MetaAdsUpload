@@ -16,6 +16,11 @@ export interface OwnedAd {
   adName: string | null;
   campaignId: string | null;
   adsetId: string | null;
+  angle: string | null;
+  problem: string | null;
+  templateId: number | null;
+  templateName: string | null;
+  graveyardOutcome: string | null; // "spend_winner" | "loser" | null
 }
 
 /**
@@ -52,6 +57,11 @@ export async function resolveOwnedAds(): Promise<OwnedAd[]> {
       adName: adMeta.get(a.metaAdId)?.name || a.autoName || null,
       campaignId: a.metaCampaignId || adMeta.get(a.metaAdId)?.campaignId || null,
       adsetId: a.metaAdsetId || adMeta.get(a.metaAdId)?.adsetId || null,
+      angle: null,
+      problem: null,
+      templateId: null,
+      templateName: null,
+      graveyardOutcome: null,
     });
   }
 
@@ -59,13 +69,21 @@ export async function resolveOwnedAds(): Promise<OwnedAd[]> {
     const existing = map.get(o.adId);
     map.set(o.adId, {
       adId: o.adId,
-      videoEditorId: o.videoEditorId,
-      creativeStrategistId: o.creativeStrategistId,
-      source: o.source || "analyzer",
+      // An explicit owner overrides the assignment owner; a metadata-only
+      // ad_owners row (e.g. one created just to store a graveyard outcome) keeps
+      // the assignment-derived owner instead of nulling it.
+      videoEditorId: o.videoEditorId ?? existing?.videoEditorId ?? null,
+      creativeStrategistId: o.creativeStrategistId ?? existing?.creativeStrategistId ?? null,
+      source: o.videoEditorId || o.creativeStrategistId ? o.source || "analyzer" : existing?.source || o.source || "analyzer",
       assignmentId: existing?.assignmentId || null,
       adName: o.adName || adMeta.get(o.adId)?.name || existing?.adName || null,
       campaignId: o.campaignId || adMeta.get(o.adId)?.campaignId || existing?.campaignId || null,
       adsetId: o.adsetId || adMeta.get(o.adId)?.adsetId || existing?.adsetId || null,
+      angle: o.angle ?? existing?.angle ?? null,
+      problem: o.problem ?? existing?.problem ?? null,
+      templateId: o.templateId ?? existing?.templateId ?? null,
+      templateName: o.templateName ?? existing?.templateName ?? null,
+      graveyardOutcome: o.graveyardOutcome ?? existing?.graveyardOutcome ?? null,
     });
   }
 

@@ -19,11 +19,13 @@ interface OwnerPickerProps {
   adsetId?: string | null;
   videoEditorId?: string | null;
   creativeStrategistId?: string | null;
+  angle?: string | null;
+  problem?: string | null;
   members: TeamMember[];
   source?: string;
   /** Compact pill style for dense tables. */
   compact?: boolean;
-  onSaved?: (videoEditorId: string | null, creativeStrategistId: string | null) => void;
+  onSaved?: (data: { videoEditorId: string | null; creativeStrategistId: string | null; angle: string | null; problem: string | null }) => void;
 }
 
 function isStrategist(m: TeamMember) {
@@ -43,6 +45,8 @@ export function OwnerPicker({
   adsetId,
   videoEditorId,
   creativeStrategistId,
+  angle,
+  problem,
   members,
   source = "analyzer",
   compact,
@@ -51,11 +55,15 @@ export function OwnerPicker({
   const [open, setOpen] = useState(false);
   const [editorId, setEditorId] = useState(videoEditorId || "");
   const [stratId, setStratId] = useState(creativeStrategistId || "");
+  const [angleVal, setAngleVal] = useState(angle || "");
+  const [problemVal, setProblemVal] = useState(problem || "");
   const [saving, setSaving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => setEditorId(videoEditorId || ""), [videoEditorId]);
   useEffect(() => setStratId(creativeStrategistId || ""), [creativeStrategistId]);
+  useEffect(() => setAngleVal(angle || ""), [angle]);
+  useEffect(() => setProblemVal(problem || ""), [problem]);
 
   useEffect(() => {
     if (!open) return;
@@ -86,6 +94,8 @@ export function OwnerPicker({
           source,
           videoEditorId: editorId || null,
           creativeStrategistId: stratId || null,
+          angle: angleVal || null,
+          problem: problemVal || null,
         }),
       });
       if (!res.ok) {
@@ -93,7 +103,7 @@ export function OwnerPicker({
         throw new Error(j.error || "Kunde inte spara ägare");
       }
       toast.success("Ägare sparad");
-      onSaved?.(editorId || null, stratId || null);
+      onSaved?.({ videoEditorId: editorId || null, creativeStrategistId: stratId || null, angle: angleVal || null, problem: problemVal || null });
       setOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Något gick fel");
@@ -114,7 +124,9 @@ export function OwnerPicker({
       toast.success("Ägare borttagen");
       setEditorId("");
       setStratId("");
-      onSaved?.(null, null);
+      setAngleVal("");
+      setProblemVal("");
+      onSaved?.({ videoEditorId: null, creativeStrategistId: null, angle: null, problem: null });
       setOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Något gick fel");
@@ -174,6 +186,27 @@ export function OwnerPicker({
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">Angle</label>
+                <input
+                  value={angleVal}
+                  onChange={(e) => setAngleVal(e.target.value)}
+                  placeholder="Vinkel"
+                  className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-white/20"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-rose-400">Problem</label>
+                <input
+                  value={problemVal}
+                  onChange={(e) => setProblemVal(e.target.value)}
+                  placeholder="Problem"
+                  className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-white/20"
+                />
+              </div>
             </div>
 
             <div className="flex items-center gap-2 pt-1">

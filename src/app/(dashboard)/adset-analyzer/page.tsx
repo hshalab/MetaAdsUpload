@@ -89,8 +89,9 @@ export default function AdSetAnalyzerPage() {
   const [classFilter, setClassFilter] = useState<Classification | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
+  const [graveyardChoiceFor, setGraveyardChoiceFor] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const [ownersByAd, setOwnersByAd] = useState<Record<string, { videoEditorId: string | null; creativeStrategistId: string | null }>>({});
+  const [ownersByAd, setOwnersByAd] = useState<Record<string, { videoEditorId: string | null; creativeStrategistId: string | null; angle: string | null; problem: string | null }>>({});
 
   // Team members for the owner picker (admin only — silently empty otherwise).
   useEffect(() => {
@@ -155,16 +156,16 @@ export default function AdSetAnalyzerPage() {
         const res = await fetch(`/api/ad-owner?adIds=${encodeURIComponent(adIds.join(","))}`);
         if (!res.ok) return;
         const { owners } = await res.json();
-        const map: Record<string, { videoEditorId: string | null; creativeStrategistId: string | null }> = {};
+        const map: Record<string, { videoEditorId: string | null; creativeStrategistId: string | null; angle: string | null; problem: string | null }> = {};
         for (const o of owners || []) {
-          map[o.adId] = { videoEditorId: o.videoEditorId, creativeStrategistId: o.creativeStrategistId };
+          map[o.adId] = { videoEditorId: o.videoEditorId, creativeStrategistId: o.creativeStrategistId, angle: o.angle ?? null, problem: o.problem ?? null };
         }
         setOwnersByAd(map);
       } catch { /* ignore */ }
     })();
   }, [data, members.length]);
 
-  const executeAction = async (adsetId: string, action: string, adset: ClassifiedAdset) => {
+  const executeAction = async (adsetId: string, action: string, adset: ClassifiedAdset, graveyardOutcome?: "spend_winner" | "loser") => {
     setActing(adsetId);
     try {
       const res = await fetch("/api/evolve/adset-classify/actions", {
@@ -178,6 +179,7 @@ export default function AdSetAnalyzerPage() {
           campaignId: adset.campaignId,
           adsetName: adset.name,
           dateRange: data?.dateRange,
+          graveyardOutcome,
         }),
       });
       const result = await res.json();
@@ -384,14 +386,41 @@ export default function AdSetAnalyzerPage() {
                       ) : (
                         <>
                           {(adset.classification === "loser" || adset.classification === "spend_winner") && (
-                            <button
-                              onClick={() => executeAction(adset.id, "move_zombie", adset)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all"
-                              title="Flytta alla ads till Graveyard med post-ID, pausa ad set"
-                            >
-                              <Skull className="h-3.5 w-3.5" />
-                              Graveyard
-                            </button>
+                            graveyardChoiceFor === adset.id ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-slate-500 mr-0.5">Graveyard som:</span>
+                                <button
+                                  onClick={() => { executeAction(adset.id, "move_zombie", adset, "spend_winner"); setGraveyardChoiceFor(null); }}
+                                  className="px-2 py-1.5 rounded-lg text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all"
+                                  title="Lönsam men under target — räknas som Spend Winner för editorn"
+                                >
+                                  Spend Winner
+                                </button>
+                                <button
+                                  onClick={() => { executeAction(adset.id, "move_zombie", adset, "loser"); setGraveyardChoiceFor(null); }}
+                                  className="px-2 py-1.5 rounded-lg text-[11px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
+                                  title="Under breakeven — räknas som Loser för editorn"
+                                >
+                                  Loser
+                                </button>
+                                <button
+                                  onClick={() => setGraveyardChoiceFor(null)}
+                                  className="px-1.5 py-1.5 rounded-lg text-[11px] text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
+                                  title="Avbryt"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setGraveyardChoiceFor(adset.id)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all"
+                                title="Flytta alla ads till Graveyard — du får välja Spend Winner eller Loser"
+                              >
+                                <Skull className="h-3.5 w-3.5" />
+                                Graveyard
+                              </button>
+                            )
                           )}
                           {adset.classification === "loser" && adset.status === "ACTIVE" && (
                             <button
@@ -457,9 +486,11 @@ export default function AdSetAnalyzerPage() {
                             members={members}
                             videoEditorId={ownersByAd[ad.id]?.videoEditorId || null}
                             creativeStrategistId={ownersByAd[ad.id]?.creativeStrategistId || null}
+                            angle={ownersByAd[ad.id]?.angle || null}
+                            problem={ownersByAd[ad.id]?.problem || null}
                             compact
-                            onSaved={(ve, cs) =>
-                              setOwnersByAd((prev) => ({ ...prev, [ad.id]: { videoEditorId: ve, creativeStrategistId: cs } }))
+                            onSaved={(d) =>
+                              setOwnersByAd((prev) => ({ ...prev, [ad.id]: { videoEditorId: d.videoEditorId, creativeStrategistId: d.creativeStrategistId, angle: d.angle, problem: d.problem } }))
                             }
                           />
                         </div>

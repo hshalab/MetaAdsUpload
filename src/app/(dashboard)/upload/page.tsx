@@ -245,6 +245,8 @@ export default function UploadPage() {
   const [teamMembers, setTeamMembers] = useState<Array<{ id: string; name: string; email?: string; userType?: string }>>([]);
   const [videoEditorId, setVideoEditorId] = useState("");
   const [creativeStrategistId, setCreativeStrategistId] = useState("");
+  const [adAngle, setAdAngle] = useState("");
+  const [adProblem, setAdProblem] = useState("");
 
   // New adset config
   const [newAdsetName, setNewAdsetName] = useState("");
@@ -315,6 +317,8 @@ export default function UploadPage() {
         if (prefs.pixelId) setPixelId(prefs.pixelId);
         if (prefs.videoEditorId) setVideoEditorId(prefs.videoEditorId);
         if (prefs.creativeStrategistId) setCreativeStrategistId(prefs.creativeStrategistId);
+        if (prefs.adAngle) setAdAngle(prefs.adAngle);
+        if (prefs.adProblem) setAdProblem(prefs.adProblem);
       }
     } catch { /* ignore */ }
   }, []);
@@ -328,9 +332,11 @@ export default function UploadPage() {
         pixelId,
         videoEditorId,
         creativeStrategistId,
+        adAngle,
+        adProblem,
       }));
     } catch { /* ignore */ }
-  }, [selectedTemplateId, selectedCampaignId, selectedPageId, pixelId, videoEditorId, creativeStrategistId]);
+  }, [selectedTemplateId, selectedCampaignId, selectedPageId, pixelId, videoEditorId, creativeStrategistId, adAngle, adProblem]);
 
   useEffect(() => { savePrefs(); }, [savePrefs]);
 
@@ -1167,6 +1173,10 @@ export default function UploadPage() {
               source: "uploader",
               videoEditorId: videoEditorId || null,
               creativeStrategistId: creativeStrategistId || null,
+              angle: adAngle || null,
+              problem: adProblem || null,
+              templateId: selectedTemplateId || null,
+              templateName: templates.find((t) => t.id === selectedTemplateId)?.name || null,
             }),
           });
         } catch { /* non-fatal — owner can still be set later in the analyzer */ }
@@ -1872,6 +1882,40 @@ export default function UploadPage() {
               }}
             />
           </div>
+        </div>
+      </div>
+
+      {/* ─── Angle + Problem Row ─── */}
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Crosshair className="h-4 w-4 text-amber-400" />
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Angle <span className="text-slate-600 normal-case">· vinkel annonsen trycker på</span>
+            </h3>
+          </div>
+          <input
+            type="text"
+            value={adAngle}
+            onChange={(e) => setAdAngle(e.target.value)}
+            placeholder="t.ex. Trötthet, Klåda, Pris"
+            className={inputCls}
+          />
+        </div>
+        <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+          <div className="flex items-center gap-2 mb-2.5">
+            <AlertTriangle className="h-4 w-4 text-rose-400" />
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Problem <span className="text-slate-600 normal-case">· problemet/smärtan</span>
+            </h3>
+          </div>
+          <input
+            type="text"
+            value={adProblem}
+            onChange={(e) => setAdProblem(e.target.value)}
+            placeholder="t.ex. Hunden kliar sig konstant"
+            className={inputCls}
+          />
         </div>
       </div>
 

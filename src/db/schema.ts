@@ -380,6 +380,15 @@ export const adOwners = pgTable("ad_owners", {
   campaignId: text("campaign_id"),
   adsetId: text("adset_id"),
   adName: text("ad_name"),
+  // Creative metadata — what the ad is about, for per-editor pattern tracking
+  angle: text("angle"), // e.g. "Trötthet", "Klåda", "Pris"
+  problem: text("problem"), // the pain/problem the creative addresses
+  // Which uploader template produced this ad (for best/worst-template analytics)
+  templateId: integer("template_id"),
+  templateName: text("template_name"),
+  // Forced outcome when an ad set is sent to the Graveyard
+  graveyardOutcome: text("graveyard_outcome"), // "spend_winner" | "loser"
+  graveyardAt: timestamp("graveyard_at"),
   source: text("source").default("analyzer"), // "uploader" | "analyzer" | "import"
   assignedById: text("assigned_by_id"), // admin who set the owner
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -387,6 +396,7 @@ export const adOwners = pgTable("ad_owners", {
 }, (table) => [
   index("ad_owners_video_editor_idx").on(table.videoEditorId),
   index("ad_owners_strategist_idx").on(table.creativeStrategistId),
+  index("ad_owners_template_idx").on(table.templateId),
 ]);
 
 // ─── Ad Bonus Ledger (lifetime, locked once) ────────────────────────────────

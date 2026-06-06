@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
-    const { adsetId, action, classification, metrics, campaignId, adsetName, dateRange } = body as {
+    const { adsetId, action, classification, metrics, campaignId, adsetName, dateRange, graveyardOutcome } = body as {
       adsetId: string;
       action: "move_zombie" | "pause" | "let_run";
       classification: string;
@@ -23,10 +23,15 @@ export async function POST(request: NextRequest) {
       campaignId?: string;
       adsetName?: string;
       dateRange?: { since: string; until: string };
+      graveyardOutcome?: "spend_winner" | "loser";
     };
 
     if (!adsetId || !action) {
       return NextResponse.json({ error: "Missing adsetId or action" }, { status: 400 });
+    }
+
+    if (action === "move_zombie" && graveyardOutcome !== "spend_winner" && graveyardOutcome !== "loser") {
+      return NextResponse.json({ error: "Välj om annonserna är Spend Winner eller Loser innan de flyttas till Graveyard." }, { status: 400 });
     }
 
     let actionDescription = "";
@@ -123,7 +128,30 @@ export async function POST(request: NextRequest) {
         // 5. Pause the original ad set
         await updateAdSet(adsetId, { status: "PAUSED" });
 
-        actionDescription = `Ad set pausad → nytt GY ad set "${gyAdsetName}" (cost cap ${costCapValue / 100} kr). ${results.length}/${activeAds.length} ads duplicerade.`;
+        // 6. Record the forced spend_winner/loser outcome on each ORIGINAL ad
+        //    (the ones linked to a video editor) for per-editor tracking.
+        const gyNow = new Date();
+        for (const ad of activeAds) {
+          try {
+            await db
+              .insert(schema.adOwners)
+              .values({
+                adId: ad.id,
+                adName: ad.name,
+                campaignId: campaignId || null,
+                adsetId,
+                graveyardOutcome,
+                graveyardAt: gyNow,
+                source: "analyzer",
+              })
+              .onConflictDoUpdate({
+                target: schema.adOwners.adId,
+                set: { graveyardOutcome, graveyardAt: gyNow, updatedAt: gyNow },
+              });
+          } catch { /* best-effort outcome tracking */ }
+        }
+
+        actionDescription = `${graveyardOutcome === "spend_winner" ? "Spend Winner" : "Loser"} → Graveyard. Ad set pausad → nytt GY ad set "${gyAdsetName}" (cost cap ${costCapValue / 100} kr). ${results.length}/${activeAds.length} ads duplicerade.`;
         if (errors.length > 0) {
           actionDescription += ` Fel: ${errors.join("; ")}`;
         }

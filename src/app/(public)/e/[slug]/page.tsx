@@ -48,6 +48,9 @@ interface Ad {
   lifetimeSpend: number;
   lifetimeRoas: number;
   isWinner: boolean;
+  angle: string | null;
+  problem: string | null;
+  graveyardOutcome: string | null;
 }
 interface Editor {
   editorId: string;
@@ -66,6 +69,8 @@ interface Editor {
   unpaidAmount: number;
   adCount: number;
   winnerCount: number;
+  graveyardSpendWinners: number;
+  graveyardLosers: number;
   ads: Ad[];
 }
 interface LeaderEntry { editorId: string; name: string; winners: number; hookRate: number }
@@ -390,8 +395,8 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/5">
-                    {["Annons", "Spend", "ROAS", "Hook", "Köp", "Bonus"].map((h, i) => (
-                      <th key={h} className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${i > 0 ? "text-right" : "text-left"}`}>
+                    {["Annons", "Angle", "Spend", "ROAS", "Hook", "Köp", "Bonus"].map((h, i) => (
+                      <th key={h} className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${i > 1 ? "text-right" : "text-left"}`}>
                         {h}
                       </th>
                     ))}
@@ -400,10 +405,13 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
                 <tbody>
                   {editor.ads.map((ad) => (
                     <tr key={ad.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                      <td className="px-4 py-2.5 text-sm text-slate-300 max-w-[280px] truncate">
+                      <td className="px-4 py-2.5 text-sm text-slate-300 max-w-[240px] truncate">
                         {ad.name}
                         {ad.strategistName && <span className="ml-2 text-[10px] text-purple-400/70">💡 {ad.strategistName}</span>}
+                        {ad.graveyardOutcome === "spend_winner" && <span className="ml-2 text-[10px] text-blue-400">⚰ spend winner</span>}
+                        {ad.graveyardOutcome === "loser" && <span className="ml-2 text-[10px] text-red-400">⚰ loser</span>}
                       </td>
+                      <td className="px-4 py-2.5 text-sm text-slate-500 max-w-[120px] truncate" title={ad.problem || undefined}>{ad.angle || "—"}</td>
                       <td className="px-4 py-2.5 text-right text-sm text-slate-400">${fmt(ad.spend)}</td>
                       <td className="px-4 py-2.5 text-right text-sm">
                         <span className={ad.roas >= 2.5 ? "text-emerald-400" : ad.roas >= 2.0 ? "text-amber-400" : ad.spend > 0 ? "text-red-400" : "text-slate-600"}>
@@ -423,7 +431,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
                   ))}
                   {editor.ads.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-600">
+                      <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-600">
                         Inga annonser tilldelade dig ännu.
                       </td>
                     </tr>

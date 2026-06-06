@@ -29,6 +29,10 @@ export interface EditorAdRow {
   lifetimeSpend: number;
   lifetimeRoas: number;
   isWinner: boolean;
+  angle: string | null;
+  problem: string | null;
+  graveyardOutcome: string | null;
+  templateName: string | null;
 }
 
 /** Ensure every editor that owns ads has a unique public slug; backfill if missing. */
@@ -86,6 +90,7 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
 
   const editorMap = new Map<string, { editorId: string; ads: EditorAdRow[] }>();
   const strategistMap = new Map<string, { id: string; ads: number; winners: number }>();
+  const templateMap = new Map<number, { templateId: number; templateName: string; ads: number; winners: number; spend: number; revenue: number }>();
 
   for (const owned of ownedAds) {
     const period = periodByAd.get(owned.adId);
@@ -116,6 +121,23 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
       strategistMap.set(owned.creativeStrategistId, s);
     }
 
+    // Template performance (best/worst) — across all owned ads that recorded a template.
+    if (owned.templateId) {
+      const t = templateMap.get(owned.templateId) || {
+        templateId: owned.templateId,
+        templateName: owned.templateName || `Template ${owned.templateId}`,
+        ads: 0,
+        winners: 0,
+        spend: 0,
+        revenue: 0,
+      };
+      t.ads += 1;
+      if (isWinner) t.winners += 1;
+      t.spend += lifetimeSpend;
+      t.revenue += lifetimeSpend * lifetimeRoas;
+      templateMap.set(owned.templateId, t);
+    }
+
     if (!owned.videoEditorId) continue;
 
     const row: EditorAdRow = {
@@ -140,6 +162,10 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
       lifetimeSpend,
       lifetimeRoas,
       isWinner,
+      angle: owned.angle,
+      problem: owned.problem,
+      graveyardOutcome: owned.graveyardOutcome,
+      templateName: owned.templateName,
     };
 
     const entry = editorMap.get(owned.videoEditorId) || { editorId: owned.videoEditorId, ads: [] };
@@ -177,6 +203,19 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
     const totalBonus = e.ads.reduce((s, a) => s + a.bonus, 0);
     const paidAmount = e.ads.reduce((s, a) => s + a.paidForAd, 0);
     const winnerCount = e.ads.filter((a) => a.isWinner).length;
+    const graveyardSpendWinners = e.ads.filter((a) => a.graveyardOutcome === "spend_winner").length;
+    const graveyardLosers = e.ads.filter((a) => a.graveyardOutcome === "loser").length;
+
+    // Per-editor angle breakdown (which angles they win with).
+    const angleAgg = new Map<string, { angle: string; ads: number; winners: number }>();
+    for (const a of e.ads) {
+      if (!a.angle) continue;
+      const g = angleAgg.get(a.angle) || { angle: a.angle, ads: 0, winners: 0 };
+      g.ads += 1;
+      if (a.isWinner) g.winners += 1;
+      angleAgg.set(a.angle, g);
+    }
+    const angleStats = Array.from(angleAgg.values()).sort((x, y) => y.winners - x.winners || y.ads - x.ads);
 
     const myPayouts = (payoutsByEditor.get(e.editorId) || []).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -202,6 +241,9 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
       unpaidAmount: Math.max(totalBonus - paidAmount - pendingAmount, 0),
       adCount: e.ads.length,
       winnerCount,
+      graveyardSpendWinners,
+      graveyardLosers,
+      angleStats,
       ads: e.ads,
       payouts: myPayouts,
     };
@@ -234,7 +276,19 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
     })
     .sort((a, b) => b.winners - a.winners);
 
-  return { editors, leaderboard, strategists, bonusTiers: BONUS_TIERS, dateRange: { from, to } };
+  const templates = Array.from(templateMap.values())
+    .map((t) => ({
+      templateId: t.templateId,
+      templateName: t.templateName,
+      ads: t.ads,
+      winners: t.winners,
+      winRate: t.ads > 0 ? (t.winners / t.ads) * 100 : 0,
+      spend: t.spend,
+      roas: t.spend > 0 ? t.revenue / t.spend : 0,
+    }))
+    .sort((a, b) => b.roas - a.roas || b.winners - a.winners);
+
+  return { editors, leaderboard, strategists, templates, bonusTiers: BONUS_TIERS, dateRange: { from, to } };
 }
 
 /** Daily spend / revenue / ROAS series for a set of ads — powers the performance graph. */
