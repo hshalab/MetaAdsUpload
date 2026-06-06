@@ -39,6 +39,7 @@ import {
   Video,
   Lightbulb,
 } from "lucide-react";
+import { MemberQuickAdd } from "@/components/editors/member-quick-add";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -241,7 +242,7 @@ export default function UploadPage() {
   const [loadingConnection, setLoadingConnection] = useState(true);
 
   // Team attribution — who made this creative (for bonus + stats tracking)
-  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; name: string; userType?: string }>>([]);
+  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; name: string; email?: string; userType?: string }>>([]);
   const [videoEditorId, setVideoEditorId] = useState("");
   const [creativeStrategistId, setCreativeStrategistId] = useState("");
 
@@ -335,20 +336,22 @@ export default function UploadPage() {
 
   // ─── Load team members for attribution ──────────────────────────────────
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/users");
-        if (!res.ok) return;
-        const { users } = await res.json();
-        setTeamMembers(
-          (users || [])
-            .filter((u: { isActive?: boolean }) => u.isActive !== false)
-            .map((u: { id: string; name: string; userType?: string }) => ({ id: u.id, name: u.name, userType: u.userType }))
-        );
-      } catch { /* ignore */ }
-    })();
+  const fetchMembers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/users");
+      if (!res.ok) return [];
+      const { users } = await res.json();
+      const list = (users || [])
+        .filter((u: { isActive?: boolean }) => u.isActive !== false)
+        .map((u: { id: string; name: string; email?: string; userType?: string }) => ({ id: u.id, name: u.name, email: u.email, userType: u.userType }));
+      setTeamMembers(list);
+      return list as Array<{ id: string; name: string; email?: string; userType?: string }>;
+    } catch {
+      return [];
+    }
   }, []);
+
+  useEffect(() => { fetchMembers(); }, [fetchMembers]);
 
   // ─── Fetch templates + campaigns ────────────────────────────────────────
 
@@ -1801,18 +1804,35 @@ export default function UploadPage() {
               Video Editor <span className="text-slate-600 normal-case">· äger annonsen, får bonus</span>
             </h3>
           </div>
-          <select
-            value={videoEditorId}
-            onChange={(e) => setVideoEditorId(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">Ingen vald...</option>
-            {teamMembers
-              .filter((m) => m.userType !== "creative_strategist")
-              .map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <select
+                value={videoEditorId}
+                onChange={(e) => setVideoEditorId(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">Ingen vald...</option>
+                {teamMembers
+                  .filter((m) => m.userType !== "creative_strategist")
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+              </select>
+            </div>
+            <MemberQuickAdd
+              defaultType="video_editor"
+              members={teamMembers}
+              onAdded={async (email) => {
+                const list = await fetchMembers();
+                const u = list.find((m) => m.email === email);
+                if (u) setVideoEditorId(u.id);
+              }}
+              onRemoved={async () => {
+                const list = await fetchMembers();
+                if (videoEditorId && !list.some((m) => m.id === videoEditorId)) setVideoEditorId("");
+              }}
+            />
+          </div>
         </div>
 
         {/* Creative Strategist */}
@@ -1823,18 +1843,35 @@ export default function UploadPage() {
               Creative Strategist <span className="text-slate-600 normal-case">· koncept, stats</span>
             </h3>
           </div>
-          <select
-            value={creativeStrategistId}
-            onChange={(e) => setCreativeStrategistId(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">Ingen vald...</option>
-            {teamMembers
-              .filter((m) => m.userType === "creative_strategist")
-              .map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <select
+                value={creativeStrategistId}
+                onChange={(e) => setCreativeStrategistId(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">Ingen vald...</option>
+                {teamMembers
+                  .filter((m) => m.userType === "creative_strategist")
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+              </select>
+            </div>
+            <MemberQuickAdd
+              defaultType="creative_strategist"
+              members={teamMembers}
+              onAdded={async (email) => {
+                const list = await fetchMembers();
+                const u = list.find((m) => m.email === email);
+                if (u) setCreativeStrategistId(u.id);
+              }}
+              onRemoved={async () => {
+                const list = await fetchMembers();
+                if (creativeStrategistId && !list.some((m) => m.id === creativeStrategistId)) setCreativeStrategistId("");
+              }}
+            />
+          </div>
         </div>
       </div>
 
