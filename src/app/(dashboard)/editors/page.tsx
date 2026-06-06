@@ -2,6 +2,17 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { format, subDays } from "date-fns";
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+} from "recharts";
 import { DateRangePicker } from "@/components/dashboard/date-range-picker";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -21,7 +32,6 @@ import {
   ChevronDown,
   ChevronRight,
   Users,
-  CheckCircle2,
   Banknote,
   Check,
   Clock,
@@ -31,14 +41,21 @@ import {
   Lightbulb,
   Eye,
   EyeOff,
+  Copy,
+  ExternalLink,
+  Medal,
+  Flame,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { bonusTierColor } from "@/lib/bonus";
 
 interface EditorAd {
   id: string;
   name: string;
   assignmentId: string | null;
+  source: string;
+  strategistName: string | null;
   spend: number;
   impressions: number;
   linkClicks: number;
@@ -48,7 +65,12 @@ interface EditorAd {
   ctr: number;
   hookRate: number;
   bonus: number;
-  bonusTier: string | null;
+  bonusTier: number;
+  paidForAd: number;
+  outstanding: number;
+  lifetimeSpend: number;
+  lifetimeRoas: number;
+  isWinner: boolean;
 }
 
 interface Payout {
@@ -67,49 +89,39 @@ interface Payout {
 interface EditorData {
   editorId: string;
   editor: string;
+  fullName: string;
+  slug: string | null;
+  userType: string;
   totalSpend: number;
   totalPurchaseValue: number;
   totalPurchases: number;
   totalImpressions: number;
   roas: number;
   ctr: number;
+  hookRate: number;
   totalBonus: number;
   paidAmount: number;
   pendingAmount: number;
   unpaidAmount: number;
   adCount: number;
+  winnerCount: number;
   ads: EditorAd[];
   payouts: Payout[];
 }
 
-interface AssignmentStat {
-  editorId: string;
-  editorName: string;
-  completedAssignments: number;
-  avgEditingMinutes: number;
-  revisionRate: number;
-  totalTrackedHours: number;
-}
+interface LeaderEntry { editorId: string; name: string; slug: string | null; winners: number; hookRate: number; earned: number }
+interface StrategistStat { id: string; name: string; slug: string | null; ads: number; winners: number; winRate: number }
+type Series = Array<{ date: string; spend: number; revenue: number; roas: number; purchases: number }>;
 
 function fmt(n: number, decimals = 0): string {
-  return n.toLocaleString("en-US", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+  return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 function BonusBadge({ bonus }: { bonus: number }) {
   if (bonus === 0) return <span className="text-slate-500 text-sm">-</span>;
-  const color =
-    bonus >= 50 ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
-    bonus >= 30 ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
-    bonus >= 20 ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
-    "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
-
   return (
-    <Badge variant="outline" className={color}>
-      <Trophy className="h-3 w-3 mr-1" />
-      ${bonus}
+    <Badge variant="outline" className={bonusTierColor(bonus)}>
+      <Trophy className="h-3 w-3 mr-1" />${bonus}
     </Badge>
   );
 }
@@ -129,91 +141,152 @@ function PayoutStatusBadge({ status }: { status: string }) {
   );
 }
 
-function EditorRow({ editor, onCreatePayout, onMarkPaid }: {
+function EditorRow({
+  editor,
+  series,
+  onExpand,
+  onCreatePayout,
+  onMarkPaid,
+}: {
   editor: EditorData;
+  series: Series | undefined;
+  onExpand: (editorId: string) => void;
   onCreatePayout: (editor: EditorData) => void;
   onMarkPaid: (payoutId: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next) onExpand(editor.editorId);
+  };
+
+  const copyLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!editor.slug) return;
+    const url = `${window.location.origin}/e/${editor.slug}`;
+    navigator.clipboard.writeText(url);
+    toast.success(`Länk kopierad: /e/${editor.slug}`);
+  };
+
   return (
     <>
-      <tr
-        className="border-b border-white/5 cursor-pointer hover:bg-white/[0.02] transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
+      <tr className="border-b border-white/5 cursor-pointer hover:bg-white/[0.02] transition-colors" onClick={toggle}>
         <td className="px-4 py-3 font-medium text-slate-200">
           <div className="flex items-center gap-2">
-            {expanded ? (
-              <ChevronDown className="h-4 w-4 text-slate-500" />
+            {expanded ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
+            {editor.userType === "creative_strategist" ? (
+              <Lightbulb className="h-3.5 w-3.5 text-purple-400" />
             ) : (
-              <ChevronRight className="h-4 w-4 text-slate-500" />
+              <Video className="h-3.5 w-3.5 text-cyan-400" />
             )}
-            {editor.editor}
-            <span className="text-xs text-slate-500">
-              ({editor.adCount} ad{editor.adCount !== 1 ? "s" : ""})
-            </span>
+            {editor.fullName}
+            <span className="text-xs text-slate-500">({editor.adCount})</span>
           </div>
         </td>
+        <td className="px-4 py-3 text-right text-sm text-amber-400 font-medium">{editor.winnerCount}</td>
         <td className="px-4 py-3 text-right text-sm text-slate-300">${fmt(editor.totalSpend, 2)}</td>
-        <td className="px-4 py-3 text-right text-sm text-slate-300">${fmt(editor.totalPurchaseValue, 2)}</td>
         <td className="px-4 py-3 text-right text-sm font-semibold">
           <span className={editor.roas >= 2.5 ? "text-emerald-400" : editor.roas >= 2.0 ? "text-amber-400" : "text-red-400"}>
             {editor.roas.toFixed(2)}x
           </span>
         </td>
-        <td className="px-4 py-3 text-right text-sm text-slate-300">{editor.totalPurchases}</td>
-        <td className="px-4 py-3 text-right text-sm text-slate-400">{editor.ctr.toFixed(2)}%</td>
+        <td className="px-4 py-3 text-right text-sm text-slate-400">{editor.hookRate.toFixed(1)}%</td>
         <td className="px-4 py-3 text-right">
           <span className="font-semibold text-emerald-400">${fmt(editor.totalBonus)}</span>
         </td>
         <td className="px-4 py-3 text-right">
           <div className="flex items-center justify-end gap-2">
-            {editor.paidAmount > 0 && (
-              <span className="text-xs text-emerald-400">${fmt(editor.paidAmount)} paid</span>
-            )}
+            {editor.paidAmount > 0 && <span className="text-xs text-emerald-400">${fmt(editor.paidAmount)} paid</span>}
             {editor.unpaidAmount > 0 && (
               <button
                 onClick={(e) => { e.stopPropagation(); onCreatePayout(editor); }}
                 className="text-[10px] font-medium px-2 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-all"
               >
-                Create Payout
+                Betala ${fmt(editor.unpaidAmount)}
               </button>
             )}
           </div>
         </td>
+        <td className="px-4 py-3 text-right">
+          {editor.slug && (
+            <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+              <button onClick={copyLink} title="Kopiera publik länk" className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-cyan-400 hover:bg-white/10 transition-all">
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+              <a href={`/e/${editor.slug}`} target="_blank" rel="noreferrer" title="Öppna publik sida" className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-cyan-400 hover:bg-white/10 transition-all">
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          )}
+        </td>
       </tr>
       {expanded && (
-        <>
-          {/* Ad rows */}
-          {editor.ads.map((ad) => (
-            <tr key={ad.id} className="border-b border-white/5 bg-white/[0.01]">
-              <td className="px-4 py-2.5 pl-12 text-sm text-slate-500">
-                {ad.name}
-                {ad.assignmentId && (
-                  <span className="ml-2 text-[10px] text-cyan-400/60">linked</span>
-                )}
-              </td>
-              <td className="px-4 py-2.5 text-right text-sm text-slate-400">${fmt(ad.spend, 2)}</td>
-              <td className="px-4 py-2.5 text-right text-sm text-slate-400">${fmt(ad.purchaseValue, 2)}</td>
-              <td className="px-4 py-2.5 text-right text-sm">
-                <span className={ad.roas >= 2.5 ? "text-emerald-400" : ad.roas >= 2.0 ? "text-amber-400" : "text-red-400"}>
-                  {ad.roas.toFixed(2)}x
-                </span>
-              </td>
-              <td className="px-4 py-2.5 text-right text-sm text-slate-400">{ad.purchases}</td>
-              <td className="px-4 py-2.5 text-right text-sm text-slate-500">{ad.ctr.toFixed(2)}%</td>
-              <td className="px-4 py-2.5 text-right">
-                <BonusBadge bonus={ad.bonus} />
-              </td>
-              <td />
-            </tr>
-          ))}
-          {/* Payout history */}
-          {editor.payouts.length > 0 && (
-            <tr className="border-b border-white/5 bg-emerald-500/[0.02]">
-              <td colSpan={8} className="px-4 py-3 pl-12">
-                <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Payout History</div>
+        <tr className="border-b border-white/5 bg-white/[0.01]">
+          <td colSpan={8} className="px-4 py-4">
+            {/* Performance graph */}
+            <div className="rounded-xl border border-white/5 bg-[#0f1629] p-4 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="h-4 w-4 text-cyan-400" />
+                <span className="text-xs font-semibold text-white">Prestation över tid</span>
+                <span className="text-[10px] text-slate-600">spend (staplar) &amp; ROAS (linje)</span>
+              </div>
+              {series === undefined ? (
+                <div className="py-10 text-center text-xs text-slate-600">Laddar graf...</div>
+              ) : series.length === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-600">Ingen data i perioden.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <ComposedChart data={series} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 10 }} tickFormatter={(d) => String(d).slice(5)} />
+                    <YAxis yAxisId="left" tick={{ fill: "#64748b", fontSize: 10 }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fill: "#64748b", fontSize: 10 }} />
+                    <Tooltip contentStyle={{ background: "#0f1629", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, fontSize: 12 }} labelStyle={{ color: "#e2e8f0" }} />
+                    <ReferenceLine yAxisId="right" y={2.0} stroke="#f59e0b" strokeDasharray="4 4" />
+                    <Bar yAxisId="left" dataKey="spend" name="Spend ($)" fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={26} />
+                    <Line yAxisId="right" type="monotone" dataKey="roas" name="ROAS" stroke="#34d399" strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Ads */}
+            <div className="rounded-xl border border-white/5 overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/5 bg-white/[0.02]">
+                    {["Annons", "Spend", "Livstid", "ROAS", "Hook", "Köp", "Bonus"].map((h, i) => (
+                      <th key={h} className={cn("px-3 py-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider", i > 0 ? "text-right" : "text-left")}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {editor.ads.map((ad) => (
+                    <tr key={ad.id} className="border-b border-white/[0.03]">
+                      <td className="px-3 py-2 text-xs text-slate-400 max-w-[260px] truncate">
+                        {ad.name}
+                        {ad.strategistName && <span className="ml-2 text-[10px] text-purple-400/70">💡 {ad.strategistName}</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs text-slate-400">${fmt(ad.spend)}</td>
+                      <td className="px-3 py-2 text-right text-[11px] text-slate-500">${fmt(ad.lifetimeSpend)} / {ad.lifetimeRoas.toFixed(1)}x</td>
+                      <td className="px-3 py-2 text-right text-xs">
+                        <span className={ad.roas >= 2.5 ? "text-emerald-400" : ad.roas >= 2.0 ? "text-amber-400" : ad.spend > 0 ? "text-red-400" : "text-slate-600"}>{ad.roas.toFixed(2)}x</span>
+                      </td>
+                      <td className={cn("px-3 py-2 text-right text-xs", ad.hookRate >= 30 ? "text-emerald-400" : ad.hookRate >= 20 ? "text-amber-400" : ad.hookRate > 0 ? "text-red-400" : "text-slate-600")}>{ad.hookRate.toFixed(1)}%</td>
+                      <td className="px-3 py-2 text-right text-xs text-slate-400">{ad.purchases}</td>
+                      <td className="px-3 py-2 text-right"><BonusBadge bonus={ad.bonus} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Payout history */}
+            {editor.payouts.length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Utbetalningshistorik</div>
                 <div className="space-y-1.5">
                   {editor.payouts.map((p) => (
                     <div key={p.id} className="flex items-center justify-between text-sm">
@@ -228,35 +301,34 @@ function EditorRow({ editor, onCreatePayout, onMarkPaid }: {
                           onClick={(e) => { e.stopPropagation(); onMarkPaid(p.id); }}
                           className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-all"
                         >
-                          <Check className="h-3 w-3" /> Mark Paid
+                          <Check className="h-3 w-3" /> Markera betald
                         </button>
                       )}
                     </div>
                   ))}
                 </div>
-              </td>
-            </tr>
-          )}
-        </>
+              </div>
+            )}
+          </td>
+        </tr>
       )}
     </>
   );
 }
 
 export default function EditorsPage() {
-  const [dateRange, setDateRange] = useState({
-    from: subDays(new Date(), 30),
-    to: new Date(),
-  });
+  const [dateRange, setDateRange] = useState({ from: subDays(new Date(), 30), to: new Date() });
   const [editors, setEditors] = useState<EditorData[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
+  const [strategists, setStrategists] = useState<StrategistStat[]>([]);
   const [loading, setLoading] = useState(true);
-  const [assignmentStats, setAssignmentStats] = useState<AssignmentStat[]>([]);
+  const [seriesByEditor, setSeriesByEditor] = useState<Record<string, Series>>({});
+
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [payoutEditor, setPayoutEditor] = useState<EditorData | null>(null);
   const [payoutNotes, setPayoutNotes] = useState("");
   const [creatingPayout, setCreatingPayout] = useState(false);
 
-  // Create team member state
   const [showCreateMember, setShowCreateMember] = useState(false);
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberEmail, setNewMemberEmail] = useState("");
@@ -273,18 +345,13 @@ export default function EditorsPage() {
         from: format(dateRange.from, "yyyy-MM-dd"),
         to: format(dateRange.to, "yyyy-MM-dd"),
       });
-      const [editorsRes, statsRes] = await Promise.all([
-        fetch(`/api/editors?${params}`),
-        fetch("/api/editors/assignment-stats").catch(() => null),
-      ]);
-      if (!editorsRes.ok) throw new Error("Failed to fetch");
-      const data = await editorsRes.json();
-      setEditors(data.editors);
-
-      if (statsRes && statsRes.ok) {
-        const statsData = await statsRes.json();
-        setAssignmentStats(statsData.editors || []);
-      }
+      const res = await fetch(`/api/editors?${params}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setEditors(data.editors || []);
+      setLeaderboard(data.leaderboard || []);
+      setStrategists(data.strategists || []);
+      setSeriesByEditor({});
     } catch (err) {
       console.error(err);
     } finally {
@@ -293,6 +360,21 @@ export default function EditorsPage() {
   }, [dateRange]);
 
   useEffect(() => { fetchEditors(); }, [fetchEditors]);
+
+  const loadSeries = useCallback(async (editorId: string) => {
+    if (seriesByEditor[editorId]) return;
+    try {
+      const params = new URLSearchParams({
+        editorId,
+        from: format(dateRange.from, "yyyy-MM-dd"),
+        to: format(dateRange.to, "yyyy-MM-dd"),
+      });
+      const res = await fetch(`/api/editors/timeseries?${params}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setSeriesByEditor((prev) => ({ ...prev, [editorId]: data.timeseries || [] }));
+    } catch { /* ignore */ }
+  }, [dateRange, seriesByEditor]);
 
   const handleCreatePayout = (editor: EditorData) => {
     setPayoutEditor(editor);
@@ -304,16 +386,8 @@ export default function EditorsPage() {
     if (!payoutEditor) return;
     setCreatingPayout(true);
     try {
-      const breakdown = payoutEditor.ads
-        .filter((a) => a.bonus > 0)
-        .map((a) => ({
-          adId: a.id,
-          adName: a.name,
-          spend: a.spend,
-          roas: a.roas,
-          bonus: a.bonus,
-        }));
-
+      const unpaidAds = payoutEditor.ads.filter((a) => a.outstanding > 0);
+      const breakdown = unpaidAds.map((a) => ({ adId: a.id, adName: a.name, spend: a.lifetimeSpend, roas: a.lifetimeRoas, bonus: a.outstanding }));
       const res = await fetch("/api/editors/payouts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -322,19 +396,17 @@ export default function EditorsPage() {
           amount: payoutEditor.unpaidAmount,
           periodFrom: format(dateRange.from, "yyyy-MM-dd"),
           periodTo: format(dateRange.to, "yyyy-MM-dd"),
-          adIds: payoutEditor.ads.filter((a) => a.bonus > 0).map((a) => a.id),
-          assignmentIds: payoutEditor.ads.filter((a) => a.assignmentId).map((a) => a.assignmentId),
+          adIds: unpaidAds.map((a) => a.id),
           breakdown,
           notes: payoutNotes || null,
         }),
       });
-
       if (!res.ok) throw new Error("Failed to create payout");
-      toast.success(`Payout of $${fmt(payoutEditor.unpaidAmount)} created for ${payoutEditor.editor}`);
+      toast.success(`Payout på $${fmt(payoutEditor.unpaidAmount)} skapad för ${payoutEditor.editor}`);
       setShowPayoutModal(false);
       fetchEditors();
     } catch {
-      toast.error("Failed to create payout");
+      toast.error("Kunde inte skapa payout");
     } finally {
       setCreatingPayout(false);
     }
@@ -348,21 +420,21 @@ export default function EditorsPage() {
         body: JSON.stringify({ id: payoutId, status: "paid" }),
       });
       if (!res.ok) throw new Error("Failed");
-      toast.success("Payout marked as paid");
+      toast.success("Payout markerad som betald");
       fetchEditors();
     } catch {
-      toast.error("Failed to update payout");
+      toast.error("Kunde inte uppdatera payout");
     }
   };
 
   const handleCreateMember = async () => {
     setCreateError("");
     if (!newMemberName.trim() || !newMemberEmail.trim() || !newMemberPassword) {
-      setCreateError("All fields are required");
+      setCreateError("Alla fält krävs");
       return;
     }
     if (newMemberPassword.length < 8) {
-      setCreateError("Password must be at least 8 characters");
+      setCreateError("Lösenord måste vara minst 8 tecken");
       return;
     }
     setCreatingMember(true);
@@ -379,17 +451,18 @@ export default function EditorsPage() {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to create member");
+        throw new Error(data.error || "Kunde inte skapa medlem");
       }
-      toast.success(`${newMemberName.trim()} added as ${newMemberType === "video_editor" ? "Video Editor" : "Creative Strategist"}`);
+      toast.success(`${newMemberName.trim()} tillagd som ${newMemberType === "video_editor" ? "Video Editor" : "Creative Strategist"}`);
       setShowCreateMember(false);
       setNewMemberName("");
       setNewMemberEmail("");
       setNewMemberPassword("");
       setNewMemberType("video_editor");
       setShowPassword(false);
+      fetchEditors();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create member");
+      setCreateError(err instanceof Error ? err.message : "Kunde inte skapa medlem");
     } finally {
       setCreatingMember(false);
     }
@@ -411,26 +484,17 @@ export default function EditorsPage() {
             <Users className="h-6 w-6 text-cyan-400" />
             Editor Performance
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Ad performance, bonus tracking and payouts per video editor
-          </p>
+          <p className="text-sm text-slate-500 mt-0.5">Prestation, livstidsbonus &amp; utbetalningar per video editor</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <DateRangePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
-          <button
-            onClick={fetchEditors}
-            disabled={loading}
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50"
-          >
+          <button onClick={fetchEditors} disabled={loading} className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            Uppdatera
           </button>
-          <button
-            onClick={() => setShowCreateMember(true)}
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-sm font-medium text-white transition-all"
-          >
+          <button onClick={() => setShowCreateMember(true)} className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-sm font-medium text-white transition-all">
             <Plus className="h-4 w-4" />
-            Add Member
+            Lägg till medlem
           </button>
         </div>
       </div>
@@ -438,94 +502,86 @@ export default function EditorsPage() {
       {/* KPI Cards */}
       <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
         {[
-          { title: "Editors", value: loading ? "..." : editors.length, icon: Users, glow: "glow-cyan", iconBg: "bg-cyan-500/10", iconColor: "text-cyan-400" },
-          { title: "Total Ad Spend", value: loading ? "..." : `$${fmt(totalSpend, 2)}`, icon: DollarSign, glow: "glow-purple", iconBg: "bg-purple-500/10", iconColor: "text-purple-400" },
-          { title: "Overall ROAS", value: loading ? "..." : `${overallRoas.toFixed(2)}x`, icon: TrendingUp, glow: "glow-green", iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
-          { title: "Total Bonuses", value: loading ? "..." : `$${fmt(totalBonus)}`, icon: Trophy, glow: "glow-amber", iconBg: "bg-amber-500/10", iconColor: "text-amber-400", valueColor: "text-emerald-400" },
-          { title: "Unpaid", value: loading ? "..." : `$${fmt(totalUnpaid)}`, icon: AlertCircle, glow: totalUnpaid > 0 ? "glow-amber" : "", iconBg: totalUnpaid > 0 ? "bg-red-500/10" : "bg-white/5", iconColor: totalUnpaid > 0 ? "text-red-400" : "text-slate-500", valueColor: totalUnpaid > 0 ? "text-red-400" : "text-slate-400" },
+          { title: "Editors", value: loading ? "..." : editors.length, icon: Users, iconBg: "bg-cyan-500/10", iconColor: "text-cyan-400" },
+          { title: "Spend", value: loading ? "..." : `$${fmt(totalSpend, 0)}`, icon: DollarSign, iconBg: "bg-purple-500/10", iconColor: "text-purple-400" },
+          { title: "ROAS", value: loading ? "..." : `${overallRoas.toFixed(2)}x`, icon: TrendingUp, iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
+          { title: "Bonus (livstid)", value: loading ? "..." : `$${fmt(totalBonus)}`, icon: Trophy, iconBg: "bg-amber-500/10", iconColor: "text-amber-400", valueColor: "text-emerald-400" },
+          { title: "Kvar att betala", value: loading ? "..." : `$${fmt(totalUnpaid)}`, icon: AlertCircle, iconBg: totalUnpaid > 0 ? "bg-red-500/10" : "bg-white/5", iconColor: totalUnpaid > 0 ? "text-red-400" : "text-slate-500", valueColor: totalUnpaid > 0 ? "text-red-400" : "text-slate-400" },
         ].map((card) => (
-          <div key={card.title} className={cn("rounded-xl border bg-[#111827] p-4 transition-all", card.glow)}>
+          <div key={card.title} className="rounded-xl border border-white/5 bg-[#111827] p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{card.title}</span>
               <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", card.iconBg)}>
                 <card.icon className={cn("h-4 w-4", card.iconColor)} />
               </div>
             </div>
-            <div className={cn("text-2xl font-bold", card.valueColor || "text-white", loading && "animate-pulse")}>
-              {card.value}
-            </div>
+            <div className={cn("text-2xl font-bold", card.valueColor || "text-white", loading && "animate-pulse")}>{card.value}</div>
           </div>
         ))}
       </div>
 
-      {/* Payout Summary */}
+      {/* Paid / Unpaid */}
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5 glow-green">
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
           <div className="flex items-center gap-2 mb-2">
             <Banknote className="h-4 w-4 text-emerald-400" />
-            <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Total Paid</span>
+            <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Totalt utbetalt</span>
           </div>
-          <div className="text-3xl font-bold text-emerald-400">
-            {loading ? "..." : `$${fmt(totalPaid)}`}
-          </div>
-          <p className="text-xs text-slate-500 mt-1">Bonuses marked as paid this period</p>
+          <div className="text-3xl font-bold text-emerald-400">{loading ? "..." : `$${fmt(totalPaid)}`}</div>
+          <p className="text-xs text-slate-500 mt-1">Bonusar markerade som betalda</p>
         </div>
-        <div className={cn(
-          "rounded-xl border p-5",
-          totalUnpaid > 0 ? "border-amber-500/20 bg-amber-500/5" : "border-white/5 bg-[#111827]"
-        )}>
+        <div className={cn("rounded-xl border p-5", totalUnpaid > 0 ? "border-amber-500/20 bg-amber-500/5" : "border-white/5 bg-[#111827]")}>
           <div className="flex items-center gap-2 mb-2">
             <Clock className={cn("h-4 w-4", totalUnpaid > 0 ? "text-amber-400" : "text-slate-500")} />
-            <span className={cn("text-xs font-medium uppercase tracking-wider", totalUnpaid > 0 ? "text-amber-400" : "text-slate-500")}>Pending / Unpaid</span>
+            <span className={cn("text-xs font-medium uppercase tracking-wider", totalUnpaid > 0 ? "text-amber-400" : "text-slate-500")}>Kvar att betala</span>
           </div>
-          <div className={cn("text-3xl font-bold", totalUnpaid > 0 ? "text-amber-400" : "text-slate-500")}>
-            {loading ? "..." : `$${fmt(totalUnpaid)}`}
-          </div>
-          <p className="text-xs text-slate-500 mt-1">Bonuses not yet paid out</p>
+          <div className={cn("text-3xl font-bold", totalUnpaid > 0 ? "text-amber-400" : "text-slate-500")}>{loading ? "..." : `$${fmt(totalUnpaid)}`}</div>
+          <p className="text-xs text-slate-500 mt-1">Intjänad bonus som inte betalats ut</p>
         </div>
       </div>
 
-      {/* Assignment Stats */}
-      {assignmentStats.length > 0 && (
+      {/* Leaderboard + Strategists */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold text-white">Assignment Performance</h3>
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
+            <Medal className="h-4 w-4 text-amber-400" />
+            <h3 className="text-sm font-semibold text-white">Topplista — flest vinnare</h3>
           </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                {["Editor", "Completed", "Avg Edit Time", "Revision Rate", "Total Hours"].map((h, i) => (
-                  <th key={h} className={cn("px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider", i > 0 && "text-right")}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {assignmentStats.map((stat) => (
-                <tr key={stat.editorId} className="border-b border-white/5 hover:bg-white/[0.02]">
-                  <td className="px-4 py-3 text-sm font-medium text-slate-200">{stat.editorName}</td>
-                  <td className="px-4 py-3 text-sm text-right text-slate-300">{stat.completedAssignments}</td>
-                  <td className="px-4 py-3 text-sm text-right text-slate-400">
-                    {stat.avgEditingMinutes > 0 ? `${Math.round(stat.avgEditingMinutes)}m` : "-"}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right">
-                    <span className={stat.revisionRate > 30 ? "text-red-400" : stat.revisionRate > 15 ? "text-amber-400" : "text-emerald-400"}>
-                      {stat.revisionRate.toFixed(0)}%
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-slate-400">{stat.totalTrackedHours.toFixed(1)}h</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="divide-y divide-white/5">
+            {leaderboard.length === 0 && <p className="px-5 py-6 text-center text-sm text-slate-600">Ingen data ännu.</p>}
+            {leaderboard.slice(0, 6).map((l, i) => (
+              <div key={l.editorId} className="flex items-center gap-3 px-5 py-2.5">
+                <span className={cn("w-5 text-center text-sm font-bold", i === 0 ? "text-yellow-400" : i === 1 ? "text-slate-300" : i === 2 ? "text-amber-600" : "text-slate-600")}>{i + 1}</span>
+                <span className="flex-1 text-sm text-slate-300">{l.name}</span>
+                <span className="flex items-center gap-1 text-xs text-slate-500"><Flame className="h-3 w-3" />{l.hookRate.toFixed(1)}%</span>
+                <span className="flex items-center gap-1 text-sm font-semibold text-amber-400"><Trophy className="h-3.5 w-3.5" />{l.winners}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+
+        <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
+            <Lightbulb className="h-4 w-4 text-purple-400" />
+            <h3 className="text-sm font-semibold text-white">Creative Strategists — vinnare skapade</h3>
+          </div>
+          <div className="divide-y divide-white/5">
+            {strategists.length === 0 && <p className="px-5 py-6 text-center text-sm text-slate-600">Ingen strateg-data ännu. Välj strateg i uploadern eller via ägar-knappen.</p>}
+            {strategists.slice(0, 6).map((s) => (
+              <div key={s.id} className="flex items-center gap-3 px-5 py-2.5">
+                <span className="flex-1 text-sm text-slate-300">{s.name}</span>
+                <span className="text-xs text-slate-500">{s.ads} annonser</span>
+                <span className="text-xs text-slate-500">{s.winRate.toFixed(0)}% hit</span>
+                <span className="flex items-center gap-1 text-sm font-semibold text-purple-400"><Trophy className="h-3.5 w-3.5" />{s.winners}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* Bonus Tiers */}
       <div className="rounded-xl border border-white/5 bg-[#111827] p-5">
-        <h3 className="text-sm font-semibold text-white mb-3">Bonus Tiers</h3>
+        <h3 className="text-sm font-semibold text-white mb-3">Bonusnivåer <span className="text-xs font-normal text-slate-500">(livstidslåst per annons)</span></h3>
         <div className="flex flex-wrap gap-3">
           {[
             { label: "$10 — $500+ spend, 2.5+ ROAS", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
@@ -541,37 +597,29 @@ export default function EditorsPage() {
       {/* Editor Table */}
       <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
         <div className="px-5 py-4 border-b border-white/5">
-          <h3 className="text-sm font-semibold text-white">Editor Breakdown</h3>
+          <h3 className="text-sm font-semibold text-white">Editors</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/5">
-                {["Editor", "Spend", "Revenue", "ROAS", "Purchases", "CTR", "Bonus", "Payouts"].map((h, i) => (
-                  <th key={h} className={cn("px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider", i > 0 && "text-right")}>
-                    {h}
-                  </th>
+                {["Editor", "Vinnare", "Spend", "ROAS", "Hook", "Bonus", "Utbetalning", "Länk"].map((h, i) => (
+                  <th key={h} className={cn("px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider", i > 0 && "text-right")}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-500">
-                    Loading editor data...
-                  </td>
-                </tr>
+                <tr><td colSpan={8} className="text-center py-12 text-slate-500">Laddar editor-data...</td></tr>
               ) : editors.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-500">
-                    No editor data found. Publish assignments to Meta to see performance data here.
-                  </td>
-                </tr>
+                <tr><td colSpan={8} className="text-center py-12 text-slate-500">Ingen editor-data. Tilldela ägare via uploadern eller ägar-knappen i Ad Set Analyzer.</td></tr>
               ) : (
                 editors.map((editor) => (
                   <EditorRow
                     key={editor.editorId}
                     editor={editor}
+                    series={seriesByEditor[editor.editorId]}
+                    onExpand={loadSeries}
                     onCreatePayout={handleCreatePayout}
                     onMarkPaid={handleMarkPaid}
                   />
@@ -585,77 +633,38 @@ export default function EditorsPage() {
       {/* Create Payout Modal */}
       <Dialog open={showPayoutModal} onOpenChange={setShowPayoutModal}>
         <DialogContent className="max-w-md bg-[#111827] border-white/10">
-          <DialogHeader>
-            <DialogTitle className="text-white">Create Payout</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-white">Skapa utbetalning</DialogTitle></DialogHeader>
           {payoutEditor && (
             <div className="space-y-4">
               <div className="rounded-lg bg-white/[0.02] border border-white/5 p-4">
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-slate-400">Editor</span>
-                  <span className="text-sm font-medium text-white">{payoutEditor.editor}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-slate-400">Period</span>
-                  <span className="text-sm text-slate-300">
-                    {format(dateRange.from, "yyyy-MM-dd")} — {format(dateRange.to, "yyyy-MM-dd")}
-                  </span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-slate-400">Total Bonus</span>
-                  <span className="text-sm font-medium text-emerald-400">${fmt(payoutEditor.totalBonus)}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-slate-400">Already Paid</span>
-                  <span className="text-sm text-slate-300">${fmt(payoutEditor.paidAmount)}</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t border-white/5">
-                  <span className="text-sm font-medium text-white">Payout Amount</span>
-                  <span className="text-lg font-bold text-emerald-400">${fmt(payoutEditor.unpaidAmount)}</span>
-                </div>
+                <div className="flex justify-between mb-2"><span className="text-sm text-slate-400">Editor</span><span className="text-sm font-medium text-white">{payoutEditor.fullName}</span></div>
+                <div className="flex justify-between mb-2"><span className="text-sm text-slate-400">Intjänat (livstid)</span><span className="text-sm font-medium text-emerald-400">${fmt(payoutEditor.totalBonus)}</span></div>
+                <div className="flex justify-between mb-2"><span className="text-sm text-slate-400">Redan betalt</span><span className="text-sm text-slate-300">${fmt(payoutEditor.paidAmount)}</span></div>
+                <div className="flex justify-between pt-2 border-t border-white/5"><span className="text-sm font-medium text-white">Att betala nu</span><span className="text-lg font-bold text-emerald-400">${fmt(payoutEditor.unpaidAmount)}</span></div>
               </div>
-
-              {/* Bonus breakdown */}
               <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Ad Breakdown</p>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Annonser i utbetalningen</p>
                 <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {payoutEditor.ads.filter((a) => a.bonus > 0).map((ad) => (
+                  {payoutEditor.ads.filter((a) => a.outstanding > 0).map((ad) => (
                     <div key={ad.id} className="flex items-center justify-between text-xs py-1">
                       <span className="text-slate-400 truncate max-w-[200px]">{ad.name}</span>
                       <div className="flex items-center gap-3">
-                        <span className="text-slate-500">${fmt(ad.spend, 0)} / {ad.roas.toFixed(1)}x</span>
-                        <span className="text-emerald-400 font-medium">${ad.bonus}</span>
+                        <span className="text-slate-500">${fmt(ad.lifetimeSpend, 0)} / {ad.lifetimeRoas.toFixed(1)}x</span>
+                        <span className="text-emerald-400 font-medium">${ad.outstanding}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Notes (optional)</label>
-                <input
-                  value={payoutNotes}
-                  onChange={(e) => setPayoutNotes(e.target.value)}
-                  placeholder="e.g. Swish, bank transfer..."
-                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50"
-                />
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Notering (valfritt)</label>
+                <input value={payoutNotes} onChange={(e) => setPayoutNotes(e.target.value)} placeholder="t.ex. Swish, banköverföring..." className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50" />
               </div>
             </div>
           )}
           <DialogFooter>
-            <button
-              onClick={() => setShowPayoutModal(false)}
-              className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmitPayout}
-              disabled={creatingPayout}
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-medium text-white hover:from-emerald-400 hover:to-emerald-500 transition-all disabled:opacity-50"
-            >
-              {creatingPayout ? "Creating..." : "Create Payout"}
-            </button>
+            <button onClick={() => setShowPayoutModal(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all">Avbryt</button>
+            <button onClick={handleSubmitPayout} disabled={creatingPayout} className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-medium text-white hover:from-emerald-400 hover:to-emerald-500 transition-all disabled:opacity-50">{creatingPayout ? "Skapar..." : "Skapa utbetalning"}</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -664,136 +673,54 @@ export default function EditorsPage() {
       <Dialog open={showCreateMember} onOpenChange={setShowCreateMember}>
         <DialogContent className="max-w-md bg-[#111827] border-white/10">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Plus className="h-4 w-4 text-cyan-400" />
-              Add Team Member
-            </DialogTitle>
-            <DialogDescription className="text-slate-400 text-sm">
-              Create a new account for a team member.
-            </DialogDescription>
+            <DialogTitle className="text-white flex items-center gap-2"><Plus className="h-4 w-4 text-cyan-400" />Lägg till teammedlem</DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm">Skapa ett konto. En publik prestationssida (/e/namn) genereras automatiskt.</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-4">
-            {/* Role selection */}
             <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setNewMemberType("video_editor")}
-                className={cn(
-                  "relative rounded-xl border p-4 text-left transition-all",
-                  newMemberType === "video_editor"
-                    ? "border-cyan-500/50 bg-cyan-500/5 ring-1 ring-cyan-500/30"
-                    : "border-white/10 bg-white/[0.02] hover:border-white/20"
-                )}
-              >
-                <div className={cn(
-                  "h-9 w-9 rounded-lg flex items-center justify-center mb-2",
-                  newMemberType === "video_editor" ? "bg-cyan-500/15" : "bg-white/5"
-                )}>
+              <button type="button" onClick={() => setNewMemberType("video_editor")} className={cn("relative rounded-xl border p-4 text-left transition-all", newMemberType === "video_editor" ? "border-cyan-500/50 bg-cyan-500/5 ring-1 ring-cyan-500/30" : "border-white/10 bg-white/[0.02] hover:border-white/20")}>
+                <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center mb-2", newMemberType === "video_editor" ? "bg-cyan-500/15" : "bg-white/5")}>
                   <Video className={cn("h-4.5 w-4.5", newMemberType === "video_editor" ? "text-cyan-400" : "text-slate-500")} />
                 </div>
-                <div className={cn("text-sm font-medium", newMemberType === "video_editor" ? "text-white" : "text-slate-300")}>
-                  Video Editor
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Edits video content
-                </div>
+                <div className={cn("text-sm font-medium", newMemberType === "video_editor" ? "text-white" : "text-slate-300")}>Video Editor</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Får bonus</div>
               </button>
-
-              <button
-                type="button"
-                onClick={() => setNewMemberType("creative_strategist")}
-                className={cn(
-                  "relative rounded-xl border p-4 text-left transition-all",
-                  newMemberType === "creative_strategist"
-                    ? "border-purple-500/50 bg-purple-500/5 ring-1 ring-purple-500/30"
-                    : "border-white/10 bg-white/[0.02] hover:border-white/20"
-                )}
-              >
-                <div className={cn(
-                  "h-9 w-9 rounded-lg flex items-center justify-center mb-2",
-                  newMemberType === "creative_strategist" ? "bg-purple-500/15" : "bg-white/5"
-                )}>
+              <button type="button" onClick={() => setNewMemberType("creative_strategist")} className={cn("relative rounded-xl border p-4 text-left transition-all", newMemberType === "creative_strategist" ? "border-purple-500/50 bg-purple-500/5 ring-1 ring-purple-500/30" : "border-white/10 bg-white/[0.02] hover:border-white/20")}>
+                <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center mb-2", newMemberType === "creative_strategist" ? "bg-purple-500/15" : "bg-white/5")}>
                   <Lightbulb className={cn("h-4.5 w-4.5", newMemberType === "creative_strategist" ? "text-purple-400" : "text-slate-500")} />
                 </div>
-                <div className={cn("text-sm font-medium", newMemberType === "creative_strategist" ? "text-white" : "text-slate-300")}>
-                  Creative Strategist
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Plans ad strategy
-                </div>
+                <div className={cn("text-sm font-medium", newMemberType === "creative_strategist" ? "text-white" : "text-slate-300")}>Creative Strategist</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Planerar koncept (stats)</div>
               </button>
             </div>
-
-            {/* Form fields */}
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Name</label>
-                <Input
-                  value={newMemberName}
-                  onChange={(e) => setNewMemberName(e.target.value)}
-                  placeholder="Full name"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600"
-                />
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Namn</label>
+                <Input value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} placeholder="Fullständigt namn" className="bg-white/5 border-white/10 text-white placeholder:text-slate-600" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Email</label>
-                <Input
-                  type="email"
-                  value={newMemberEmail}
-                  onChange={(e) => setNewMemberEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600"
-                />
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">E-post</label>
+                <Input type="email" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} placeholder="namn@example.com" className="bg-white/5 border-white/10 text-white placeholder:text-slate-600" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Password</label>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Lösenord</label>
                 <div className="relative">
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    value={newMemberPassword}
-                    onChange={(e) => setNewMemberPassword(e.target.value)}
-                    placeholder="Min 8 characters"
-                    className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                  >
+                  <Input type={showPassword ? "text" : "password"} value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} placeholder="Minst 8 tecken" className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 pr-10" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
             </div>
-
             {createError && (
               <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                {createError}
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />{createError}
               </div>
             )}
           </div>
-
           <DialogFooter>
-            <button
-              onClick={() => setShowCreateMember(false)}
-              className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCreateMember}
-              disabled={creatingMember}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50",
-                newMemberType === "creative_strategist"
-                  ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500"
-                  : "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500"
-              )}
-            >
-              {creatingMember ? "Creating..." : "Add Member"}
-            </button>
+            <button onClick={() => setShowCreateMember(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all">Avbryt</button>
+            <button onClick={handleCreateMember} disabled={creatingMember} className={cn("px-4 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50", newMemberType === "creative_strategist" ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500" : "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500")}>{creatingMember ? "Skapar..." : "Lägg till"}</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

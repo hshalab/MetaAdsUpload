@@ -36,6 +36,8 @@ import {
   Globe,
   Crosshair,
   Pencil,
+  Video,
+  Lightbulb,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -238,6 +240,11 @@ export default function UploadPage() {
   const [pixelId, setPixelId] = useState("");
   const [loadingConnection, setLoadingConnection] = useState(true);
 
+  // Team attribution — who made this creative (for bonus + stats tracking)
+  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; name: string; userType?: string }>>([]);
+  const [videoEditorId, setVideoEditorId] = useState("");
+  const [creativeStrategistId, setCreativeStrategistId] = useState("");
+
   // New adset config
   const [newAdsetName, setNewAdsetName] = useState("");
   const [newAdsetBudget, setNewAdsetBudget] = useState(50);
@@ -305,6 +312,8 @@ export default function UploadPage() {
         if (prefs.campaignId) setSelectedCampaignId(prefs.campaignId);
         if (prefs.pageId) setSelectedPageId(prefs.pageId);
         if (prefs.pixelId) setPixelId(prefs.pixelId);
+        if (prefs.videoEditorId) setVideoEditorId(prefs.videoEditorId);
+        if (prefs.creativeStrategistId) setCreativeStrategistId(prefs.creativeStrategistId);
       }
     } catch { /* ignore */ }
   }, []);
@@ -316,11 +325,30 @@ export default function UploadPage() {
         campaignId: selectedCampaignId,
         pageId: selectedPageId,
         pixelId,
+        videoEditorId,
+        creativeStrategistId,
       }));
     } catch { /* ignore */ }
-  }, [selectedTemplateId, selectedCampaignId, selectedPageId, pixelId]);
+  }, [selectedTemplateId, selectedCampaignId, selectedPageId, pixelId, videoEditorId, creativeStrategistId]);
 
   useEffect(() => { savePrefs(); }, [savePrefs]);
+
+  // ─── Load team members for attribution ──────────────────────────────────
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/users");
+        if (!res.ok) return;
+        const { users } = await res.json();
+        setTeamMembers(
+          (users || [])
+            .filter((u: { isActive?: boolean }) => u.isActive !== false)
+            .map((u: { id: string; name: string; userType?: string }) => ({ id: u.id, name: u.name, userType: u.userType }))
+        );
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   // ─── Fetch templates + campaigns ────────────────────────────────────────
 
@@ -1122,6 +1150,25 @@ export default function UploadPage() {
         )
       );
 
+      // Record team attribution so this ad shows up on the editor's dashboard.
+      if (result.adId && (videoEditorId || creativeStrategistId)) {
+        try {
+          await fetch("/api/ad-owner", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              adId: result.adId,
+              adName: resolvedAdName || job.filename,
+              campaignId: selectedCampaignId,
+              adsetId: result.adsetId,
+              source: "uploader",
+              videoEditorId: videoEditorId || null,
+              creativeStrategistId: creativeStrategistId || null,
+            }),
+          });
+        } catch { /* non-fatal — owner can still be set later in the analyzer */ }
+      }
+
       return { adsetId: result.adsetId };
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : "Unknown error";
@@ -1741,6 +1788,53 @@ export default function UploadPage() {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ─── Team Attribution Row ─── */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {/* Video Editor */}
+        <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Video className="h-4 w-4 text-cyan-400" />
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Video Editor <span className="text-slate-600 normal-case">· äger annonsen, får bonus</span>
+            </h3>
+          </div>
+          <select
+            value={videoEditorId}
+            onChange={(e) => setVideoEditorId(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">Ingen vald...</option>
+            {teamMembers
+              .filter((m) => m.userType !== "creative_strategist")
+              .map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+          </select>
+        </div>
+
+        {/* Creative Strategist */}
+        <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Lightbulb className="h-4 w-4 text-purple-400" />
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Creative Strategist <span className="text-slate-600 normal-case">· koncept, stats</span>
+            </h3>
+          </div>
+          <select
+            value={creativeStrategistId}
+            onChange={(e) => setCreativeStrategistId(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">Ingen vald...</option>
+            {teamMembers
+              .filter((m) => m.userType === "creative_strategist")
+              .map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+          </select>
         </div>
       </div>
 

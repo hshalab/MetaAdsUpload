@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { eq, and, desc, inArray } from "drizzle-orm";
+import { applyBonusPayment } from "@/lib/bonus-ledger";
 
 // GET - List payouts (optionally filtered by editorId)
 export async function GET(request: NextRequest) {
@@ -94,6 +95,10 @@ export async function PATCH(request: NextRequest) {
 
     if (!id) return NextResponse.json({ error: "Payout ID is required" }, { status: 400 });
 
+    // Fetch the current row so we only move the ledger on an actual status change.
+    const [current] = await db.select().from(schema.editorPayouts).where(eq(schema.editorPayouts.id, id));
+    if (!current) return NextResponse.json({ error: "Payout not found" }, { status: 404 });
+
     const updateData: Record<string, unknown> = {};
     if (status === "paid") {
       updateData.status = "paid";
@@ -111,6 +116,15 @@ export async function PATCH(request: NextRequest) {
       .set(updateData)
       .where(eq(schema.editorPayouts.id, id))
       .returning();
+
+    // Keep the lifetime ledger's paidAmount in sync with payout status changes.
+    const breakdown = (current.breakdown || []).map((b) => ({ adId: b.adId, bonus: b.bonus }));
+    if (status === "paid" && current.status !== "paid") {
+      await applyBonusPayment(breakdown);
+    } else if (status === "pending" && current.status === "paid") {
+      // Reverse the payment.
+      await applyBonusPayment(breakdown.map((b) => ({ adId: b.adId, bonus: -b.bonus })));
+    }
 
     return NextResponse.json(updated);
   } catch (error) {

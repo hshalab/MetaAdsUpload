@@ -9,6 +9,8 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   role: text("role").notNull().default("editor"), // "admin" | "editor"
   userType: text("user_type").default("editor"), // "video_editor" | "creative_strategist"
+  slug: text("slug").unique(), // public vanity slug for /e/[slug] performance page
+  publicPagePassword: text("public_page_password"), // optional bcrypt hash to gate the public page
   isActive: boolean("is_active").default(true).notNull(),
   hourlyRate: real("hourly_rate"),
   timezone: text("timezone").default("Europe/Stockholm"),
@@ -362,6 +364,54 @@ export const editorPayouts = pgTable("editor_payouts", {
 }, (table) => [
   index("editor_payouts_editor_id_idx").on(table.editorId),
   index("editor_payouts_status_idx").on(table.status),
+]);
+
+// ─── Ad Ownership ───────────────────────────────────────────────────────────
+// Direct mapping of a Meta ad → its owning video editor (bonus owner) and the
+// creative strategist (tracked for stats only). Set either at upload time or via
+// the one-click "Owner" button in the Ad Set / Creative Analyzer. This is the
+// PRIMARY source of truth for attributing ad performance to a team member,
+// replacing the fragile "parse editor name from ad name" heuristic.
+
+export const adOwners = pgTable("ad_owners", {
+  adId: text("ad_id").primaryKey(), // Meta ad ID
+  videoEditorId: text("video_editor_id"), // FK users — earns the bonus
+  creativeStrategistId: text("creative_strategist_id"), // FK users — stats only, no bonus
+  campaignId: text("campaign_id"),
+  adsetId: text("adset_id"),
+  adName: text("ad_name"),
+  source: text("source").default("analyzer"), // "uploader" | "analyzer" | "import"
+  assignedById: text("assigned_by_id"), // admin who set the owner
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("ad_owners_video_editor_idx").on(table.videoEditorId),
+  index("ad_owners_strategist_idx").on(table.creativeStrategistId),
+]);
+
+// ─── Ad Bonus Ledger (lifetime, locked once) ────────────────────────────────
+// One row per qualifying ad. When an ad first crosses a bonus tier (on lifetime
+// cumulative spend + ROAS) the earned amount is locked in and never decreases,
+// even if you change the date filter or ROAS later dips. If the ad later climbs
+// to a higher tier, earnedBonus is bumped up (you owe the delta). paidAmount
+// tracks what has actually been paid out so outstanding = earnedBonus - paidAmount.
+
+export const adBonuses = pgTable("ad_bonuses", {
+  id: serial("id").primaryKey(),
+  adId: text("ad_id").notNull().unique(), // Meta ad ID
+  editorId: text("editor_id").notNull(), // video editor who earned it
+  earnedBonus: real("earned_bonus").default(0).notNull(), // highest tier $ ever reached (locked)
+  earnedTier: integer("earned_tier").default(0).notNull(), // 0 | 10 | 20 | 30 | 50
+  paidAmount: real("paid_amount").default(0).notNull(), // sum already paid out for this ad
+  peakSpend: real("peak_spend").default(0).notNull(), // lifetime spend at last evaluation
+  peakRoas: real("peak_roas").default(0).notNull(), // lifetime ROAS at last evaluation
+  firstQualifiedAt: timestamp("first_qualified_at"),
+  lastEvaluatedAt: timestamp("last_evaluated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("ad_bonuses_editor_idx").on(table.editorId),
+  index("ad_bonuses_status_idx").on(table.adId),
 ]);
 
 export const metaConnections = pgTable("meta_connections", {

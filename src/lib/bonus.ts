@@ -1,0 +1,105 @@
+// ─── Bonus tiers (single source of truth) ───────────────────────────────────
+// A video editor earns a one-time bonus per ad based on the ad's LIFETIME
+// cumulative spend + ROAS. An ad qualifies for the highest tier whose BOTH
+// thresholds it meets. Tiers are total amounts (not additive): an ad at the
+// $50 tier earns $50 total, not $50 on top of $30.
+//
+//   $10 — $500+ spend  @ 2.5+ ROAS
+//   $20 — $1,000+ spend @ 2.5+ ROAS
+//   $30 — $3,750+ spend @ 2.0+ ROAS
+//   $50 — $7,500+ spend @ 2.0+ ROAS
+//
+// NOTE: this module is intentionally pure (no DB / no server imports) so it can
+// be imported from both client components and API routes.
+
+export interface BonusTier {
+  minSpend: number;
+  minRoas: number;
+  bonus: number;
+}
+
+/** Ordered high → low so the first match is the highest qualifying tier. */
+export const BONUS_TIERS: BonusTier[] = [
+  { minSpend: 7500, minRoas: 2.0, bonus: 50 },
+  { minSpend: 3750, minRoas: 2.0, bonus: 30 },
+  { minSpend: 1000, minRoas: 2.5, bonus: 20 },
+  { minSpend: 500, minRoas: 2.5, bonus: 10 },
+];
+
+export interface BonusResult {
+  bonus: number;
+  tier: number; // the bonus value doubles as the tier id (0 | 10 | 20 | 30 | 50)
+  label: string | null;
+}
+
+/** Highest tier this (spend, roas) qualifies for. Returns bonus 0 if none. */
+export function calculateBonus(spend: number, roas: number): BonusResult {
+  for (const t of BONUS_TIERS) {
+    if (spend >= t.minSpend && roas >= t.minRoas) {
+      return {
+        bonus: t.bonus,
+        tier: t.bonus,
+        label: `$${t.bonus} ($${t.minSpend.toLocaleString("en-US")}+ spend, ${t.minRoas}+ ROAS)`,
+      };
+    }
+  }
+  return { bonus: 0, tier: 0, label: null };
+}
+
+export interface NextTierProgress {
+  /** The tier the ad is working toward, or null if already at the top. */
+  next: BonusTier | null;
+  /** Current locked bonus value. */
+  current: number;
+  /** Spend progress toward the next tier, 0–1. */
+  spendProgress: number;
+  /** Whether the ROAS requirement for the next tier is currently met. */
+  roasMet: boolean;
+  /** Human hint, e.g. "$220 / $500 spend · ROAS 2.6x ✓". */
+  hint: string;
+}
+
+/**
+ * Progress toward the next bonus tier above the current locked one.
+ * Used to render the "X to next bonus" bar on the editor dashboard.
+ */
+export function nextTierProgress(spend: number, roas: number, lockedBonus = 0): NextTierProgress {
+  const current = Math.max(lockedBonus, calculateBonus(spend, roas).bonus);
+  // Tiers strictly above current, lowest first.
+  const ascending = [...BONUS_TIERS].sort((a, b) => a.bonus - b.bonus);
+  const next = ascending.find((t) => t.bonus > current) || null;
+
+  if (!next) {
+    return { next: null, current, spendProgress: 1, roasMet: true, hint: "Topp-tier uppnådd 🎉" };
+  }
+
+  const spendProgress = Math.min(spend / next.minSpend, 1);
+  const roasMet = roas >= next.minRoas;
+  const hint = `$${Math.round(spend).toLocaleString("en-US")} / $${next.minSpend.toLocaleString(
+    "en-US"
+  )} spend · ROAS ${roas.toFixed(2)}x ${roasMet ? "✓" : `(behöver ${next.minRoas}x)`}`;
+
+  return { next, current, spendProgress, roasMet, hint };
+}
+
+/** Tailwind classes for a bonus badge by tier value. Matches the existing palette. */
+export function bonusTierColor(bonus: number): string {
+  if (bonus >= 50) return "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
+  if (bonus >= 30) return "bg-purple-500/10 text-purple-400 border-purple-500/20";
+  if (bonus >= 20) return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+  if (bonus >= 10) return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+  return "bg-white/5 text-slate-400 border-white/10";
+}
+
+/** Convert a display name to a URL-safe public slug (e.g. "Fervin Berg" → "fervin-berg"). */
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[åä]/g, "a") // å ä
+    .replace(/ö/g, "o") // ö
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // strip remaining combining diacritics
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}

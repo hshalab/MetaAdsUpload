@@ -111,6 +111,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const isCronApi = request.nextUrl.pathname.startsWith("/api/cron");
       const isPublicReview = request.nextUrl.pathname.startsWith("/r/");
       const isPublicReviewApi = request.nextUrl.pathname.startsWith("/api/review/");
+      const isPublicEditor = request.nextUrl.pathname.startsWith("/e/");
+      const isPublicEditorApi = request.nextUrl.pathname.startsWith("/api/e/");
 
       if (isAuthApi) return true;
       if (isSeedApi) {
@@ -125,6 +127,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (isOnRegister) return true;
       if (isPublicReview) return true;
       if (isPublicReviewApi) return true;
+      if (isPublicEditor) return true;
+      if (isPublicEditorApi) return true;
       if (isLoggedIn) return true;
 
       return Response.redirect(new URL("/login", request.nextUrl.origin));

@@ -1,0 +1,273 @@
+// ─── Editor performance aggregation (server-only) ───────────────────────────
+// Shared by the admin /api/editors route and the public /api/e/[slug] route so
+// both render identical numbers. Bonuses are lifetime-locked (see bonus-ledger).
+
+import { db, schema } from "@/db";
+import { and, eq, gte, lte, sql, inArray } from "drizzle-orm";
+import { BONUS_TIERS, slugify } from "./bonus";
+import { resolveOwnedAds, recomputeAdBonuses } from "./bonus-ledger";
+
+export interface EditorAdRow {
+  id: string;
+  name: string;
+  assignmentId: string | null;
+  source: string;
+  strategistId: string | null;
+  strategistName: string | null;
+  spend: number;
+  impressions: number;
+  linkClicks: number;
+  purchases: number;
+  purchaseValue: number;
+  roas: number;
+  ctr: number;
+  hookRate: number;
+  bonus: number;
+  bonusTier: number;
+  paidForAd: number;
+  outstanding: number;
+  lifetimeSpend: number;
+  lifetimeRoas: number;
+  isWinner: boolean;
+}
+
+/** Ensure every editor that owns ads has a unique public slug; backfill if missing. */
+async function ensureSlugs(editorIds: string[], users: (typeof schema.users.$inferSelect)[]) {
+  const taken = new Set(users.map((u) => u.slug).filter(Boolean) as string[]);
+  for (const id of editorIds) {
+    const u = users.find((x) => x.id === id);
+    if (!u || u.slug) continue;
+    let base = slugify(u.name) || `editor-${id.slice(0, 6)}`;
+    let candidate = base;
+    let n = 2;
+    while (taken.has(candidate)) candidate = `${base}-${n++}`;
+    taken.add(candidate);
+    u.slug = candidate; // mutate in-memory copy so the caller sees it
+    try {
+      await db.update(schema.users).set({ slug: candidate, updatedAt: new Date() }).where(eq(schema.users.id, id));
+    } catch {
+      /* slug is best-effort; collisions on the unique index are ignored */
+    }
+  }
+}
+
+export async function getEditorsOverview({ from, to }: { from: string; to: string }) {
+  const allUsers = await db.select().from(schema.users);
+  const userMap = new Map(allUsers.map((u) => [u.id, u]));
+
+  const ownedAds = await resolveOwnedAds();
+  const ledgerRows = await recomputeAdBonuses(ownedAds);
+  const ledgerByAd = new Map(ledgerRows.map((r) => [r.adId, r]));
+  const ownedAdIds = ownedAds.map((a) => a.adId);
+
+  const periodInsights = ownedAdIds.length
+    ? await db
+        .select({
+          entityId: schema.insights.entityId,
+          spend: sql<number>`coalesce(sum(${schema.insights.spend}), 0)`,
+          impressions: sql<number>`coalesce(sum(${schema.insights.impressions}), 0)`,
+          linkClicks: sql<number>`coalesce(sum(${schema.insights.linkClicks}), 0)`,
+          purchases: sql<number>`coalesce(sum(${schema.insights.purchases}), 0)`,
+          purchaseValue: sql<number>`coalesce(sum(${schema.insights.purchaseValue}), 0)`,
+          videoViews3s: sql<number>`coalesce(sum(${schema.insights.videoViews3s}), 0)`,
+        })
+        .from(schema.insights)
+        .where(
+          and(
+            eq(schema.insights.entityType, "ad"),
+            inArray(schema.insights.entityId, ownedAdIds),
+            gte(schema.insights.dateStart, from),
+            lte(schema.insights.dateStop, to)
+          )
+        )
+        .groupBy(schema.insights.entityId)
+    : [];
+  const periodByAd = new Map(periodInsights.map((r) => [r.entityId, r]));
+
+  const editorMap = new Map<string, { editorId: string; ads: EditorAdRow[] }>();
+  const strategistMap = new Map<string, { id: string; ads: number; winners: number }>();
+
+  for (const owned of ownedAds) {
+    const period = periodByAd.get(owned.adId);
+    const ledger = ledgerByAd.get(owned.adId);
+
+    const spend = Number(period?.spend) || 0;
+    const impressions = Number(period?.impressions) || 0;
+    const linkClicks = Number(period?.linkClicks) || 0;
+    const purchases = Number(period?.purchases) || 0;
+    const purchaseValue = Number(period?.purchaseValue) || 0;
+    const videoViews3s = Number(period?.videoViews3s) || 0;
+    const roas = spend > 0 ? purchaseValue / spend : 0;
+    const ctr = impressions > 0 ? (linkClicks / impressions) * 100 : 0;
+    const hookRate = impressions > 0 ? (videoViews3s / impressions) * 100 : 0;
+
+    const bonus = ledger?.earnedBonus || 0;
+    const bonusTier = ledger?.earnedTier || 0;
+    const paidForAd = ledger?.paidAmount || 0;
+    const outstanding = Math.max(bonus - paidForAd, 0);
+    const lifetimeSpend = ledger?.peakSpend || 0;
+    const lifetimeRoas = ledger?.peakRoas || 0;
+    const isWinner = bonus > 0;
+
+    if (owned.creativeStrategistId) {
+      const s = strategistMap.get(owned.creativeStrategistId) || { id: owned.creativeStrategistId, ads: 0, winners: 0 };
+      s.ads += 1;
+      if (isWinner) s.winners += 1;
+      strategistMap.set(owned.creativeStrategistId, s);
+    }
+
+    if (!owned.videoEditorId) continue;
+
+    const row: EditorAdRow = {
+      id: owned.adId,
+      name: owned.adName || owned.adId,
+      assignmentId: owned.assignmentId,
+      source: owned.source,
+      strategistId: owned.creativeStrategistId,
+      strategistName: owned.creativeStrategistId ? userMap.get(owned.creativeStrategistId)?.name?.split(" ")[0] || null : null,
+      spend,
+      impressions,
+      linkClicks,
+      purchases,
+      purchaseValue,
+      roas,
+      ctr,
+      hookRate,
+      bonus,
+      bonusTier,
+      paidForAd,
+      outstanding,
+      lifetimeSpend,
+      lifetimeRoas,
+      isWinner,
+    };
+
+    const entry = editorMap.get(owned.videoEditorId) || { editorId: owned.videoEditorId, ads: [] };
+    entry.ads.push(row);
+    editorMap.set(owned.videoEditorId, entry);
+  }
+
+  const editorIds = Array.from(editorMap.keys());
+  await ensureSlugs(editorIds, allUsers);
+
+  const payouts = editorIds.length
+    ? await db.select().from(schema.editorPayouts).where(inArray(schema.editorPayouts.editorId, editorIds))
+    : [];
+  const payoutsByEditor = new Map<string, typeof payouts>();
+  for (const p of payouts) {
+    const list = payoutsByEditor.get(p.editorId) || [];
+    list.push(p);
+    payoutsByEditor.set(p.editorId, list);
+  }
+
+  const editors = Array.from(editorMap.values()).map((e) => {
+    const user = userMap.get(e.editorId);
+    e.ads.sort((a, b) => b.lifetimeSpend - a.lifetimeSpend);
+
+    const totalSpend = e.ads.reduce((s, a) => s + a.spend, 0);
+    const totalPurchaseValue = e.ads.reduce((s, a) => s + a.purchaseValue, 0);
+    const totalPurchases = e.ads.reduce((s, a) => s + a.purchases, 0);
+    const totalImpressions = e.ads.reduce((s, a) => s + a.impressions, 0);
+    const totalLinkClicks = e.ads.reduce((s, a) => s + a.linkClicks, 0);
+    const totalVideoViews3s = e.ads.reduce((s, a) => s + (a.hookRate * a.impressions) / 100, 0);
+    const roas = totalSpend > 0 ? totalPurchaseValue / totalSpend : 0;
+    const ctr = totalImpressions > 0 ? (totalLinkClicks / totalImpressions) * 100 : 0;
+    const hookRate = totalImpressions > 0 ? (totalVideoViews3s / totalImpressions) * 100 : 0;
+
+    const totalBonus = e.ads.reduce((s, a) => s + a.bonus, 0);
+    const paidAmount = e.ads.reduce((s, a) => s + a.paidForAd, 0);
+    const winnerCount = e.ads.filter((a) => a.isWinner).length;
+
+    const myPayouts = (payoutsByEditor.get(e.editorId) || []).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    const pendingAmount = myPayouts.filter((p) => p.status === "pending").reduce((s, p) => s + p.amount, 0);
+
+    return {
+      editorId: e.editorId,
+      editor: user?.name?.split(" ")[0] || "Unknown",
+      fullName: user?.name || "Unknown",
+      slug: user?.slug || null,
+      userType: user?.userType || "video_editor",
+      totalSpend,
+      totalPurchaseValue,
+      totalPurchases,
+      totalImpressions,
+      roas,
+      ctr,
+      hookRate,
+      totalBonus,
+      paidAmount,
+      pendingAmount,
+      unpaidAmount: Math.max(totalBonus - paidAmount - pendingAmount, 0),
+      adCount: e.ads.length,
+      winnerCount,
+      ads: e.ads,
+      payouts: myPayouts,
+    };
+  });
+
+  editors.sort((a, b) => b.totalBonus - a.totalBonus || b.totalSpend - a.totalSpend);
+
+  const leaderboard = editors
+    .map((e) => ({
+      editorId: e.editorId,
+      name: e.editor,
+      slug: e.slug,
+      winners: e.winnerCount,
+      hookRate: e.hookRate,
+      earned: e.totalBonus,
+    }))
+    .sort((a, b) => b.winners - a.winners || b.earned - a.earned);
+
+  const strategists = Array.from(strategistMap.values())
+    .map((s) => {
+      const u = userMap.get(s.id);
+      return {
+        id: s.id,
+        name: u?.name || "Unknown",
+        slug: u?.slug || null,
+        ads: s.ads,
+        winners: s.winners,
+        winRate: s.ads > 0 ? (s.winners / s.ads) * 100 : 0,
+      };
+    })
+    .sort((a, b) => b.winners - a.winners);
+
+  return { editors, leaderboard, strategists, bonusTiers: BONUS_TIERS, dateRange: { from, to } };
+}
+
+/** Daily spend / revenue / ROAS series for a set of ads — powers the performance graph. */
+export async function getEditorTimeseries(adIds: string[], from: string, to: string) {
+  if (adIds.length === 0) return [] as Array<{ date: string; spend: number; revenue: number; roas: number; purchases: number }>;
+  const rows = await db
+    .select({
+      date: schema.insights.dateStart,
+      spend: sql<number>`coalesce(sum(${schema.insights.spend}), 0)`,
+      revenue: sql<number>`coalesce(sum(${schema.insights.purchaseValue}), 0)`,
+      purchases: sql<number>`coalesce(sum(${schema.insights.purchases}), 0)`,
+    })
+    .from(schema.insights)
+    .where(
+      and(
+        eq(schema.insights.entityType, "ad"),
+        inArray(schema.insights.entityId, adIds),
+        gte(schema.insights.dateStart, from),
+        lte(schema.insights.dateStop, to)
+      )
+    )
+    .groupBy(schema.insights.dateStart)
+    .orderBy(schema.insights.dateStart);
+
+  return rows.map((r) => {
+    const spend = Number(r.spend) || 0;
+    const revenue = Number(r.revenue) || 0;
+    return {
+      date: String(r.date),
+      spend,
+      revenue,
+      roas: spend > 0 ? revenue / spend : 0,
+      purchases: Number(r.purchases) || 0,
+    };
+  });
+}

@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { OwnerPicker, type TeamMember } from "@/components/editors/owner-picker";
 
 type Classification = "breakthrough" | "spend_winner" | "kpi_winner" | "loser" | "new";
 
@@ -88,6 +89,29 @@ export default function AdSetAnalyzerPage() {
   const [classFilter, setClassFilter] = useState<Classification | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [ownersByAd, setOwnersByAd] = useState<Record<string, { videoEditorId: string | null; creativeStrategistId: string | null }>>({});
+
+  // Team members for the owner picker (admin only — silently empty otherwise).
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/users");
+        if (!res.ok) return;
+        const { users } = await res.json();
+        setMembers(
+          (users || [])
+            .filter((u: { isActive?: boolean }) => u.isActive !== false)
+            .map((u: { id: string; name: string; userType?: string; role?: string }) => ({
+              id: u.id,
+              name: u.name,
+              userType: u.userType,
+              role: u.role,
+            }))
+        );
+      } catch { /* not admin / not logged in */ }
+    })();
+  }, []);
 
   const buildUrl = useCallback(() => {
     const params = new URLSearchParams();
@@ -120,6 +144,25 @@ export default function AdSetAnalyzerPage() {
     const timer = setTimeout(() => { fetchData(); }, 300);
     return () => clearTimeout(timer);
   }, [fetchData]);
+
+  // Load existing owners for the ads currently shown.
+  useEffect(() => {
+    if (!data || members.length === 0) return;
+    const adIds = data.adsets.flatMap((a) => a.ads.map((ad) => ad.id));
+    if (adIds.length === 0) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/ad-owner?adIds=${encodeURIComponent(adIds.join(","))}`);
+        if (!res.ok) return;
+        const { owners } = await res.json();
+        const map: Record<string, { videoEditorId: string | null; creativeStrategistId: string | null }> = {};
+        for (const o of owners || []) {
+          map[o.adId] = { videoEditorId: o.videoEditorId, creativeStrategistId: o.creativeStrategistId };
+        }
+        setOwnersByAd(map);
+      } catch { /* ignore */ }
+    })();
+  }, [data, members.length]);
 
   const executeAction = async (adsetId: string, action: string, adset: ClassifiedAdset) => {
     setActing(adsetId);
@@ -405,6 +448,20 @@ export default function AdSetAnalyzerPage() {
                             </span>
                             <span className="text-slate-500">{ad.purchases} köp</span>
                           </div>
+                          {/* Owner assignment */}
+                          <OwnerPicker
+                            adId={ad.id}
+                            adName={ad.name}
+                            campaignId={adset.campaignId}
+                            adsetId={adset.id}
+                            members={members}
+                            videoEditorId={ownersByAd[ad.id]?.videoEditorId || null}
+                            creativeStrategistId={ownersByAd[ad.id]?.creativeStrategistId || null}
+                            compact
+                            onSaved={(ve, cs) =>
+                              setOwnersByAd((prev) => ({ ...prev, [ad.id]: { videoEditorId: ve, creativeStrategistId: cs } }))
+                            }
+                          />
                         </div>
                       ))}
                       {adset.ads.length === 0 && (

@@ -3,6 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { slugify } from "@/lib/bonus";
 
 export async function POST(request: Request) {
   try {
@@ -67,6 +68,13 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    // Generate a unique public slug for the editor's /e/[slug] page.
+    let slug: string | undefined = slugify(name.trim());
+    if (slug) {
+      const existingSlugs = await db.select({ slug: users.slug }).from(users).where(eq(users.slug, slug));
+      if (existingSlugs.length > 0) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
+    }
+
     // Create user
     await db.insert(users).values({
       name: name.trim(),
@@ -74,6 +82,7 @@ export async function POST(request: Request) {
       password: hashedPassword,
       role: "editor",
       userType,
+      slug: slug || null,
       isActive: true,
     });
 
