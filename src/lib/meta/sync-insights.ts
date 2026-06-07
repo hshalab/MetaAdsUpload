@@ -3,9 +3,10 @@
 // from Meta into the insights table, and refreshes campaign/ad metadata caches.
 
 import { db, schema } from "@/db";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, lte, inArray, isNotNull } from "drizzle-orm";
 import {
   getInsights,
+  getAdInsightsById,
   extractPurchases,
   extractPurchaseValue,
   calculateROAS,
@@ -63,6 +64,55 @@ async function replaceInsights(entityType: string, since: string, until: string,
     const slice = rows.slice(i, i + CHUNK);
     if (slice.length) await db.insert(schema.insights).values(slice);
   }
+}
+
+/**
+ * Targeted sync for the editor dashboard: pulls daily insights ONLY for ads that
+ * are assigned to an editor (ad_owners + published assignments). This stays well
+ * within Hobby-plan function limits even though the ad account has thousands of
+ * ads, because it scales with the number of owned ads, not the whole account.
+ */
+export async function runEditorInsightsSync() {
+  const today = new Date().toISOString().split("T")[0];
+  const since = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+
+  const owners = await db.select({ adId: schema.adOwners.adId }).from(schema.adOwners);
+  const assigns = await db
+    .select({ adId: schema.assignments.metaAdId })
+    .from(schema.assignments)
+    .where(isNotNull(schema.assignments.metaAdId));
+
+  const adIds = [...new Set([...owners.map((o) => o.adId), ...assigns.map((a) => a.adId).filter(Boolean) as string[]])];
+  if (adIds.length === 0) return { ads: 0, adInsightRows: 0 };
+
+  const rows: InsightRow[] = [];
+  const failed: string[] = [];
+  for (const adId of adIds) {
+    try {
+      const data = await getAdInsightsById(adId, { since, until: today }, 1);
+      for (const r of data) rows.push(toRow(r, adId, "ad"));
+    } catch (e) {
+      failed.push(adId);
+      console.error(`Insights fetch failed for ad ${adId}:`, e instanceof Error ? e.message : e);
+    }
+  }
+
+  // Replace only these ads' insights in the window.
+  await db.delete(schema.insights).where(
+    and(
+      eq(schema.insights.entityType, "ad"),
+      inArray(schema.insights.entityId, adIds),
+      gte(schema.insights.dateStart, since),
+      lte(schema.insights.dateStop, today),
+    )
+  );
+  const CHUNK = 200;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const slice = rows.slice(i, i + CHUNK);
+    if (slice.length) await db.insert(schema.insights).values(slice);
+  }
+
+  return { ads: adIds.length, adInsightRows: rows.length, failed: failed.length };
 }
 
 export async function runSync() {

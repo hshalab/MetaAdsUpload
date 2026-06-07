@@ -82,6 +82,24 @@ export async function getInsights(params: {
   });
 }
 
+/**
+ * Fetch insights for ONE ad directly (/{adId}/insights) — daily rows with video
+ * metrics. Used by the targeted editor sync so we never scan the whole account.
+ */
+export async function getAdInsightsById(
+  adId: string,
+  dateRange: { since: string; until: string },
+  timeIncrement = 1
+) {
+  return metaApiPaginated<InsightData>(`/${adId}/insights`, {
+    params: {
+      fields: INSIGHT_FIELDS_WITH_VIDEO,
+      time_increment: timeIncrement,
+      time_range: JSON.stringify(dateRange),
+    },
+  });
+}
+
 export function extractPurchases(actions?: Array<{ action_type: string; value: string }>) {
   return parseInt(actions?.find((a) => a.action_type === "purchase")?.value || "0", 10);
 }

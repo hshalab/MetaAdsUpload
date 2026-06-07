@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runSync } from "@/lib/meta/sync-insights";
+import { runEditorInsightsSync } from "@/lib/meta/sync-insights";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // allow long syncs (daily rows for many ads)
@@ -19,7 +19,7 @@ async function handle(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const synced = await runSync();
+    const synced = await runEditorInsightsSync();
     return NextResponse.json({ success: true, synced });
   } catch (error) {
     console.error("Sync error:", error);

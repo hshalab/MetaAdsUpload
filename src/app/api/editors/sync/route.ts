@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { runSync } from "@/lib/meta/sync-insights";
+import { runEditorInsightsSync } from "@/lib/meta/sync-insights";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -12,7 +12,7 @@ export async function POST() {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const synced = await runSync();
+    const synced = await runEditorInsightsSync();
     return NextResponse.json({ success: true, synced });
   } catch (error) {
     console.error("Manual sync error:", error);
