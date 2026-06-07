@@ -78,6 +78,13 @@
       "when": 1780869680422,
       "tag": "0010_ad_bonuses_tier_log",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780873481726,
+      "tag": "0011_evolve_bonus_tiers",
+      "breakpoints": true
     }
   ]
 }

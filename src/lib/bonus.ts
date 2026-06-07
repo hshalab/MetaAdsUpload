@@ -33,8 +33,10 @@ export interface BonusResult {
 }
 
 /** Highest tier this (spend, roas) qualifies for. Returns bonus 0 if none. */
-export function calculateBonus(spend: number, roas: number): BonusResult {
-  for (const t of BONUS_TIERS) {
+export function calculateBonus(spend: number, roas: number, tiers: BonusTier[] = BONUS_TIERS): BonusResult {
+  // Evaluate highest-bonus first so the first match is the best tier.
+  const ordered = [...tiers].sort((a, b) => b.bonus - a.bonus);
+  for (const t of ordered) {
     if (spend >= t.minSpend && roas >= t.minRoas) {
       return {
         bonus: t.bonus,
@@ -63,21 +65,21 @@ export interface NextTierProgress {
  * Progress toward the next bonus tier above the current locked one.
  * Used to render the "X to next bonus" bar on the editor dashboard.
  */
-export function nextTierProgress(spend: number, roas: number, lockedBonus = 0): NextTierProgress {
-  const current = Math.max(lockedBonus, calculateBonus(spend, roas).bonus);
+export function nextTierProgress(spend: number, roas: number, lockedBonus = 0, tiers: BonusTier[] = BONUS_TIERS): NextTierProgress {
+  const current = Math.max(lockedBonus, calculateBonus(spend, roas, tiers).bonus);
   // Tiers strictly above current, lowest first.
-  const ascending = [...BONUS_TIERS].sort((a, b) => a.bonus - b.bonus);
+  const ascending = [...tiers].sort((a, b) => a.bonus - b.bonus);
   const next = ascending.find((t) => t.bonus > current) || null;
 
   if (!next) {
-    return { next: null, current, spendProgress: 1, roasMet: true, hint: "Topp-tier uppnådd 🎉" };
+    return { next: null, current, spendProgress: 1, roasMet: true, hint: "Top tier reached 🎉" };
   }
 
   const spendProgress = Math.min(spend / next.minSpend, 1);
   const roasMet = roas >= next.minRoas;
   const hint = `$${Math.round(spend).toLocaleString("en-US")} / $${next.minSpend.toLocaleString(
     "en-US"
-  )} spend · ROAS ${roas.toFixed(2)}x ${roasMet ? "✓" : `(behöver ${next.minRoas}x)`}`;
+  )} spend · ROAS ${roas.toFixed(2)}x ${roasMet ? "✓" : `(needs ${next.minRoas}x)`}`;
 
   return { next, current, spendProgress, roasMet, hint };
 }

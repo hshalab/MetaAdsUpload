@@ -1,0 +1,1 @@
+ALTER TABLE "evolve_settings" ADD COLUMN "bonus_tiers" jsonb DEFAULT '[]'::jsonb;

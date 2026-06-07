@@ -57,8 +57,8 @@ export function MemberQuickAdd({ defaultType, members, onAdded, onRemoved }: Pro
 
   const add = async () => {
     setError("");
-    if (!name.trim() || !email.trim() || !password) { setError("Alla fält krävs"); return; }
-    if (password.length < 8) { setError("Lösenord måste vara minst 8 tecken"); return; }
+    if (!name.trim() || !email.trim() || !password) { setError("All fields are required"); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/auth/register", {
@@ -73,30 +73,30 @@ export function MemberQuickAdd({ defaultType, members, onAdded, onRemoved }: Pro
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || "Kunde inte skapa medlem");
+        throw new Error(j.error || "Could not create member");
       }
-      toast.success(`${name.trim()} tillagd`);
+      toast.success(`${name.trim()} added`);
       const newEmail = email.trim().toLowerCase();
       setName(""); setEmail(""); setPassword("");
       await onAdded(newEmail);
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kunde inte skapa medlem");
+      setError(err instanceof Error ? err.message : "Could not create member");
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (m: QuickMember) => {
-    if (!confirm(`Ta bort ${m.name}? (inaktiveras — bonus-historik behålls)`)) return;
+    if (!confirm(`Remove ${m.name}? (deactivated — bonus history is kept)`)) return;
     setRemovingId(m.id);
     try {
       const res = await fetch(`/api/users/${m.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Kunde inte ta bort");
-      toast.success(`${m.name} borttagen`);
+      if (!res.ok) throw new Error("Could not remove");
+      toast.success(`${m.name} removed`);
       await onRemoved();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Kunde inte ta bort");
+      toast.error(err instanceof Error ? err.message : "Could not remove");
     } finally {
       setRemovingId(null);
     }
@@ -107,7 +107,7 @@ export function MemberQuickAdd({ defaultType, members, onAdded, onRemoved }: Pro
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        title={isStrat ? "Lägg till / hantera strateger" : "Lägg till / hantera editors"}
+        title={isStrat ? "Add / manage strategists" : "Add / manage editors"}
         className={cn(
           "flex h-[38px] w-[38px] items-center justify-center rounded-lg border transition-all",
           open
@@ -126,21 +126,21 @@ export function MemberQuickAdd({ defaultType, members, onAdded, onRemoved }: Pro
           <div className="flex items-center gap-1.5 mb-2.5">
             {isStrat ? <Lightbulb className="h-3.5 w-3.5 text-purple-400" /> : <Video className="h-3.5 w-3.5 text-cyan-400" />}
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">
-              Ny {isStrat ? "creative strategist" : "video editor"}
+              New {isStrat ? "creative strategist" : "video editor"}
             </span>
           </div>
           <div className="space-y-2">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Namn"
+              placeholder="Name"
               className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-white/20"
             />
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="E-post"
+              placeholder="Email"
               className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-white/20"
             />
             <input
@@ -148,7 +148,7 @@ export function MemberQuickAdd({ defaultType, members, onAdded, onRemoved }: Pro
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && add()}
-              placeholder="Lösenord (min 8 tecken)"
+              placeholder="Password (min 8 characters)"
               className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-white/20"
             />
             {error && <p className="text-[11px] text-red-400">{error}</p>}
@@ -162,7 +162,7 @@ export function MemberQuickAdd({ defaultType, members, onAdded, onRemoved }: Pro
               )}
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-              Lägg till
+              Add
             </button>
           </div>
 
@@ -170,7 +170,7 @@ export function MemberQuickAdd({ defaultType, members, onAdded, onRemoved }: Pro
           {existing.length > 0 && (
             <div className="mt-3 pt-3 border-t border-white/5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-                Befintliga ({existing.length})
+                Existing ({existing.length})
               </p>
               <div className="space-y-0.5 max-h-40 overflow-y-auto">
                 {existing.map((m) => (
@@ -180,7 +180,7 @@ export function MemberQuickAdd({ defaultType, members, onAdded, onRemoved }: Pro
                       type="button"
                       onClick={() => remove(m)}
                       disabled={removingId === m.id}
-                      title={`Ta bort ${m.name}`}
+                      title={`Remove ${m.name}`}
                       className="text-slate-500 hover:text-red-400 transition-colors disabled:opacity-50"
                     >
                       {removingId === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -195,7 +195,7 @@ export function MemberQuickAdd({ defaultType, members, onAdded, onRemoved }: Pro
             type="button"
             onClick={() => setOpen(false)}
             className="absolute top-2 right-2 text-slate-500 hover:text-slate-300"
-            aria-label="Stäng"
+            aria-label="Close"
           >
             <X className="h-3.5 w-3.5" />
           </button>

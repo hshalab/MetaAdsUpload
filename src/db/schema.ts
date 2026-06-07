@@ -497,6 +497,7 @@ export const evolveSettings = pgTable("evolve_settings", {
   targetCpa: real("target_cpa").default(30).notNull(),
   minDailySpend: real("min_daily_spend").default(50).notNull(),
   sekPerUsd: real("sek_per_usd").default(10.5).notNull(), // FX rate: spend (SEK) → USD for bonus thresholds
+  bonusTiers: jsonb("bonus_tiers").$type<Array<{ minSpend: number; minRoas: number; bonus: number }>>().default([]), // editable editor bonus tiers; empty = use code defaults
   learningPeriodDays: integer("learning_period_days").default(7).notNull(),
   scalingProtocolDays: integer("scaling_protocol_days").default(3).notNull(),
   zombieCostCapDiscount: real("zombie_cost_cap_discount").default(0.20).notNull(),

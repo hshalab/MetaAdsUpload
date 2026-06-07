@@ -48,10 +48,12 @@ import {
   BarChart3,
   Skull,
   CloudDownload,
+  Pencil,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { bonusTierColor } from "@/lib/bonus";
+import { bonusTierColor, type BonusTier } from "@/lib/bonus";
 
 interface EditorAd {
   id: string;
@@ -69,6 +71,7 @@ interface EditorAd {
   hookRate: number;
   bonus: number;
   bonusTier: number;
+  tierLog: Record<string, string>;
   paidForAd: number;
   outstanding: number;
   lifetimeSpend: number;
@@ -137,6 +140,28 @@ function BonusBadge({ bonus }: { bonus: number }) {
   );
 }
 
+/** Per-ad ladder showing every bonus tier the ad has reached (locked, in order). */
+function TierLadder({ tierLog, tiers }: { tierLog: Record<string, string>; tiers: BonusTier[] }) {
+  const ladder = [...tiers].map((t) => t.bonus).sort((a, b) => a - b);
+  if (ladder.length === 0) return null;
+  return (
+    <div className="flex items-center gap-1 mt-1 flex-wrap">
+      {ladder.map((t) => {
+        const hit = tierLog?.[String(t)];
+        return (
+          <span
+            key={t}
+            title={hit ? `$${t} reached ${hit}` : `$${t} not reached yet`}
+            className={"rounded px-1 py-0.5 text-[9px] font-bold border " + (hit ? bonusTierColor(t) : "bg-white/[0.02] text-slate-600 border-white/5")}
+          >
+            ${t}{hit ? " ✓" : ""}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function PayoutStatusBadge({ status }: { status: string }) {
   if (status === "paid") {
     return (
@@ -155,12 +180,14 @@ function PayoutStatusBadge({ status }: { status: string }) {
 function EditorRow({
   editor,
   series,
+  tiers,
   onExpand,
   onCreatePayout,
   onMarkPaid,
 }: {
   editor: EditorData;
   series: Series | undefined;
+  tiers: BonusTier[];
   onExpand: (editorId: string) => void;
   onCreatePayout: (editor: EditorData) => void;
   onMarkPaid: (payoutId: number) => void;
@@ -178,7 +205,7 @@ function EditorRow({
     if (!editor.slug) return;
     const url = `${window.location.origin}/e/${editor.slug}`;
     navigator.clipboard.writeText(url);
-    toast.success(`Länk kopierad: /e/${editor.slug}`);
+    toast.success(`Link copied: /e/${editor.slug}`);
   };
 
   return (
@@ -215,7 +242,7 @@ function EditorRow({
                 onClick={(e) => { e.stopPropagation(); onCreatePayout(editor); }}
                 className="text-[10px] font-medium px-2 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-all"
               >
-                Betala ${fmt(editor.unpaidAmount)}
+                Pay ${fmt(editor.unpaidAmount)}
               </button>
             )}
           </div>
@@ -223,10 +250,10 @@ function EditorRow({
         <td className="px-4 py-3 text-right">
           {editor.slug && (
             <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-              <button onClick={copyLink} title="Kopiera publik länk" className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-cyan-400 hover:bg-white/10 transition-all">
+              <button onClick={copyLink} title="Copy public link" className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-cyan-400 hover:bg-white/10 transition-all">
                 <Copy className="h-3.5 w-3.5" />
               </button>
-              <a href={`/e/${editor.slug}`} target="_blank" rel="noreferrer" title="Öppna publik sida" className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-cyan-400 hover:bg-white/10 transition-all">
+              <a href={`/e/${editor.slug}`} target="_blank" rel="noreferrer" title="Open public page" className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-cyan-400 hover:bg-white/10 transition-all">
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </div>
@@ -240,13 +267,13 @@ function EditorRow({
             <div className="rounded-xl border border-white/5 bg-[#0f1629] p-4 mb-4">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="h-4 w-4 text-cyan-400" />
-                <span className="text-xs font-semibold text-white">Prestation över tid</span>
-                <span className="text-[10px] text-slate-600">spend (staplar) &amp; ROAS (linje)</span>
+                <span className="text-xs font-semibold text-white">Performance over time</span>
+                <span className="text-[10px] text-slate-600">spend (bars) &amp; ROAS (line)</span>
               </div>
               {series === undefined ? (
-                <div className="py-10 text-center text-xs text-slate-600">Laddar graf...</div>
+                <div className="py-10 text-center text-xs text-slate-600">Loading chart...</div>
               ) : series.length === 0 ? (
-                <div className="py-10 text-center text-xs text-slate-600">Ingen data i perioden.</div>
+                <div className="py-10 text-center text-xs text-slate-600">No data in this period.</div>
               ) : (
                 <ResponsiveContainer width="100%" height={200}>
                   <ComposedChart data={series} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
@@ -283,7 +310,7 @@ function EditorRow({
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/5 bg-white/[0.02]">
-                    {["Annons", "Angle", "Spend", "Livstid", "ROAS", "Hook", "Köp", "Bonus"].map((h, i) => (
+                    {["Ad", "Angle", "Spend", "Lifetime", "ROAS", "Hook", "Purch.", "Bonus"].map((h, i) => (
                       <th key={h} className={cn("px-3 py-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider", i > 1 ? "text-right" : "text-left")}>{h}</th>
                     ))}
                   </tr>
@@ -291,11 +318,14 @@ function EditorRow({
                 <tbody>
                   {editor.ads.map((ad) => (
                     <tr key={ad.id} className="border-b border-white/[0.03]">
-                      <td className="px-3 py-2 text-xs text-slate-400 max-w-[220px] truncate">
-                        {ad.name}
-                        {ad.strategistName && <span className="ml-2 text-[10px] text-purple-400/70">💡 {ad.strategistName}</span>}
-                        {ad.graveyardOutcome === "spend_winner" && <span className="ml-2 text-[10px] text-blue-400">⚰ spend winner</span>}
-                        {ad.graveyardOutcome === "loser" && <span className="ml-2 text-[10px] text-red-400">⚰ loser</span>}
+                      <td className="px-3 py-2 text-xs text-slate-400 max-w-[240px]">
+                        <div className="truncate">
+                          {ad.name}
+                          {ad.strategistName && <span className="ml-2 text-[10px] text-purple-400/70">💡 {ad.strategistName}</span>}
+                          {ad.graveyardOutcome === "spend_winner" && <span className="ml-2 text-[10px] text-blue-400">⚰ spend winner</span>}
+                          {ad.graveyardOutcome === "loser" && <span className="ml-2 text-[10px] text-red-400">⚰ loser</span>}
+                        </div>
+                        {ad.bonus > 0 && <TierLadder tierLog={ad.tierLog} tiers={tiers} />}
                       </td>
                       <td className="px-3 py-2 text-xs text-slate-500 max-w-[120px] truncate" title={ad.problem || undefined}>{ad.angle || "—"}</td>
                       <td className="px-3 py-2 text-right text-xs text-slate-400">${fmt(ad.spend)}</td>
@@ -315,7 +345,7 @@ function EditorRow({
             {/* Payout history */}
             {editor.payouts.length > 0 && (
               <div className="mt-4">
-                <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Utbetalningshistorik</div>
+                <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Payout history</div>
                 <div className="space-y-1.5">
                   {editor.payouts.map((p) => (
                     <div key={p.id} className="flex items-center justify-between text-sm">
@@ -330,7 +360,7 @@ function EditorRow({
                           onClick={(e) => { e.stopPropagation(); onMarkPaid(p.id); }}
                           className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-all"
                         >
-                          <Check className="h-3 w-3" /> Markera betald
+                          <Check className="h-3 w-3" /> Mark paid
                         </button>
                       )}
                     </div>
@@ -351,9 +381,15 @@ export default function EditorsPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
   const [strategists, setStrategists] = useState<StrategistStat[]>([]);
   const [templates, setTemplates] = useState<TemplateStat[]>([]);
+  const [bonusTiers, setBonusTiers] = useState<BonusTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [seriesByEditor, setSeriesByEditor] = useState<Record<string, Series>>({});
+
+  // Editable bonus tiers
+  const [editingTiers, setEditingTiers] = useState(false);
+  const [tierDraft, setTierDraft] = useState<BonusTier[]>([]);
+  const [savingTiers, setSavingTiers] = useState(false);
 
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [payoutEditor, setPayoutEditor] = useState<EditorData | null>(null);
@@ -383,6 +419,7 @@ export default function EditorsPage() {
       setLeaderboard(data.leaderboard || []);
       setStrategists(data.strategists || []);
       setTemplates(data.templates || []);
+      setBonusTiers(data.bonusTiers || []);
       setSeriesByEditor({});
     } catch (err) {
       console.error(err);
@@ -398,11 +435,11 @@ export default function EditorsPage() {
     try {
       const res = await fetch("/api/editors/sync", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Sync misslyckades");
-      toast.success(`Synkad från Meta: ${data.synced?.adInsightRows ?? 0} annons-rader, ${data.synced?.ads ?? 0} annonser`);
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      toast.success(`Synced from Meta: ${data.synced?.adInsightRows ?? 0} ad rows, ${data.synced?.ads ?? 0} ads`);
       fetchEditors();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Sync misslyckades");
+      toast.error(e instanceof Error ? e.message : "Sync failed");
     } finally {
       setSyncing(false);
     }
@@ -422,6 +459,40 @@ export default function EditorsPage() {
       setSeriesByEditor((prev) => ({ ...prev, [editorId]: data.timeseries || [] }));
     } catch { /* ignore */ }
   }, [dateRange, seriesByEditor]);
+
+  // ── Bonus tier editing ──
+  const startEditTiers = () => {
+    setTierDraft(bonusTiers.length > 0 ? bonusTiers.map((t) => ({ ...t })) : []);
+    setEditingTiers(true);
+  };
+  const updateTier = (i: number, field: keyof BonusTier, value: number) => {
+    setTierDraft((prev) => prev.map((t, idx) => (idx === i ? { ...t, [field]: value } : t)));
+  };
+  const addTier = () => setTierDraft((prev) => [...prev, { bonus: 0, minSpend: 0, minRoas: 2.0 }]);
+  const removeTier = (i: number) => setTierDraft((prev) => prev.filter((_, idx) => idx !== i));
+  const saveTiers = async () => {
+    setSavingTiers(true);
+    try {
+      const cleaned = tierDraft
+        .map((t) => ({ bonus: Number(t.bonus) || 0, minSpend: Number(t.minSpend) || 0, minRoas: Number(t.minRoas) || 0 }))
+        .filter((t) => t.bonus > 0)
+        .sort((a, b) => b.bonus - a.bonus);
+      const res = await fetch("/api/evolve/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bonusTiers: cleaned }),
+      });
+      if (!res.ok) throw new Error("Failed to save tiers");
+      setBonusTiers(cleaned);
+      setEditingTiers(false);
+      toast.success("Bonus tiers saved — recalculated on next refresh/sync");
+      fetchEditors();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save tiers");
+    } finally {
+      setSavingTiers(false);
+    }
+  };
 
   const handleCreatePayout = (editor: EditorData) => {
     setPayoutEditor(editor);
@@ -449,11 +520,11 @@ export default function EditorsPage() {
         }),
       });
       if (!res.ok) throw new Error("Failed to create payout");
-      toast.success(`Payout på $${fmt(payoutEditor.unpaidAmount)} skapad för ${payoutEditor.editor}`);
+      toast.success(`Payout of $${fmt(payoutEditor.unpaidAmount)} created for ${payoutEditor.editor}`);
       setShowPayoutModal(false);
       fetchEditors();
     } catch {
-      toast.error("Kunde inte skapa payout");
+      toast.error("Could not create payout");
     } finally {
       setCreatingPayout(false);
     }
@@ -467,21 +538,21 @@ export default function EditorsPage() {
         body: JSON.stringify({ id: payoutId, status: "paid" }),
       });
       if (!res.ok) throw new Error("Failed");
-      toast.success("Payout markerad som betald");
+      toast.success("Payout marked as paid");
       fetchEditors();
     } catch {
-      toast.error("Kunde inte uppdatera payout");
+      toast.error("Could not update payout");
     }
   };
 
   const handleCreateMember = async () => {
     setCreateError("");
     if (!newMemberName.trim() || !newMemberEmail.trim() || !newMemberPassword) {
-      setCreateError("Alla fält krävs");
+      setCreateError("All fields are required");
       return;
     }
     if (newMemberPassword.length < 8) {
-      setCreateError("Lösenord måste vara minst 8 tecken");
+      setCreateError("Password must be at least 8 characters");
       return;
     }
     setCreatingMember(true);
@@ -498,9 +569,9 @@ export default function EditorsPage() {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Kunde inte skapa medlem");
+        throw new Error(data.error || "Could not create member");
       }
-      toast.success(`${newMemberName.trim()} tillagd som ${newMemberType === "video_editor" ? "Video Editor" : "Creative Strategist"}`);
+      toast.success(`${newMemberName.trim()} added as ${newMemberType === "video_editor" ? "Video Editor" : "Creative Strategist"}`);
       setShowCreateMember(false);
       setNewMemberName("");
       setNewMemberEmail("");
@@ -509,7 +580,7 @@ export default function EditorsPage() {
       setShowPassword(false);
       fetchEditors();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Kunde inte skapa medlem");
+      setCreateError(err instanceof Error ? err.message : "Could not create member");
     } finally {
       setCreatingMember(false);
     }
@@ -521,6 +592,7 @@ export default function EditorsPage() {
   const totalPaid = editors.reduce((s, e) => s + e.paidAmount, 0);
   const totalUnpaid = editors.reduce((s, e) => s + e.unpaidAmount, 0);
   const overallRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+  const tiersSorted = [...bonusTiers].sort((a, b) => a.bonus - b.bonus);
 
   return (
     <div className="space-y-6">
@@ -531,21 +603,21 @@ export default function EditorsPage() {
             <Users className="h-6 w-6 text-cyan-400" />
             Editor Performance
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">Prestation, livstidsbonus &amp; utbetalningar per video editor</p>
+          <p className="text-sm text-slate-500 mt-0.5">Performance, lifetime bonus &amp; payouts per video editor</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <DateRangePicker from={dateRange.from} to={dateRange.to} onChange={setDateRange} />
           <button onClick={fetchEditors} disabled={loading} className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Uppdatera
+            Refresh
           </button>
-          <button onClick={handleSync} disabled={syncing} title="Hämta senaste spend/ROAS/video-data från Meta" className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
+          <button onClick={handleSync} disabled={syncing} title="Pull the latest spend/ROAS/video data from Meta" className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
             <CloudDownload className={`h-4 w-4 ${syncing ? "animate-pulse text-cyan-400" : ""}`} />
-            {syncing ? "Synkar..." : "Synka Meta"}
+            {syncing ? "Syncing..." : "Sync Meta"}
           </button>
           <button onClick={() => setShowCreateMember(true)} className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-sm font-medium text-white transition-all">
             <Plus className="h-4 w-4" />
-            Lägg till medlem
+            Add member
           </button>
         </div>
       </div>
@@ -556,8 +628,8 @@ export default function EditorsPage() {
           { title: "Editors", value: loading ? "..." : editors.length, icon: Users, iconBg: "bg-cyan-500/10", iconColor: "text-cyan-400" },
           { title: "Spend", value: loading ? "..." : `$${fmt(totalSpend, 0)}`, icon: DollarSign, iconBg: "bg-purple-500/10", iconColor: "text-purple-400" },
           { title: "ROAS", value: loading ? "..." : `${overallRoas.toFixed(2)}x`, icon: TrendingUp, iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
-          { title: "Bonus (livstid)", value: loading ? "..." : `$${fmt(totalBonus)}`, icon: Trophy, iconBg: "bg-amber-500/10", iconColor: "text-amber-400", valueColor: "text-emerald-400" },
-          { title: "Kvar att betala", value: loading ? "..." : `$${fmt(totalUnpaid)}`, icon: AlertCircle, iconBg: totalUnpaid > 0 ? "bg-red-500/10" : "bg-white/5", iconColor: totalUnpaid > 0 ? "text-red-400" : "text-slate-500", valueColor: totalUnpaid > 0 ? "text-red-400" : "text-slate-400" },
+          { title: "Bonus (lifetime)", value: loading ? "..." : `$${fmt(totalBonus)}`, icon: Trophy, iconBg: "bg-amber-500/10", iconColor: "text-amber-400", valueColor: "text-emerald-400" },
+          { title: "Outstanding", value: loading ? "..." : `$${fmt(totalUnpaid)}`, icon: AlertCircle, iconBg: totalUnpaid > 0 ? "bg-red-500/10" : "bg-white/5", iconColor: totalUnpaid > 0 ? "text-red-400" : "text-slate-500", valueColor: totalUnpaid > 0 ? "text-red-400" : "text-slate-400" },
         ].map((card) => (
           <div key={card.title} className="rounded-xl border border-white/5 bg-[#111827] p-4">
             <div className="flex items-center justify-between mb-3">
@@ -571,23 +643,23 @@ export default function EditorsPage() {
         ))}
       </div>
 
-      {/* Paid / Unpaid */}
+      {/* Paid / Outstanding */}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
           <div className="flex items-center gap-2 mb-2">
             <Banknote className="h-4 w-4 text-emerald-400" />
-            <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Totalt utbetalt</span>
+            <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">Total paid</span>
           </div>
           <div className="text-3xl font-bold text-emerald-400">{loading ? "..." : `$${fmt(totalPaid)}`}</div>
-          <p className="text-xs text-slate-500 mt-1">Bonusar markerade som betalda</p>
+          <p className="text-xs text-slate-500 mt-1">Bonuses marked as paid</p>
         </div>
         <div className={cn("rounded-xl border p-5", totalUnpaid > 0 ? "border-amber-500/20 bg-amber-500/5" : "border-white/5 bg-[#111827]")}>
           <div className="flex items-center gap-2 mb-2">
             <Clock className={cn("h-4 w-4", totalUnpaid > 0 ? "text-amber-400" : "text-slate-500")} />
-            <span className={cn("text-xs font-medium uppercase tracking-wider", totalUnpaid > 0 ? "text-amber-400" : "text-slate-500")}>Kvar att betala</span>
+            <span className={cn("text-xs font-medium uppercase tracking-wider", totalUnpaid > 0 ? "text-amber-400" : "text-slate-500")}>Outstanding</span>
           </div>
           <div className={cn("text-3xl font-bold", totalUnpaid > 0 ? "text-amber-400" : "text-slate-500")}>{loading ? "..." : `$${fmt(totalUnpaid)}`}</div>
-          <p className="text-xs text-slate-500 mt-1">Intjänad bonus som inte betalats ut</p>
+          <p className="text-xs text-slate-500 mt-1">Earned bonus not yet paid out</p>
         </div>
       </div>
 
@@ -596,10 +668,10 @@ export default function EditorsPage() {
         <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
             <Medal className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-semibold text-white">Topplista — flest vinnare</h3>
+            <h3 className="text-sm font-semibold text-white">Leaderboard — most winners</h3>
           </div>
           <div className="divide-y divide-white/5">
-            {leaderboard.length === 0 && <p className="px-5 py-6 text-center text-sm text-slate-600">Ingen data ännu.</p>}
+            {leaderboard.length === 0 && <p className="px-5 py-6 text-center text-sm text-slate-600">No data yet.</p>}
             {leaderboard.slice(0, 6).map((l, i) => (
               <div key={l.editorId} className="flex items-center gap-3 px-5 py-2.5">
                 <span className={cn("w-5 text-center text-sm font-bold", i === 0 ? "text-yellow-400" : i === 1 ? "text-slate-300" : i === 2 ? "text-amber-600" : "text-slate-600")}>{i + 1}</span>
@@ -614,14 +686,14 @@ export default function EditorsPage() {
         <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
             <Lightbulb className="h-4 w-4 text-purple-400" />
-            <h3 className="text-sm font-semibold text-white">Creative Strategists — vinnare skapade</h3>
+            <h3 className="text-sm font-semibold text-white">Creative Strategists — winners created</h3>
           </div>
           <div className="divide-y divide-white/5">
-            {strategists.length === 0 && <p className="px-5 py-6 text-center text-sm text-slate-600">Ingen strateg-data ännu. Välj strateg i uploadern eller via ägar-knappen.</p>}
+            {strategists.length === 0 && <p className="px-5 py-6 text-center text-sm text-slate-600">No strategist data yet. Pick a strategist in the uploader or via the Owner button.</p>}
             {strategists.slice(0, 6).map((s) => (
               <div key={s.id} className="flex items-center gap-3 px-5 py-2.5">
                 <span className="flex-1 text-sm text-slate-300">{s.name}</span>
-                <span className="text-xs text-slate-500">{s.ads} annonser</span>
+                <span className="text-xs text-slate-500">{s.ads} ads</span>
                 <span className="text-xs text-slate-500">{s.winRate.toFixed(0)}% hit</span>
                 <span className="flex items-center gap-1 text-sm font-semibold text-purple-400"><Trophy className="h-3.5 w-3.5" />{s.winners}</span>
               </div>
@@ -636,13 +708,13 @@ export default function EditorsPage() {
           <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
             <BarChart3 className="h-4 w-4 text-cyan-400" />
             <h3 className="text-sm font-semibold text-white">Template Performance</h3>
-            <span className="text-xs text-slate-600">bäst → sämst (livstid-ROAS på annonser med vald template)</span>
+            <span className="text-xs text-slate-600">best → worst (lifetime ROAS on ads with a template)</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-white/5">
-                  {["Template", "Annonser", "Vinnare", "Win-rate", "Spend", "ROAS"].map((h, i) => (
+                  {["Template", "Ads", "Winners", "Win rate", "Spend", "ROAS"].map((h, i) => (
                     <th key={h} className={cn("px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider", i > 0 && "text-right")}>{h}</th>
                   ))}
                 </tr>
@@ -655,8 +727,8 @@ export default function EditorsPage() {
                     <tr key={t.templateId} className="border-b border-white/5 hover:bg-white/[0.02]">
                       <td className="px-4 py-3 text-sm text-slate-200">
                         {t.templateName}
-                        {isBest && <span className="ml-2 text-[10px] text-emerald-400">▲ bäst</span>}
-                        {isWorst && <span className="ml-2 text-[10px] text-red-400">▼ sämst</span>}
+                        {isBest && <span className="ml-2 text-[10px] text-emerald-400">▲ best</span>}
+                        {isWorst && <span className="ml-2 text-[10px] text-red-400">▼ worst</span>}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-slate-400">{t.ads}</td>
                       <td className="px-4 py-3 text-right text-sm text-amber-400">{t.winners}</td>
@@ -674,19 +746,56 @@ export default function EditorsPage() {
         </div>
       )}
 
-      {/* Bonus Tiers */}
+      {/* Bonus Tiers (editable) */}
       <div className="rounded-xl border border-white/5 bg-[#111827] p-5">
-        <h3 className="text-sm font-semibold text-white mb-3">Bonusnivåer <span className="text-xs font-normal text-slate-500">(livstidslåst per annons)</span></h3>
-        <div className="flex flex-wrap gap-3">
-          {[
-            { label: "$10 — $500+ spend, 2.5+ ROAS", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
-            { label: "$20 — $1,000+ spend, 2.5+ ROAS", color: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
-            { label: "$30 — $3,750+ spend, 2.0+ ROAS", color: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
-            { label: "$50 — $7,500+ spend, 2.0+ ROAS", color: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
-          ].map((tier) => (
-            <Badge key={tier.label} variant="outline" className={tier.color}>{tier.label}</Badge>
-          ))}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-white">
+            Bonus tiers <span className="text-xs font-normal text-slate-500">(locked per ad for life · spend in USD)</span>
+          </h3>
+          {!editingTiers ? (
+            <button onClick={startEditTiers} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 transition-all">
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button onClick={() => setEditingTiers(false)} className="text-xs px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 transition-all">Cancel</button>
+              <button onClick={saveTiers} disabled={savingTiers} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-cyan-600 text-white hover:bg-cyan-500 transition-all disabled:opacity-50">
+                <Check className="h-3.5 w-3.5" /> {savingTiers ? "Saving..." : "Save"}
+              </button>
+            </div>
+          )}
         </div>
+
+        {!editingTiers ? (
+          <div className="flex flex-wrap gap-3">
+            {tiersSorted.length === 0 && <span className="text-sm text-slate-500">No tiers configured.</span>}
+            {tiersSorted.map((t) => (
+              <Badge key={t.bonus} variant="outline" className={bonusTierColor(t.bonus)}>
+                ${t.bonus} — ${t.minSpend.toLocaleString("en-US")}+ spend, {t.minRoas}+ ROAS
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-[10px] uppercase tracking-wider text-slate-500 px-1">
+              <span>Bonus ($)</span><span>Min spend ($)</span><span>Min ROAS</span><span></span>
+            </div>
+            {tierDraft.map((t, i) => (
+              <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
+                <input type="number" value={t.bonus} onChange={(e) => updateTier(i, "bonus", parseFloat(e.target.value))} className="rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-sm text-white [color-scheme:dark]" />
+                <input type="number" value={t.minSpend} onChange={(e) => updateTier(i, "minSpend", parseFloat(e.target.value))} className="rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-sm text-white [color-scheme:dark]" />
+                <input type="number" step="0.1" value={t.minRoas} onChange={(e) => updateTier(i, "minRoas", parseFloat(e.target.value))} className="rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-sm text-white [color-scheme:dark]" />
+                <button onClick={() => removeTier(i)} className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"><X className="h-4 w-4" /></button>
+              </div>
+            ))}
+            <button onClick={addTier} className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 transition-all mt-1">
+              <Plus className="h-3.5 w-3.5" /> Add tier
+            </button>
+            <p className="text-[11px] text-slate-600 pt-1">
+              Changes apply going forward. Already-locked bonuses on existing ads are not lowered automatically.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Editor Table */}
@@ -698,22 +807,23 @@ export default function EditorsPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/5">
-                {["Editor", "Vinnare", "Spend", "ROAS", "Hook", "Bonus", "Utbetalning", "Länk"].map((h, i) => (
+                {["Editor", "Winners", "Spend", "ROAS", "Hook", "Bonus", "Payout", "Link"].map((h, i) => (
                   <th key={h} className={cn("px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider", i > 0 && "text-right")}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="text-center py-12 text-slate-500">Laddar editor-data...</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-slate-500">Loading editor data...</td></tr>
               ) : editors.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-12 text-slate-500">Ingen editor-data. Tilldela ägare via uploadern eller ägar-knappen i Ad Set Analyzer.</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-slate-500">No editor data. Assign owners via the uploader or the Owner button in the Ad Set Analyzer.</td></tr>
               ) : (
                 editors.map((editor) => (
                   <EditorRow
                     key={editor.editorId}
                     editor={editor}
                     series={seriesByEditor[editor.editorId]}
+                    tiers={bonusTiers}
                     onExpand={loadSeries}
                     onCreatePayout={handleCreatePayout}
                     onMarkPaid={handleMarkPaid}
@@ -728,17 +838,17 @@ export default function EditorsPage() {
       {/* Create Payout Modal */}
       <Dialog open={showPayoutModal} onOpenChange={setShowPayoutModal}>
         <DialogContent className="max-w-md bg-[#111827] border-white/10">
-          <DialogHeader><DialogTitle className="text-white">Skapa utbetalning</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-white">Create payout</DialogTitle></DialogHeader>
           {payoutEditor && (
             <div className="space-y-4">
               <div className="rounded-lg bg-white/[0.02] border border-white/5 p-4">
                 <div className="flex justify-between mb-2"><span className="text-sm text-slate-400">Editor</span><span className="text-sm font-medium text-white">{payoutEditor.fullName}</span></div>
-                <div className="flex justify-between mb-2"><span className="text-sm text-slate-400">Intjänat (livstid)</span><span className="text-sm font-medium text-emerald-400">${fmt(payoutEditor.totalBonus)}</span></div>
-                <div className="flex justify-between mb-2"><span className="text-sm text-slate-400">Redan betalt</span><span className="text-sm text-slate-300">${fmt(payoutEditor.paidAmount)}</span></div>
-                <div className="flex justify-between pt-2 border-t border-white/5"><span className="text-sm font-medium text-white">Att betala nu</span><span className="text-lg font-bold text-emerald-400">${fmt(payoutEditor.unpaidAmount)}</span></div>
+                <div className="flex justify-between mb-2"><span className="text-sm text-slate-400">Earned (lifetime)</span><span className="text-sm font-medium text-emerald-400">${fmt(payoutEditor.totalBonus)}</span></div>
+                <div className="flex justify-between mb-2"><span className="text-sm text-slate-400">Already paid</span><span className="text-sm text-slate-300">${fmt(payoutEditor.paidAmount)}</span></div>
+                <div className="flex justify-between pt-2 border-t border-white/5"><span className="text-sm font-medium text-white">To pay now</span><span className="text-lg font-bold text-emerald-400">${fmt(payoutEditor.unpaidAmount)}</span></div>
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Annonser i utbetalningen</p>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Ads in this payout</p>
                 <div className="space-y-1 max-h-40 overflow-y-auto">
                   {payoutEditor.ads.filter((a) => a.outstanding > 0).map((ad) => (
                     <div key={ad.id} className="flex items-center justify-between text-xs py-1">
@@ -752,14 +862,14 @@ export default function EditorsPage() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Notering (valfritt)</label>
-                <input value={payoutNotes} onChange={(e) => setPayoutNotes(e.target.value)} placeholder="t.ex. Swish, banköverföring..." className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50" />
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Note (optional)</label>
+                <input value={payoutNotes} onChange={(e) => setPayoutNotes(e.target.value)} placeholder="e.g. Wise, bank transfer..." className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50" />
               </div>
             </div>
           )}
           <DialogFooter>
-            <button onClick={() => setShowPayoutModal(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all">Avbryt</button>
-            <button onClick={handleSubmitPayout} disabled={creatingPayout} className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-medium text-white hover:from-emerald-400 hover:to-emerald-500 transition-all disabled:opacity-50">{creatingPayout ? "Skapar..." : "Skapa utbetalning"}</button>
+            <button onClick={() => setShowPayoutModal(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all">Cancel</button>
+            <button onClick={handleSubmitPayout} disabled={creatingPayout} className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-medium text-white hover:from-emerald-400 hover:to-emerald-500 transition-all disabled:opacity-50">{creatingPayout ? "Creating..." : "Create payout"}</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -768,8 +878,8 @@ export default function EditorsPage() {
       <Dialog open={showCreateMember} onOpenChange={setShowCreateMember}>
         <DialogContent className="max-w-md bg-[#111827] border-white/10">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2"><Plus className="h-4 w-4 text-cyan-400" />Lägg till teammedlem</DialogTitle>
-            <DialogDescription className="text-slate-400 text-sm">Skapa ett konto. En publik prestationssida (/e/namn) genereras automatiskt.</DialogDescription>
+            <DialogTitle className="text-white flex items-center gap-2"><Plus className="h-4 w-4 text-cyan-400" />Add team member</DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm">Create an account. A public performance page (/e/name) is generated automatically.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -778,29 +888,29 @@ export default function EditorsPage() {
                   <Video className={cn("h-4.5 w-4.5", newMemberType === "video_editor" ? "text-cyan-400" : "text-slate-500")} />
                 </div>
                 <div className={cn("text-sm font-medium", newMemberType === "video_editor" ? "text-white" : "text-slate-300")}>Video Editor</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">Får bonus</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Earns bonus</div>
               </button>
               <button type="button" onClick={() => setNewMemberType("creative_strategist")} className={cn("relative rounded-xl border p-4 text-left transition-all", newMemberType === "creative_strategist" ? "border-purple-500/50 bg-purple-500/5 ring-1 ring-purple-500/30" : "border-white/10 bg-white/[0.02] hover:border-white/20")}>
                 <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center mb-2", newMemberType === "creative_strategist" ? "bg-purple-500/15" : "bg-white/5")}>
                   <Lightbulb className={cn("h-4.5 w-4.5", newMemberType === "creative_strategist" ? "text-purple-400" : "text-slate-500")} />
                 </div>
                 <div className={cn("text-sm font-medium", newMemberType === "creative_strategist" ? "text-white" : "text-slate-300")}>Creative Strategist</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">Planerar koncept (stats)</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Plans concepts (stats)</div>
               </button>
             </div>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Namn</label>
-                <Input value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} placeholder="Fullständigt namn" className="bg-white/5 border-white/10 text-white placeholder:text-slate-600" />
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Name</label>
+                <Input value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} placeholder="Full name" className="bg-white/5 border-white/10 text-white placeholder:text-slate-600" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">E-post</label>
-                <Input type="email" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} placeholder="namn@example.com" className="bg-white/5 border-white/10 text-white placeholder:text-slate-600" />
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Email</label>
+                <Input type="email" value={newMemberEmail} onChange={(e) => setNewMemberEmail(e.target.value)} placeholder="name@example.com" className="bg-white/5 border-white/10 text-white placeholder:text-slate-600" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Lösenord</label>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Password</label>
                 <div className="relative">
-                  <Input type={showPassword ? "text" : "password"} value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} placeholder="Minst 8 tecken" className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 pr-10" />
+                  <Input type={showPassword ? "text" : "password"} value={newMemberPassword} onChange={(e) => setNewMemberPassword(e.target.value)} placeholder="At least 8 characters" className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 pr-10" />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -814,8 +924,8 @@ export default function EditorsPage() {
             )}
           </div>
           <DialogFooter>
-            <button onClick={() => setShowCreateMember(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all">Avbryt</button>
-            <button onClick={handleCreateMember} disabled={creatingMember} className={cn("px-4 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50", newMemberType === "creative_strategist" ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500" : "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500")}>{creatingMember ? "Skapar..." : "Lägg till"}</button>
+            <button onClick={() => setShowCreateMember(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all">Cancel</button>
+            <button onClick={handleCreateMember} disabled={creatingMember} className={cn("px-4 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50", newMemberType === "creative_strategist" ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500" : "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500")}>{creatingMember ? "Creating..." : "Add"}</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

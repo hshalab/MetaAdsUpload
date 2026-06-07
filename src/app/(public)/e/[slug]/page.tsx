@@ -59,16 +59,16 @@ interface Ad {
   graveyardOutcome: string | null;
 }
 
-const BONUS_LADDER = [10, 20, 30, 50];
-function TierLadder({ tierLog }: { tierLog: Record<string, string> }) {
+function TierLadder({ tierLog, tiers }: { tierLog: Record<string, string>; tiers: BonusTier[] }) {
+  const ladder = [...tiers].map((t) => t.bonus).sort((a, b) => a - b);
   return (
-    <div className="flex items-center gap-1 mt-1">
-      {BONUS_LADDER.map((t) => {
+    <div className="flex items-center gap-1 mt-1 flex-wrap">
+      {ladder.map((t) => {
         const hit = tierLog?.[String(t)];
         return (
           <span
             key={t}
-            title={hit ? `$${t} nådd ${hit}` : `$${t} ej nådd ännu`}
+            title={hit ? `$${t} reached ${hit}` : `$${t} not reached yet`}
             className={
               "rounded px-1.5 py-0.5 text-[9px] font-bold border " +
               (hit ? bonusTierColor(t) : "bg-white/[0.02] text-slate-600 border-white/5")
@@ -82,6 +82,7 @@ function TierLadder({ tierLog }: { tierLog: Record<string, string> }) {
     </div>
   );
 }
+
 interface Editor {
   editorId: string;
   editor: string;
@@ -161,12 +162,12 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
       }
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || "Kunde inte ladda");
+        throw new Error(j.error || "Could not load");
       }
       setPwRequired(false);
       setData(await res.json());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Något gick fel");
+      setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -175,6 +176,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
   useEffect(() => { load(); }, [load]);
 
   const editor = data?.editor;
+  const tiers = data?.bonusTiers || [];
 
   const { winners, inflight } = useMemo(() => {
     const ads = editor?.ads || [];
@@ -194,15 +196,15 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
         <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#111827] p-6 space-y-4">
           <div className="flex items-center gap-2 text-cyan-400">
             <Lock className="h-5 w-5" />
-            <h1 className="text-lg font-semibold text-white">Skyddad sida</h1>
+            <h1 className="text-lg font-semibold text-white">Protected page</h1>
           </div>
-          <p className="text-sm text-slate-400">Den här prestationssidan kräver ett lösenord.</p>
+          <p className="text-sm text-slate-400">This performance page requires a password.</p>
           <input
             type="password"
             value={pw}
             onChange={(e) => setPw(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && load(pw)}
-            placeholder="Lösenord"
+            placeholder="Password"
             className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50"
           />
           {error && <p className="text-sm text-red-400">{error}</p>}
@@ -210,7 +212,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
             onClick={() => load(pw)}
             className="w-full rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 transition-all"
           >
-            Visa min sida
+            View my page
           </button>
         </div>
       </div>
@@ -231,7 +233,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
               {editor?.userType === "creative_strategist" ? "Creative Strategist" : "Video Editor"}
             </p>
             <h1 className="text-3xl font-bold text-white tracking-tight">{editor?.fullName || slug}</h1>
-            <p className="text-sm text-slate-500">Din prestation &amp; bonusöversikt</p>
+            <p className="text-sm text-slate-500">Your performance &amp; bonus overview</p>
           </div>
         </div>
         <div className="flex rounded-xl border border-white/10 overflow-hidden self-start">
@@ -262,30 +264,53 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
             <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/[0.02] p-5">
               <div className="flex items-center gap-2 text-emerald-400 mb-1">
                 <Trophy className="h-4 w-4" />
-                <span className="text-[11px] font-semibold uppercase tracking-wider">Intjänad bonus (livstid)</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider">Bonus earned (lifetime)</span>
               </div>
               <div className="text-4xl font-bold text-white">${fmt(editor.totalBonus)}</div>
-              <p className="text-xs text-slate-500 mt-1">{editor.winnerCount} kvalificerande annonser</p>
+              <p className="text-xs text-slate-500 mt-1">{editor.winnerCount} qualifying ads</p>
             </div>
             <div className="rounded-2xl border border-white/5 bg-[#111827] p-5">
               <div className="flex items-center gap-2 text-cyan-400 mb-1">
                 <CheckCircle2 className="h-4 w-4" />
-                <span className="text-[11px] font-semibold uppercase tracking-wider">Utbetalt</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider">Paid out</span>
               </div>
               <div className="text-4xl font-bold text-emerald-400">${fmt(editor.paidAmount)}</div>
-              <p className="text-xs text-slate-500 mt-1">redan utbetalt till dig</p>
+              <p className="text-xs text-slate-500 mt-1">already paid to you</p>
             </div>
             <div className={`rounded-2xl border p-5 ${editor.unpaidAmount > 0 ? "border-amber-500/30 bg-amber-500/5" : "border-white/5 bg-[#111827]"}`}>
               <div className={`flex items-center gap-2 mb-1 ${editor.unpaidAmount > 0 ? "text-amber-400" : "text-slate-500"}`}>
                 <Clock className="h-4 w-4" />
-                <span className="text-[11px] font-semibold uppercase tracking-wider">Kvar att betala</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider">Outstanding</span>
               </div>
               <div className={`text-4xl font-bold ${editor.unpaidAmount > 0 ? "text-amber-400" : "text-slate-500"}`}>
                 ${fmt(editor.unpaidAmount)}
               </div>
-              <p className="text-xs text-slate-500 mt-1">väntar på utbetalning</p>
+              <p className="text-xs text-slate-500 mt-1">awaiting payout</p>
             </div>
           </div>
+
+          {/* How the bonus works */}
+          {tiers.length > 0 && (
+            <div className="rounded-2xl border border-white/5 bg-[#111827] p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Trophy className="h-4 w-4 text-amber-400" />
+                <h2 className="text-sm font-semibold text-white">How your bonus works</h2>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                Each ad earns a one-time bonus based on its lifetime spend &amp; ROAS. The moment an ad reaches a level it stays
+                locked in — even if ROAS later drops. Spend is shown in USD.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[...tiers].sort((a, b) => a.bonus - b.bonus).map((t) => (
+                  <div key={t.bonus} className={`rounded-xl border p-3 ${bonusTierColor(t.bonus)}`}>
+                    <div className="text-lg font-bold">${t.bonus}</div>
+                    <div className="text-[11px] opacity-80">${t.minSpend.toLocaleString("en-US")}+ spend</div>
+                    <div className="text-[11px] opacity-80">{t.minRoas}+ ROAS</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* KPI cards (period) */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -296,20 +321,20 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
               value={`${editor.roas.toFixed(2)}x`}
               tint={editor.roas >= 2.5 ? "text-emerald-400" : editor.roas >= 2.0 ? "text-amber-400" : "text-red-400"}
             />
-            <Kpi icon={Flame} label="Hook Rate" value={`${editor.hookRate.toFixed(1)}%`} tint={hookColor(editor.hookRate)} sub="mål 30%+" />
-            <Kpi icon={Gauge} label="Hold Rate" value={`${editor.holdRate.toFixed(1)}%`} tint={holdColor(editor.holdRate)} sub="mål 50%+" />
+            <Kpi icon={Flame} label="Hook Rate" value={`${editor.hookRate.toFixed(1)}%`} tint={hookColor(editor.hookRate)} sub="target 30%+" />
+            <Kpi icon={Gauge} label="Hold Rate" value={`${editor.holdRate.toFixed(1)}%`} tint={holdColor(editor.holdRate)} sub="target 50%+" />
             <Kpi icon={MousePointerClick} label="CTR" value={`${editor.ctr.toFixed(2)}%`} tint="text-cyan-400" />
-            <Kpi icon={DollarSign} label="CPC" value={`$${editor.cpc.toFixed(2)}`} tint="text-slate-300" sub="per länkklick" />
+            <Kpi icon={DollarSign} label="CPC" value={`$${editor.cpc.toFixed(2)}`} tint="text-slate-300" sub="per link click" />
             <Kpi icon={DollarSign} label="CPM" value={`$${editor.cpm.toFixed(2)}`} tint="text-slate-300" />
-            <Kpi icon={Zap} label="Köp" value={fmt(editor.totalPurchases)} tint="text-cyan-400" />
+            <Kpi icon={Zap} label="Purchases" value={fmt(editor.totalPurchases)} tint="text-cyan-400" />
           </div>
 
           {/* Performance chart */}
           <div className="rounded-2xl border border-white/5 bg-[#111827] p-5">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp className="h-4 w-4 text-cyan-400" />
-              <h2 className="text-sm font-semibold text-white">Din prestation över tid</h2>
-              <span className="text-xs text-slate-600">spend (staplar) &amp; ROAS (linje)</span>
+              <h2 className="text-sm font-semibold text-white">Your performance over time</h2>
+              <span className="text-xs text-slate-600">spend (bars) &amp; ROAS (line)</span>
             </div>
             {data && data.timeseries.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
@@ -328,7 +353,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
                 </ComposedChart>
               </ResponsiveContainer>
             ) : (
-              <div className="py-12 text-center text-sm text-slate-600">Ingen data i perioden ännu.</div>
+              <div className="py-12 text-center text-sm text-slate-600">No data in this period yet.</div>
             )}
           </div>
 
@@ -338,11 +363,11 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
             <div className="rounded-2xl border border-white/5 bg-[#111827] overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
                 <Trophy className="h-4 w-4 text-yellow-400" />
-                <h2 className="text-sm font-semibold text-white">Dina vinnare ({winners.length})</h2>
+                <h2 className="text-sm font-semibold text-white">Your winners ({winners.length})</h2>
               </div>
               <div className="divide-y divide-white/5 max-h-[360px] overflow-y-auto">
                 {winners.length === 0 && (
-                  <p className="px-5 py-8 text-center text-sm text-slate-600">Inga kvalificerade annonser ännu — fortsätt skapa! 💪</p>
+                  <p className="px-5 py-8 text-center text-sm text-slate-600">No qualifying ads yet — keep creating! 💪</p>
                 )}
                 {winners.map((ad) => (
                   <div key={ad.id} className="flex items-center gap-3 px-5 py-3">
@@ -350,10 +375,10 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
                       <p className="text-sm text-slate-200 truncate">{ad.name}</p>
                       <p className="text-[11px] text-slate-500">
                         ${fmt(ad.lifetimeSpend)} spend · {ad.lifetimeRoas.toFixed(2)}x ROAS
-                        {ad.outstanding === 0 && ad.bonus > 0 && <span className="text-emerald-500"> · betald</span>}
-                        {ad.outstanding > 0 && <span className="text-amber-400"> · ${fmt(ad.outstanding)} kvar</span>}
+                        {ad.outstanding === 0 && ad.bonus > 0 && <span className="text-emerald-500"> · paid</span>}
+                        {ad.outstanding > 0 && <span className="text-amber-400"> · ${fmt(ad.outstanding)} outstanding</span>}
                       </p>
-                      <TierLadder tierLog={ad.tierLog} />
+                      <TierLadder tierLog={ad.tierLog} tiers={tiers} />
                     </div>
                     <span className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs font-bold ${bonusTierColor(ad.bonus)}`}>
                       ${ad.bonus}
@@ -367,14 +392,14 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
             <div className="rounded-2xl border border-white/5 bg-[#111827] overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
                 <Target className="h-4 w-4 text-cyan-400" />
-                <h2 className="text-sm font-semibold text-white">På väg mot bonus</h2>
+                <h2 className="text-sm font-semibold text-white">On the way to a bonus</h2>
               </div>
               <div className="divide-y divide-white/5 max-h-[360px] overflow-y-auto">
                 {inflight.length === 0 && (
-                  <p className="px-5 py-8 text-center text-sm text-slate-600">Inga aktiva annonser nära en tier just nu.</p>
+                  <p className="px-5 py-8 text-center text-sm text-slate-600">No active ads near a tier right now.</p>
                 )}
                 {inflight.map((ad) => {
-                  const prog = nextTierProgress(ad.lifetimeSpend, ad.lifetimeRoas, ad.bonus);
+                  const prog = nextTierProgress(ad.lifetimeSpend, ad.lifetimeRoas, ad.bonus, tiers);
                   return (
                     <div key={ad.id} className="px-5 py-3">
                       <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -402,8 +427,8 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
             <div className="rounded-2xl border border-white/5 bg-[#111827] overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
                 <Medal className="h-4 w-4 text-amber-400" />
-                <h2 className="text-sm font-semibold text-white">Topplista — flest vinnare</h2>
-                <span className="text-xs text-slate-600">vänlig jämförelse, ingen lön visas</span>
+                <h2 className="text-sm font-semibold text-white">Leaderboard — most winners</h2>
+                <span className="text-xs text-slate-600">friendly comparison, no pay shown</span>
               </div>
               <div className="divide-y divide-white/5">
                 {data.leaderboard.slice(0, 8).map((l, i) => {
@@ -414,7 +439,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
                         {i + 1}
                       </span>
                       <span className={`flex-1 text-sm ${isMe ? "text-cyan-300 font-semibold" : "text-slate-300"}`}>
-                        {isMe ? `${l.name} (du)` : l.name}
+                        {isMe ? `${l.name} (you)` : l.name}
                       </span>
                       <span className="text-xs text-slate-500">{l.hookRate.toFixed(1)}% hook</span>
                       <span className="flex items-center gap-1 text-sm font-semibold text-amber-400">
@@ -430,13 +455,13 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
           {/* All ads */}
           <div className="rounded-2xl border border-white/5 bg-[#111827] overflow-hidden">
             <div className="px-5 py-4 border-b border-white/5">
-              <h2 className="text-sm font-semibold text-white">Alla dina annonser ({editor.adCount})</h2>
+              <h2 className="text-sm font-semibold text-white">All your ads ({editor.adCount})</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/5">
-                    {["Annons", "Angle", "Spend", "ROAS", "Hook", "Hold", "CTR", "Köp", "Bonus"].map((h, i) => (
+                    {["Ad", "Angle", "Spend", "ROAS", "Hook", "Hold", "CTR", "Purch.", "Bonus"].map((h, i) => (
                       <th key={h} className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${i > 1 ? "text-right" : "text-left"}`}>
                         {h}
                       </th>
@@ -475,7 +500,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
                   {editor.ads.length === 0 && (
                     <tr>
                       <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-600">
-                        Inga annonser tilldelade dig ännu.
+                        No ads assigned to you yet.
                       </td>
                     </tr>
                   )}
@@ -485,7 +510,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
           </div>
 
           <p className="text-center text-xs text-slate-600 pt-4">
-            Bonusnivåer: $10 (500$/2.5x) · $20 (1 000$/2.5x) · $30 (3 750$/2.0x) · $50 (7 500$/2.0x) — låses livstid per annons.
+            Bonuses lock in per ad for life and never decrease. Spend shown in USD.
           </p>
         </>
       ) : null}

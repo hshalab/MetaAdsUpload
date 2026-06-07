@@ -4,7 +4,7 @@
 
 import { db, schema } from "@/db";
 import { and, eq, gte, lte, sql, inArray } from "drizzle-orm";
-import { BONUS_TIERS, slugify } from "./bonus";
+import { slugify } from "./bonus";
 import { resolveOwnedAds, recomputeAdBonuses } from "./bonus-ledger";
 import { getEvolveSettings } from "./evolve/settings";
 
@@ -70,7 +70,7 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
   const rate = settings.sekPerUsd > 0 ? settings.sekPerUsd : 10.5; // SEK → USD
 
   const ownedAds = await resolveOwnedAds();
-  const ledgerRows = await recomputeAdBonuses(ownedAds, rate);
+  const ledgerRows = await recomputeAdBonuses(ownedAds, rate, settings.bonusTiers);
   const ledgerByAd = new Map(ledgerRows.map((r) => [r.adId, r]));
   const ownedAdIds = ownedAds.map((a) => a.adId);
 
@@ -320,7 +320,7 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
     }))
     .sort((a, b) => b.roas - a.roas || b.winners - a.winners);
 
-  return { editors, leaderboard, strategists, templates, bonusTiers: BONUS_TIERS, sekPerUsd: rate, dateRange: { from, to } };
+  return { editors, leaderboard, strategists, templates, bonusTiers: settings.bonusTiers, sekPerUsd: rate, dateRange: { from, to } };
 }
 
 /** Daily spend / revenue / ROAS series for a set of ads — powers the performance graph. Money in USD. */

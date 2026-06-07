@@ -1811,7 +1811,7 @@ export default function UploadPage() {
           <div className="flex items-center gap-2 mb-2.5">
             <Video className="h-4 w-4 text-cyan-400" />
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Video Editor <span className="text-slate-600 normal-case">· äger annonsen, får bonus</span>
+              Video Editor <span className="text-slate-600 normal-case">· owns the ad, earns bonus</span>
             </h3>
           </div>
           <div className="flex items-center gap-2">
@@ -1821,7 +1821,7 @@ export default function UploadPage() {
                 onChange={(e) => setVideoEditorId(e.target.value)}
                 className={inputCls}
               >
-                <option value="">Ingen vald...</option>
+                <option value="">None selected...</option>
                 {teamMembers
                   .filter((m) => m.userType !== "creative_strategist")
                   .map((m) => (
@@ -1850,7 +1850,7 @@ export default function UploadPage() {
           <div className="flex items-center gap-2 mb-2.5">
             <Lightbulb className="h-4 w-4 text-purple-400" />
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Creative Strategist <span className="text-slate-600 normal-case">· koncept, stats</span>
+              Creative Strategist <span className="text-slate-600 normal-case">· concept, stats only</span>
             </h3>
           </div>
           <div className="flex items-center gap-2">
@@ -1860,7 +1860,7 @@ export default function UploadPage() {
                 onChange={(e) => setCreativeStrategistId(e.target.value)}
                 className={inputCls}
               >
-                <option value="">Ingen vald...</option>
+                <option value="">None selected...</option>
                 {teamMembers
                   .filter((m) => m.userType === "creative_strategist")
                   .map((m) => (
@@ -1891,14 +1891,14 @@ export default function UploadPage() {
           <div className="flex items-center gap-2 mb-2.5">
             <Crosshair className="h-4 w-4 text-amber-400" />
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Angle <span className="text-slate-600 normal-case">· vinkel annonsen trycker på</span>
+              Angle <span className="text-slate-600 normal-case">· the angle the ad leans on</span>
             </h3>
           </div>
           <input
             type="text"
             value={adAngle}
             onChange={(e) => setAdAngle(e.target.value)}
-            placeholder="t.ex. Trötthet, Klåda, Pris"
+            placeholder="e.g. Fatigue, Itching, Price"
             className={inputCls}
           />
         </div>
@@ -1906,14 +1906,14 @@ export default function UploadPage() {
           <div className="flex items-center gap-2 mb-2.5">
             <AlertTriangle className="h-4 w-4 text-rose-400" />
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Problem <span className="text-slate-600 normal-case">· problemet/smärtan</span>
+              Problem <span className="text-slate-600 normal-case">· the pain/problem it addresses</span>
             </h3>
           </div>
           <input
             type="text"
             value={adProblem}
             onChange={(e) => setAdProblem(e.target.value)}
-            placeholder="t.ex. Hunden kliar sig konstant"
+            placeholder="e.g. The dog scratches constantly"
             className={inputCls}
           />
         </div>

@@ -5,7 +5,7 @@
 
 import { db, schema } from "@/db";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { calculateBonus } from "./bonus";
+import { BONUS_TIERS, type BonusTier } from "./bonus";
 
 export interface OwnedAd {
   adId: string;
@@ -96,7 +96,7 @@ export async function resolveOwnedAds(): Promise<OwnedAd[]> {
  * locked earnedBonus up to the highest tier ever reached — never down.
  * Returns the up-to-date ledger rows for the evaluated ads.
  */
-export async function recomputeAdBonuses(ownedAds: OwnedAd[], sekPerUsd = 10.5) {
+export async function recomputeAdBonuses(ownedAds: OwnedAd[], sekPerUsd = 10.5, tiers: BonusTier[] = BONUS_TIERS) {
   const rate = sekPerUsd > 0 ? sekPerUsd : 10.5;
   const eligible = ownedAds.filter((a) => a.videoEditorId);
   const adIds = eligible.map((a) => a.adId);
@@ -150,9 +150,15 @@ export async function recomputeAdBonuses(ownedAds: OwnedAd[], sekPerUsd = 10.5) 
       cumRevSek += day.purchaseValue;
       const roas = cumSpendSek > 0 ? cumRevSek / cumSpendSek : 0;
       const usdSpend = cumSpendSek / rate;
-      const { bonus, tier } = calculateBonus(usdSpend, roas);
-      if (bonus > maxBonus) { maxBonus = bonus; maxTier = tier; }
-      if (bonus > 0 && !tierLog[String(bonus)]) tierLog[String(bonus)] = day.date;
+      // Record EVERY tier whose criteria are met at this point — not just the
+      // highest — so the tier ladder reflects all levels genuinely reached.
+      // (Tiers don't strictly stack: $10/$20 need higher ROAS than $30/$50.)
+      for (const t of tiers) {
+        if (usdSpend >= t.minSpend && roas >= t.minRoas) {
+          if (!tierLog[String(t.bonus)]) tierLog[String(t.bonus)] = day.date;
+          if (t.bonus > maxBonus) { maxBonus = t.bonus; maxTier = t.bonus; }
+        }
+      }
     }
 
     const finalSpendUsd = cumSpendSek / rate;

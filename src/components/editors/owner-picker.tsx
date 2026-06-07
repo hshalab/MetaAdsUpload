@@ -100,13 +100,13 @@ export function OwnerPicker({
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || "Kunde inte spara ägare");
+        throw new Error(j.error || "Could not save owner");
       }
-      toast.success("Ägare sparad");
+      toast.success("Owner saved");
       onSaved?.({ videoEditorId: editorId || null, creativeStrategistId: stratId || null, angle: angleVal || null, problem: problemVal || null });
       setOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Något gick fel");
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setSaving(false);
     }
@@ -120,8 +120,8 @@ export function OwnerPicker({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ adId }),
       });
-      if (!res.ok) throw new Error("Kunde inte ta bort ägare");
-      toast.success("Ägare borttagen");
+      if (!res.ok) throw new Error("Could not remove owner");
+      toast.success("Owner removed");
       setEditorId("");
       setStratId("");
       setAngleVal("");
@@ -129,7 +129,7 @@ export function OwnerPicker({
       onSaved?.({ videoEditorId: null, creativeStrategistId: null, angle: null, problem: null });
       setOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Något gick fel");
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setSaving(false);
     }
@@ -147,10 +147,10 @@ export function OwnerPicker({
             ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/20 hover:bg-cyan-500/20"
             : "bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-slate-200"
         )}
-        title={currentEditor ? `Ägare: ${currentEditor.name}` : "Tilldela ägare"}
+        title={currentEditor ? `Owner: ${currentEditor.name}` : "Assign owner"}
       >
         <UserPlus className={cn(compact ? "h-3 w-3" : "h-3.5 w-3.5")} />
-        {currentEditor ? currentEditor.name.split(" ")[0] : "Ägare"}
+        {currentEditor ? currentEditor.name.split(" ")[0] : "Owner"}
       </button>
 
       {open && (
@@ -158,14 +158,14 @@ export function OwnerPicker({
           <div className="space-y-3">
             <div className="space-y-1.5">
               <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-400">
-                <Video className="h-3 w-3" /> Video Editor <span className="text-slate-600">(får bonus)</span>
+                <Video className="h-3 w-3" /> Video Editor <span className="text-slate-600">(earns bonus)</span>
               </label>
               <select
                 value={editorId}
                 onChange={(e) => setEditorId(e.target.value)}
                 className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-white [color-scheme:dark]"
               >
-                <option value="">— Ingen —</option>
+                <option value="">— None —</option>
                 {editors.map((m) => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
@@ -174,14 +174,14 @@ export function OwnerPicker({
 
             <div className="space-y-1.5">
               <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-purple-400">
-                <Lightbulb className="h-3 w-3" /> Creative Strategist <span className="text-slate-600">(stats)</span>
+                <Lightbulb className="h-3 w-3" /> Creative Strategist <span className="text-slate-600">(stats only)</span>
               </label>
               <select
                 value={stratId}
                 onChange={(e) => setStratId(e.target.value)}
                 className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-white [color-scheme:dark]"
               >
-                <option value="">— Ingen —</option>
+                <option value="">— None —</option>
                 {strategists.map((m) => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
@@ -194,7 +194,7 @@ export function OwnerPicker({
                 <input
                   value={angleVal}
                   onChange={(e) => setAngleVal(e.target.value)}
-                  placeholder="Vinkel"
+                  placeholder="Angle"
                   className="w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-white/20"
                 />
               </div>
@@ -217,7 +217,7 @@ export function OwnerPicker({
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-500 transition-all disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                Spara
+                Save
               </button>
               {(videoEditorId || creativeStrategistId) && (
                 <button
@@ -225,7 +225,7 @@ export function OwnerPicker({
                   onClick={clearOwner}
                   disabled={saving}
                   className="flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all disabled:opacity-50"
-                  title="Ta bort ägare"
+                  title="Remove owner"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
