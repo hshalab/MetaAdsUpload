@@ -64,6 +64,13 @@
       "when": 1780854890705,
       "tag": "0008_insights_thruplays",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780868635960,
+      "tag": "0009_evolve_sek_per_usd",
+      "breakpoints": true
     }
   ]
 }

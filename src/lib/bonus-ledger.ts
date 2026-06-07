@@ -96,7 +96,8 @@ export async function resolveOwnedAds(): Promise<OwnedAd[]> {
  * locked earnedBonus up to the highest tier ever reached — never down.
  * Returns the up-to-date ledger rows for the evaluated ads.
  */
-export async function recomputeAdBonuses(ownedAds: OwnedAd[]) {
+export async function recomputeAdBonuses(ownedAds: OwnedAd[], sekPerUsd = 10.5) {
+  const rate = sekPerUsd > 0 ? sekPerUsd : 10.5;
   const eligible = ownedAds.filter((a) => a.videoEditorId);
   const adIds = eligible.map((a) => a.adId);
   if (adIds.length === 0) return [] as (typeof schema.adBonuses.$inferSelect)[];
@@ -123,9 +124,10 @@ export async function recomputeAdBonuses(ownedAds: OwnedAd[]) {
   const now = new Date();
 
   for (const row of lifetime) {
-    const spend = Number(row.spend) || 0;
+    const spendSek = Number(row.spend) || 0;
     const purchaseValue = Number(row.purchaseValue) || 0;
-    const roas = spend > 0 ? purchaseValue / spend : 0;
+    const roas = spendSek > 0 ? purchaseValue / spendSek : 0; // currency-agnostic ratio
+    const spend = spendSek / rate; // convert to USD for the USD bonus thresholds
     const { bonus, tier } = calculateBonus(spend, roas);
     const editorId = editorByAd.get(row.adId);
     if (!editorId) continue;

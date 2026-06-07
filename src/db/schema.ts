@@ -495,6 +495,7 @@ export const evolveSettings = pgTable("evolve_settings", {
   breakevenRoas: real("breakeven_roas").default(1.42).notNull(),
   targetCpa: real("target_cpa").default(30).notNull(),
   minDailySpend: real("min_daily_spend").default(50).notNull(),
+  sekPerUsd: real("sek_per_usd").default(10.5).notNull(), // FX rate: spend (SEK) → USD for bonus thresholds
   learningPeriodDays: integer("learning_period_days").default(7).notNull(),
   scalingProtocolDays: integer("scaling_protocol_days").default(3).notNull(),
   zombieCostCapDiscount: real("zombie_cost_cap_discount").default(0.20).notNull(),

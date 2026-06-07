@@ -6,6 +6,7 @@ import { db, schema } from "@/db";
 import { and, eq, gte, lte, sql, inArray } from "drizzle-orm";
 import { BONUS_TIERS, slugify } from "./bonus";
 import { resolveOwnedAds, recomputeAdBonuses } from "./bonus-ledger";
+import { getEvolveSettings } from "./evolve/settings";
 
 export interface EditorAdRow {
   id: string;
@@ -64,8 +65,11 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
   const allUsers = await db.select().from(schema.users);
   const userMap = new Map(allUsers.map((u) => [u.id, u]));
 
+  const settings = await getEvolveSettings();
+  const rate = settings.sekPerUsd > 0 ? settings.sekPerUsd : 10.5; // SEK → USD
+
   const ownedAds = await resolveOwnedAds();
-  const ledgerRows = await recomputeAdBonuses(ownedAds);
+  const ledgerRows = await recomputeAdBonuses(ownedAds, rate);
   const ledgerByAd = new Map(ledgerRows.map((r) => [r.adId, r]));
   const ownedAdIds = ownedAds.map((a) => a.adId);
 
@@ -102,14 +106,17 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
     const period = periodByAd.get(owned.adId);
     const ledger = ledgerByAd.get(owned.adId);
 
-    const spend = Number(period?.spend) || 0;
+    const spendSek = Number(period?.spend) || 0;
     const impressions = Number(period?.impressions) || 0;
     const linkClicks = Number(period?.linkClicks) || 0;
     const purchases = Number(period?.purchases) || 0;
-    const purchaseValue = Number(period?.purchaseValue) || 0;
+    const purchaseValueSek = Number(period?.purchaseValue) || 0;
     const videoViews3s = Number(period?.videoViews3s) || 0;
     const videoThruplays = Number(period?.videoThruplays) || 0;
-    const roas = spend > 0 ? purchaseValue / spend : 0;
+    // Convert money to USD (account is SEK; bonus thresholds + display are USD).
+    const spend = spendSek / rate;
+    const purchaseValue = purchaseValueSek / rate;
+    const roas = spendSek > 0 ? purchaseValueSek / spendSek : 0; // ratio — currency-agnostic
     const ctr = impressions > 0 ? (linkClicks / impressions) * 100 : 0;
     const hookRate = impressions > 0 ? (videoViews3s / impressions) * 100 : 0;
     const holdRate = videoViews3s > 0 ? (videoThruplays / videoViews3s) * 100 : 0;
@@ -310,11 +317,12 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
     }))
     .sort((a, b) => b.roas - a.roas || b.winners - a.winners);
 
-  return { editors, leaderboard, strategists, templates, bonusTiers: BONUS_TIERS, dateRange: { from, to } };
+  return { editors, leaderboard, strategists, templates, bonusTiers: BONUS_TIERS, sekPerUsd: rate, dateRange: { from, to } };
 }
 
-/** Daily spend / revenue / ROAS series for a set of ads — powers the performance graph. */
-export async function getEditorTimeseries(adIds: string[], from: string, to: string) {
+/** Daily spend / revenue / ROAS series for a set of ads — powers the performance graph. Money in USD. */
+export async function getEditorTimeseries(adIds: string[], from: string, to: string, sekPerUsd = 10.5) {
+  const rate = sekPerUsd > 0 ? sekPerUsd : 10.5;
   if (adIds.length === 0) return [] as Array<{ date: string; spend: number; revenue: number; roas: number; purchases: number }>;
   const rows = await db
     .select({
@@ -336,13 +344,13 @@ export async function getEditorTimeseries(adIds: string[], from: string, to: str
     .orderBy(schema.insights.dateStart);
 
   return rows.map((r) => {
-    const spend = Number(r.spend) || 0;
-    const revenue = Number(r.revenue) || 0;
+    const spendSek = Number(r.spend) || 0;
+    const revenueSek = Number(r.revenue) || 0;
     return {
       date: String(r.date),
-      spend,
-      revenue,
-      roas: spend > 0 ? revenue / spend : 0,
+      spend: spendSek / rate,
+      revenue: revenueSek / rate,
+      roas: spendSek > 0 ? revenueSek / spendSek : 0,
       purchases: Number(r.purchases) || 0,
     };
   });

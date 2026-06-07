@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { resolveOwnedAds } from "@/lib/bonus-ledger";
 import { getEditorTimeseries } from "@/lib/editor-stats";
+import { getEvolveSettings } from "@/lib/evolve/settings";
 
 // GET /api/editors/timeseries?editorId=...&from=...&to=...
 export async function GET(request: NextRequest) {
@@ -17,7 +18,8 @@ export async function GET(request: NextRequest) {
 
     const owned = await resolveOwnedAds();
     const adIds = owned.filter((a) => a.videoEditorId === editorId).map((a) => a.adId);
-    const timeseries = await getEditorTimeseries(adIds, from, to);
+    const settings = await getEvolveSettings();
+    const timeseries = await getEditorTimeseries(adIds, from, to, settings.sekPerUsd);
 
     return NextResponse.json({ timeseries });
   } catch (error) {

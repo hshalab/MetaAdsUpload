@@ -37,6 +37,7 @@ export async function PUT(request: NextRequest) {
       breakevenRoas: body.breakevenRoas ?? current.breakevenRoas,
       targetCpa: body.targetCpa ?? current.targetCpa,
       minDailySpend: body.minDailySpend ?? current.minDailySpend,
+      sekPerUsd: body.sekPerUsd ?? current.sekPerUsd,
       learningPeriodDays: body.learningPeriodDays ?? current.learningPeriodDays,
       scalingProtocolDays: body.scalingProtocolDays ?? current.scalingProtocolDays,
       zombieCostCapDiscount: body.zombieCostCapDiscount ?? current.zombieCostCapDiscount,

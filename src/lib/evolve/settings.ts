@@ -8,6 +8,7 @@ export interface EvolveSettings {
   breakevenRoas: number;
   targetCpa: number;
   minDailySpend: number;
+  sekPerUsd: number;
   learningPeriodDays: number;
   scalingProtocolDays: number;
   zombieCostCapDiscount: number;
@@ -25,6 +26,7 @@ const DEFAULTS: EvolveSettings = {
   breakevenRoas: 1.42,
   targetCpa: 30,
   minDailySpend: 50,
+  sekPerUsd: 10.5,
   learningPeriodDays: 7,
   scalingProtocolDays: 3,
   zombieCostCapDiscount: 0.20,
@@ -53,6 +55,7 @@ export async function getEvolveSettings(): Promise<EvolveSettings> {
     breakevenRoas: row.breakevenRoas,
     targetCpa: row.targetCpa,
     minDailySpend: row.minDailySpend,
+    sekPerUsd: row.sekPerUsd ?? 10.5,
     learningPeriodDays: row.learningPeriodDays,
     scalingProtocolDays: row.scalingProtocolDays,
     zombieCostCapDiscount: row.zombieCostCapDiscount,

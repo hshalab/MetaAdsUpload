@@ -64,7 +64,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const timeseries = await getEditorTimeseries(
       editor.ads.map((a) => a.id),
       from,
-      to
+      to,
+      overview.sekPerUsd
     );
 
     // Strip payout *notes* from the public payload (keep amounts/status).

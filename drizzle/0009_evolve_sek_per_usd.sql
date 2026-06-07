@@ -1,0 +1,1 @@
+ALTER TABLE "evolve_settings" ADD COLUMN "sek_per_usd" real DEFAULT 10.5 NOT NULL;

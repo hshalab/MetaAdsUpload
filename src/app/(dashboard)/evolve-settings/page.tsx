@@ -11,6 +11,7 @@ interface Settings {
   breakevenRoas: number;
   targetCpa: number;
   minDailySpend: number;
+  sekPerUsd: number;
   learningPeriodDays: number;
   scalingProtocolDays: number;
   zombieCostCapDiscount: number;
@@ -213,6 +214,14 @@ export default function EvolveSettingsPage() {
             onChange={(v) => update("minDailySpend", v)}
             step="10"
             suffix="SEK"
+          />
+          <SettingField
+            label="SEK per USD"
+            description="Växelkurs för editor-bonus: annonsernas spend (SEK) räknas om till USD innan bonuströsklarna ($500/$1 000/$3 750/$7 500) jämförs"
+            value={settings.sekPerUsd}
+            onChange={(v) => update("sekPerUsd", v)}
+            step="0.1"
+            suffix="SEK/$"
           />
         </div>
       </div>
