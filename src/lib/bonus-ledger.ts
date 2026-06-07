@@ -135,8 +135,9 @@ export async function recomputeAdBonuses(ownedAds: OwnedAd[], sekPerUsd = 10.5) 
     const prev = existingByAd.get(row.adId);
 
     if (!prev) {
-      // Only materialise a ledger row once an ad has actually qualified.
-      if (bonus <= 0) continue;
+      // Track any ad with spend (for the "on the way to bonus" progress), and
+      // lock the bonus the moment it first qualifies.
+      if (bonus <= 0 && spend <= 0) continue;
       await db.insert(schema.adBonuses).values({
         adId: row.adId,
         editorId,
@@ -144,7 +145,7 @@ export async function recomputeAdBonuses(ownedAds: OwnedAd[], sekPerUsd = 10.5) 
         earnedTier: tier,
         peakSpend: spend,
         peakRoas: roas,
-        firstQualifiedAt: now,
+        firstQualifiedAt: bonus > 0 ? now : null,
         lastEvaluatedAt: now,
       });
     } else {
