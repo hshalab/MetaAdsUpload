@@ -1182,6 +1182,24 @@ export default function UploadPage() {
         } catch { /* non-fatal — owner can still be set later in the analyzer */ }
       }
 
+      // The ad SET is the bonus unit — record its owner so it shows on the editor's dashboard.
+      if (result.adsetId && (videoEditorId || creativeStrategistId)) {
+        try {
+          await fetch("/api/adset-owner", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              adsetId: result.adsetId,
+              adsetName: adsets.find((a) => a.id === result.adsetId)?.name || newAdsetName || null,
+              campaignId: selectedCampaignId,
+              source: "uploader",
+              videoEditorId: videoEditorId || null,
+              creativeStrategistId: creativeStrategistId || null,
+            }),
+          });
+        } catch { /* non-fatal */ }
+      }
+
       return { adsetId: result.adsetId };
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : "Unknown error";

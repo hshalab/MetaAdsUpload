@@ -15,7 +15,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // Find the user behind this slug (for the optional password gate).
     const [user] = await db.select().from(schema.users).where(eq(schema.users.slug, slug));
     if (!user) {
-      return NextResponse.json({ error: "Editor hittades inte" }, { status: 404 });
+      return NextResponse.json({ error: "Editor not found" }, { status: 404 });
     }
 
     // Optional password protection.
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const pw = searchParams.get("pw") || request.headers.get("x-page-password") || "";
       if (!pw) return NextResponse.json({ passwordRequired: true }, { status: 401 });
       const ok = await bcrypt.compare(pw, user.publicPagePassword);
-      if (!ok) return NextResponse.json({ passwordRequired: true, error: "Fel lösenord" }, { status: 401 });
+      if (!ok) return NextResponse.json({ passwordRequired: true, error: "Wrong password" }, { status: 401 });
     }
 
     const overview = await getEditorsOverview({ from, to });
@@ -45,13 +45,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           roas: 0,
           ctr: 0,
           hookRate: 0,
+          holdRate: 0,
+          cpc: 0,
+          cpm: 0,
           totalBonus: 0,
           paidAmount: 0,
           pendingAmount: 0,
           unpaidAmount: 0,
-          adCount: 0,
+          adsetCount: 0,
           winnerCount: 0,
-          ads: [],
+          graveyardSpendWinners: 0,
+          graveyardLosers: 0,
+          angleStats: [],
+          adsets: [],
           payouts: [],
         },
         timeseries: [],
@@ -61,12 +67,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       });
     }
 
-    const timeseries = await getEditorTimeseries(
-      editor.ads.map((a) => a.id),
-      from,
-      to,
-      overview.sekPerUsd
-    );
+    const adIds = editor.adsets.flatMap((s) => s.ads.map((a) => a.id));
+    const timeseries = await getEditorTimeseries(adIds, from, to, overview.sekPerUsd);
 
     // Strip payout *notes* from the public payload (keep amounts/status).
     const safeEditor = {
@@ -91,6 +93,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
   } catch (error) {
     console.error("Public editor API error:", error);
-    return NextResponse.json({ error: "Kunde inte ladda data" }, { status: 500 });
+    return NextResponse.json({ error: "Could not load data" }, { status: 500 });
   }
 }

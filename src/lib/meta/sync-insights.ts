@@ -6,7 +6,7 @@ import { db, schema } from "@/db";
 import { and, eq, gte, lte, inArray, isNotNull } from "drizzle-orm";
 import {
   getInsights,
-  getAdInsightsById,
+  getAdsetInsightsByAd,
   extractPurchases,
   extractPurchaseValue,
   calculateROAS,
@@ -67,52 +67,77 @@ async function replaceInsights(entityType: string, since: string, until: string,
 }
 
 /**
- * Targeted sync for the editor dashboard: pulls daily insights ONLY for ads that
- * are assigned to an editor (ad_owners + published assignments). This stays well
- * within Hobby-plan function limits even though the ad account has thousands of
- * ads, because it scales with the number of owned ads, not the whole account.
+ * Targeted sync for the editor dashboard: pulls daily insights ONLY for the ad
+ * sets that are assigned to an editor (adset_owners + published assignments).
+ * For each owned ad set it refreshes ad metadata (names + ad→adset mapping) and
+ * pulls per-ad daily insights in one call. Scales with owned ad sets, not the
+ * whole (thousands-of-ads) account, so it stays within Hobby function limits.
  */
 export async function runEditorInsightsSync() {
   const today = new Date().toISOString().split("T")[0];
   const since = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
 
-  const owners = await db.select({ adId: schema.adOwners.adId }).from(schema.adOwners);
+  const owners = await db.select({ adsetId: schema.adsetOwners.adsetId }).from(schema.adsetOwners);
   const assigns = await db
-    .select({ adId: schema.assignments.metaAdId })
+    .select({ adsetId: schema.assignments.metaAdsetId })
     .from(schema.assignments)
-    .where(isNotNull(schema.assignments.metaAdId));
+    .where(isNotNull(schema.assignments.metaAdsetId));
 
-  const adIds = [...new Set([...owners.map((o) => o.adId), ...assigns.map((a) => a.adId).filter(Boolean) as string[]])];
-  if (adIds.length === 0) return { ads: 0, adInsightRows: 0 };
+  const adsetIds = [...new Set([...owners.map((o) => o.adsetId), ...(assigns.map((a) => a.adsetId).filter(Boolean) as string[])])];
+  if (adsetIds.length === 0) return { adsets: 0, ads: 0, adInsightRows: 0 };
 
   const rows: InsightRow[] = [];
+  const allAdIds = new Set<string>();
   const failed: string[] = [];
-  for (const adId of adIds) {
+
+  for (const adsetId of adsetIds) {
     try {
-      const data = await getAdInsightsById(adId, { since, until: today }, 1);
-      for (const r of data) rows.push(toRow(r, adId, "ad"));
+      // Refresh ad metadata (names + ad→adset mapping) for this ad set.
+      const ads = await getAds(adsetId, 200);
+      for (const ad of ads) {
+        allAdIds.add(ad.id);
+        await db.insert(schema.adsCache).values({
+          id: ad.id,
+          adsetId: ad.adset_id || adsetId,
+          campaignId: ad.campaign_id || "",
+          name: ad.name,
+          status: ad.status,
+          creativeId: ad.creative?.id || null,
+        }).onConflictDoUpdate({
+          target: schema.adsCache.id,
+          set: { name: ad.name, status: ad.status, adsetId: ad.adset_id || adsetId, syncedAt: new Date() },
+        });
+      }
+      // Per-ad daily insights for the whole ad set in one call.
+      const data = await getAdsetInsightsByAd(adsetId, { since, until: today }, 1);
+      for (const r of data) {
+        if (r.ad_id) { rows.push(toRow(r, r.ad_id, "ad")); allAdIds.add(r.ad_id); }
+      }
     } catch (e) {
-      failed.push(adId);
-      console.error(`Insights fetch failed for ad ${adId}:`, e instanceof Error ? e.message : e);
+      failed.push(adsetId);
+      console.error(`Insights fetch failed for ad set ${adsetId}:`, e instanceof Error ? e.message : e);
     }
   }
 
-  // Replace only these ads' insights in the window.
-  await db.delete(schema.insights).where(
-    and(
-      eq(schema.insights.entityType, "ad"),
-      inArray(schema.insights.entityId, adIds),
-      gte(schema.insights.dateStart, since),
-      lte(schema.insights.dateStop, today),
-    )
-  );
+  // Replace ad-level insights for all ads in these ad sets within the window.
+  const adIdArr = [...allAdIds];
+  if (adIdArr.length) {
+    await db.delete(schema.insights).where(
+      and(
+        eq(schema.insights.entityType, "ad"),
+        inArray(schema.insights.entityId, adIdArr),
+        gte(schema.insights.dateStart, since),
+        lte(schema.insights.dateStop, today),
+      )
+    );
+  }
   const CHUNK = 200;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const slice = rows.slice(i, i + CHUNK);
     if (slice.length) await db.insert(schema.insights).values(slice);
   }
 
-  return { ads: adIds.length, adInsightRows: rows.length, failed: failed.length };
+  return { adsets: adsetIds.length, ads: adIdArr.length, adInsightRows: rows.length, failed: failed.length };
 }
 
 export async function runSync() {

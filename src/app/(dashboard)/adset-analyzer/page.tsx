@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { OwnerPicker, type TeamMember } from "@/components/editors/owner-picker";
+import { AdsetOwnerPicker, type TeamMember } from "@/components/editors/adset-owner-picker";
 
 type Classification = "breakthrough" | "spend_winner" | "kpi_winner" | "loser" | "new";
 
@@ -91,7 +91,7 @@ export default function AdSetAnalyzerPage() {
   const [acting, setActing] = useState<string | null>(null);
   const [graveyardChoiceFor, setGraveyardChoiceFor] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const [ownersByAd, setOwnersByAd] = useState<Record<string, { videoEditorId: string | null; creativeStrategistId: string | null; angle: string | null; problem: string | null }>>({});
+  const [ownersByAdset, setOwnersByAdset] = useState<Record<string, { videoEditorId: string | null; creativeStrategistId: string | null }>>({});
 
   // Team members for the owner picker (admin only — silently empty otherwise).
   useEffect(() => {
@@ -146,21 +146,21 @@ export default function AdSetAnalyzerPage() {
     return () => clearTimeout(timer);
   }, [fetchData]);
 
-  // Load existing owners for the ads currently shown.
+  // Load existing owners for the ad sets currently shown.
   useEffect(() => {
     if (!data || members.length === 0) return;
-    const adIds = data.adsets.flatMap((a) => a.ads.map((ad) => ad.id));
-    if (adIds.length === 0) return;
+    const adsetIds = data.adsets.map((a) => a.id);
+    if (adsetIds.length === 0) return;
     (async () => {
       try {
-        const res = await fetch(`/api/ad-owner?adIds=${encodeURIComponent(adIds.join(","))}`);
+        const res = await fetch(`/api/adset-owner?adsetIds=${encodeURIComponent(adsetIds.join(","))}`);
         if (!res.ok) return;
         const { owners } = await res.json();
-        const map: Record<string, { videoEditorId: string | null; creativeStrategistId: string | null; angle: string | null; problem: string | null }> = {};
+        const map: Record<string, { videoEditorId: string | null; creativeStrategistId: string | null }> = {};
         for (const o of owners || []) {
-          map[o.adId] = { videoEditorId: o.videoEditorId, creativeStrategistId: o.creativeStrategistId, angle: o.angle ?? null, problem: o.problem ?? null };
+          map[o.adsetId] = { videoEditorId: o.videoEditorId, creativeStrategistId: o.creativeStrategistId };
         }
-        setOwnersByAd(map);
+        setOwnersByAdset(map);
       } catch { /* ignore */ }
     })();
   }, [data, members.length]);
@@ -379,6 +379,19 @@ export default function AdSetAnalyzerPage() {
                       <span className="text-[9px] text-slate-600">{adset.spend.toFixed(0)}/{adset.spendThreshold.toFixed(0)} SEK</span>
                     </div>
 
+                    {/* Owner (ad-set level) */}
+                    <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <AdsetOwnerPicker
+                        adsetId={adset.id}
+                        adsetName={adset.name}
+                        campaignId={adset.campaignId}
+                        members={members}
+                        videoEditorId={ownersByAdset[adset.id]?.videoEditorId || null}
+                        creativeStrategistId={ownersByAdset[adset.id]?.creativeStrategistId || null}
+                        onSaved={(ve, cs) => setOwnersByAdset((prev) => ({ ...prev, [adset.id]: { videoEditorId: ve, creativeStrategistId: cs } }))}
+                      />
+                    </div>
+
                     {/* Action buttons — always visible */}
                     <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       {isActing ? (
@@ -477,22 +490,6 @@ export default function AdSetAnalyzerPage() {
                             </span>
                             <span className="text-slate-500">{ad.purchases} köp</span>
                           </div>
-                          {/* Owner assignment */}
-                          <OwnerPicker
-                            adId={ad.id}
-                            adName={ad.name}
-                            campaignId={adset.campaignId}
-                            adsetId={adset.id}
-                            members={members}
-                            videoEditorId={ownersByAd[ad.id]?.videoEditorId || null}
-                            creativeStrategistId={ownersByAd[ad.id]?.creativeStrategistId || null}
-                            angle={ownersByAd[ad.id]?.angle || null}
-                            problem={ownersByAd[ad.id]?.problem || null}
-                            compact
-                            onSaved={(d) =>
-                              setOwnersByAd((prev) => ({ ...prev, [ad.id]: { videoEditorId: d.videoEditorId, creativeStrategistId: d.creativeStrategistId, angle: d.angle, problem: d.problem } }))
-                            }
-                          />
                         </div>
                       ))}
                       {adset.ads.length === 0 && (

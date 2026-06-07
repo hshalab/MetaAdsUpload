@@ -58,29 +58,39 @@ import { bonusTierColor, type BonusTier } from "@/lib/bonus";
 interface EditorAd {
   id: string;
   name: string;
-  assignmentId: string | null;
-  source: string;
-  strategistName: string | null;
   spend: number;
-  impressions: number;
-  linkClicks: number;
-  purchases: number;
-  purchaseValue: number;
   roas: number;
   ctr: number;
   hookRate: number;
+  holdRate: number;
+  purchases: number;
+  angle: string | null;
+  problem: string | null;
+  templateName: string | null;
+}
+
+interface EditorAdset {
+  adsetId: string;
+  adsetName: string;
+  campaignId: string | null;
+  strategistName: string | null;
+  spend: number;
+  roas: number;
+  ctr: number;
+  hookRate: number;
+  holdRate: number;
+  purchases: number;
   bonus: number;
   bonusTier: number;
   tierLog: Record<string, string>;
-  paidForAd: number;
+  paidForAdset: number;
   outstanding: number;
   lifetimeSpend: number;
   lifetimeRoas: number;
   isWinner: boolean;
-  angle: string | null;
-  problem: string | null;
   graveyardOutcome: string | null;
-  templateName: string | null;
+  adCount: number;
+  ads: EditorAd[];
 }
 
 interface Payout {
@@ -113,12 +123,12 @@ interface EditorData {
   paidAmount: number;
   pendingAmount: number;
   unpaidAmount: number;
-  adCount: number;
+  adsetCount: number;
   winnerCount: number;
   graveyardSpendWinners: number;
   graveyardLosers: number;
   angleStats: Array<{ angle: string; ads: number; winners: number }>;
-  ads: EditorAd[];
+  adsets: EditorAdset[];
   payouts: Payout[];
 }
 
@@ -220,7 +230,7 @@ function EditorRow({
               <Video className="h-3.5 w-3.5 text-cyan-400" />
             )}
             {editor.fullName}
-            <span className="text-xs text-slate-500">({editor.adCount})</span>
+            <span className="text-xs text-slate-500">({editor.adsetCount} ad sets)</span>
           </div>
         </td>
         <td className="px-4 py-3 text-right text-sm text-amber-400 font-medium">{editor.winnerCount}</td>
@@ -305,41 +315,53 @@ function EditorRow({
               ))}
             </div>
 
-            {/* Ads */}
-            <div className="rounded-xl border border-white/5 overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/5 bg-white/[0.02]">
-                    {["Ad", "Angle", "Spend", "Lifetime", "ROAS", "Hook", "Purch.", "Bonus"].map((h, i) => (
-                      <th key={h} className={cn("px-3 py-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider", i > 1 ? "text-right" : "text-left")}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {editor.ads.map((ad) => (
-                    <tr key={ad.id} className="border-b border-white/[0.03]">
-                      <td className="px-3 py-2 text-xs text-slate-400 max-w-[240px]">
-                        <div className="truncate">
-                          {ad.name}
-                          {ad.strategistName && <span className="ml-2 text-[10px] text-purple-400/70">💡 {ad.strategistName}</span>}
-                          {ad.graveyardOutcome === "spend_winner" && <span className="ml-2 text-[10px] text-blue-400">⚰ spend winner</span>}
-                          {ad.graveyardOutcome === "loser" && <span className="ml-2 text-[10px] text-red-400">⚰ loser</span>}
-                        </div>
-                        {ad.bonus > 0 && <TierLadder tierLog={ad.tierLog} tiers={tiers} />}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-500 max-w-[120px] truncate" title={ad.problem || undefined}>{ad.angle || "—"}</td>
-                      <td className="px-3 py-2 text-right text-xs text-slate-400">${fmt(ad.spend)}</td>
-                      <td className="px-3 py-2 text-right text-[11px] text-slate-500">${fmt(ad.lifetimeSpend)} / {ad.lifetimeRoas.toFixed(1)}x</td>
-                      <td className="px-3 py-2 text-right text-xs">
-                        <span className={ad.roas >= 2.5 ? "text-emerald-400" : ad.roas >= 2.0 ? "text-amber-400" : ad.spend > 0 ? "text-red-400" : "text-slate-600"}>{ad.roas.toFixed(2)}x</span>
-                      </td>
-                      <td className={cn("px-3 py-2 text-right text-xs", ad.hookRate >= 30 ? "text-emerald-400" : ad.hookRate >= 20 ? "text-amber-400" : ad.hookRate > 0 ? "text-red-400" : "text-slate-600")}>{ad.hookRate.toFixed(1)}%</td>
-                      <td className="px-3 py-2 text-right text-xs text-slate-400">{ad.purchases}</td>
-                      <td className="px-3 py-2 text-right"><BonusBadge bonus={ad.bonus} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Ad sets (each with its ads) */}
+            <div className="space-y-3">
+              {editor.adsets.map((s) => (
+                <div key={s.adsetId} className="rounded-xl border border-white/5 overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-2.5 bg-white/[0.02] flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-medium text-slate-200 truncate max-w-[260px]">{s.adsetName}</span>
+                        {s.strategistName && <span className="text-[10px] text-purple-400/70">💡 {s.strategistName}</span>}
+                        {s.graveyardOutcome === "spend_winner" && <span className="text-[10px] text-blue-400">⚰ spend winner</span>}
+                        {s.graveyardOutcome === "loser" && <span className="text-[10px] text-red-400">⚰ loser</span>}
+                      </div>
+                      {s.bonus > 0 && <TierLadder tierLog={s.tierLog} tiers={tiers} />}
+                    </div>
+                    <div className="flex items-center gap-4 text-[11px] shrink-0">
+                      <span className="text-slate-500">${fmt(s.lifetimeSpend)} / {s.lifetimeRoas.toFixed(1)}x life</span>
+                      <span className="text-slate-400">${fmt(s.spend)}</span>
+                      <span className={s.roas >= 2.5 ? "text-emerald-400" : s.roas >= 2.0 ? "text-amber-400" : s.spend > 0 ? "text-red-400" : "text-slate-600"}>{s.roas.toFixed(2)}x</span>
+                      <span className={cn(s.hookRate >= 30 ? "text-emerald-400" : s.hookRate >= 20 ? "text-amber-400" : s.hookRate > 0 ? "text-red-400" : "text-slate-600")}>{s.hookRate.toFixed(0)}% hook</span>
+                      <BonusBadge bonus={s.bonus} />
+                    </div>
+                  </div>
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-white/5">
+                        {["Ad", "Angle", "Spend", "ROAS", "Hook", "Hold", "Purch."].map((h, i) => (
+                          <th key={h} className={cn("px-3 py-1.5 text-[9px] font-medium text-slate-500 uppercase tracking-wider", i > 1 ? "text-right" : "text-left")}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {s.ads.map((ad) => (
+                        <tr key={ad.id} className="border-b border-white/[0.03]">
+                          <td className="px-3 py-1.5 text-xs text-slate-400 max-w-[220px] truncate">{ad.name}</td>
+                          <td className="px-3 py-1.5 text-xs text-slate-500 max-w-[110px] truncate" title={ad.problem || undefined}>{ad.angle || "—"}</td>
+                          <td className="px-3 py-1.5 text-right text-xs text-slate-400">${fmt(ad.spend)}</td>
+                          <td className="px-3 py-1.5 text-right text-xs"><span className={ad.roas >= 2.5 ? "text-emerald-400" : ad.roas >= 2.0 ? "text-amber-400" : ad.spend > 0 ? "text-red-400" : "text-slate-600"}>{ad.roas.toFixed(2)}x</span></td>
+                          <td className={cn("px-3 py-1.5 text-right text-xs", ad.hookRate >= 30 ? "text-emerald-400" : ad.hookRate >= 20 ? "text-amber-400" : ad.hookRate > 0 ? "text-red-400" : "text-slate-600")}>{ad.hookRate.toFixed(1)}%</td>
+                          <td className={cn("px-3 py-1.5 text-right text-xs", ad.holdRate >= 50 ? "text-emerald-400" : ad.holdRate >= 40 ? "text-amber-400" : ad.holdRate > 0 ? "text-red-400" : "text-slate-600")}>{ad.holdRate.toFixed(1)}%</td>
+                          <td className="px-3 py-1.5 text-right text-xs text-slate-400">{ad.purchases}</td>
+                        </tr>
+                      ))}
+                      {s.ads.length === 0 && <tr><td colSpan={7} className="px-3 py-3 text-center text-[11px] text-slate-600">No ad data synced yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
             </div>
 
             {/* Payout history */}
@@ -504,8 +526,8 @@ export default function EditorsPage() {
     if (!payoutEditor) return;
     setCreatingPayout(true);
     try {
-      const unpaidAds = payoutEditor.ads.filter((a) => a.outstanding > 0);
-      const breakdown = unpaidAds.map((a) => ({ adId: a.id, adName: a.name, spend: a.lifetimeSpend, roas: a.lifetimeRoas, bonus: a.outstanding }));
+      const unpaid = payoutEditor.adsets.filter((s) => s.outstanding > 0);
+      const breakdown = unpaid.map((s) => ({ adId: s.adsetId, adName: s.adsetName, spend: s.lifetimeSpend, roas: s.lifetimeRoas, bonus: s.outstanding }));
       const res = await fetch("/api/editors/payouts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -514,7 +536,7 @@ export default function EditorsPage() {
           amount: payoutEditor.unpaidAmount,
           periodFrom: format(dateRange.from, "yyyy-MM-dd"),
           periodTo: format(dateRange.to, "yyyy-MM-dd"),
-          adIds: unpaidAds.map((a) => a.id),
+          adIds: unpaid.map((s) => s.adsetId),
           breakdown,
           notes: payoutNotes || null,
         }),
@@ -848,14 +870,14 @@ export default function EditorsPage() {
                 <div className="flex justify-between pt-2 border-t border-white/5"><span className="text-sm font-medium text-white">To pay now</span><span className="text-lg font-bold text-emerald-400">${fmt(payoutEditor.unpaidAmount)}</span></div>
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Ads in this payout</p>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Ad sets in this payout</p>
                 <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {payoutEditor.ads.filter((a) => a.outstanding > 0).map((ad) => (
-                    <div key={ad.id} className="flex items-center justify-between text-xs py-1">
-                      <span className="text-slate-400 truncate max-w-[200px]">{ad.name}</span>
+                  {payoutEditor.adsets.filter((s) => s.outstanding > 0).map((s) => (
+                    <div key={s.adsetId} className="flex items-center justify-between text-xs py-1">
+                      <span className="text-slate-400 truncate max-w-[200px]">{s.adsetName}</span>
                       <div className="flex items-center gap-3">
-                        <span className="text-slate-500">${fmt(ad.lifetimeSpend, 0)} / {ad.lifetimeRoas.toFixed(1)}x</span>
-                        <span className="text-emerald-400 font-medium">${ad.outstanding}</span>
+                        <span className="text-slate-500">${fmt(s.lifetimeSpend, 0)} / {s.lifetimeRoas.toFixed(1)}x</span>
+                        <span className="text-emerald-400 font-medium">${s.outstanding}</span>
                       </div>
                     </div>
                   ))}

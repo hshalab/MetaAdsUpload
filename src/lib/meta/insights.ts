@@ -100,6 +100,22 @@ export async function getAdInsightsById(
   });
 }
 
+/** Per-ad daily insights for ONE ad set (/{adsetId}/insights?level=ad). One call → all ads in the set. */
+export async function getAdsetInsightsByAd(
+  adsetId: string,
+  dateRange: { since: string; until: string },
+  timeIncrement = 1
+) {
+  return metaApiPaginated<InsightData>(`/${adsetId}/insights`, {
+    params: {
+      fields: INSIGHT_FIELDS_WITH_VIDEO,
+      level: "ad",
+      time_increment: timeIncrement,
+      time_range: JSON.stringify(dateRange),
+    },
+  });
+}
+
 export function extractPurchases(actions?: Array<{ action_type: string; value: string }>) {
   return parseInt(actions?.find((a) => a.action_type === "purchase")?.value || "0", 10);
 }

@@ -400,7 +400,32 @@ export const adOwners = pgTable("ad_owners", {
   index("ad_owners_template_idx").on(table.templateId),
 ]);
 
+// ─── Ad Set Ownership ───────────────────────────────────────────────────────
+// The bonus unit is the AD SET (not the individual ad). An ad set is assigned to
+// a video editor (+ strategist); the bonus is computed on the ad set's aggregate
+// lifetime spend + blended ROAS. Per-ad metadata (angle/problem/template) stays
+// in ad_owners for the per-ad drill-down.
+
+export const adsetOwners = pgTable("adset_owners", {
+  adsetId: text("adset_id").primaryKey(), // Meta ad set ID
+  videoEditorId: text("video_editor_id"), // FK users — earns the bonus
+  creativeStrategistId: text("creative_strategist_id"), // FK users — stats only
+  campaignId: text("campaign_id"),
+  adsetName: text("adset_name"),
+  graveyardOutcome: text("graveyard_outcome"), // "spend_winner" | "loser"
+  graveyardAt: timestamp("graveyard_at"),
+  source: text("source").default("analyzer"), // "uploader" | "analyzer"
+  assignedById: text("assigned_by_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("adset_owners_video_editor_idx").on(table.videoEditorId),
+  index("adset_owners_strategist_idx").on(table.creativeStrategistId),
+]);
+
 // ─── Ad Bonus Ledger (lifetime, locked once) ────────────────────────────────
+// NOTE: keyed by AD SET id (stored in the adId column) since the bonus unit is
+// the ad set. One row per owned ad set.
 // One row per qualifying ad. When an ad first crosses a bonus tier (on lifetime
 // cumulative spend + ROAS) the earned amount is locked in and never decreases,
 // even if you change the date filter or ROAS later dips. If the ad later climbs

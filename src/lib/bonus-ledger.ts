@@ -200,6 +200,132 @@ export async function recomputeAdBonuses(ownedAds: OwnedAd[], sekPerUsd = 10.5, 
   return db.select().from(schema.adBonuses).where(inArray(schema.adBonuses.adId, adIds));
 }
 
+// ─── Ad-set level (the bonus unit) ──────────────────────────────────────────
+
+export interface OwnedAdset {
+  adsetId: string;
+  videoEditorId: string | null;
+  creativeStrategistId: string | null;
+  adsetName: string | null;
+  campaignId: string | null;
+  graveyardOutcome: string | null;
+  source: string;
+}
+
+/** Resolve ad set → owner. adset_owners overrides the assignment linkage. */
+export async function resolveOwnedAdsets(): Promise<OwnedAdset[]> {
+  const [owners, assignmentRows] = await Promise.all([
+    db.select().from(schema.adsetOwners),
+    db.select().from(schema.assignments).where(isNotNull(schema.assignments.metaAdsetId)),
+  ]);
+  const map = new Map<string, OwnedAdset>();
+  for (const a of assignmentRows) {
+    if (!a.metaAdsetId) continue;
+    map.set(a.metaAdsetId, {
+      adsetId: a.metaAdsetId,
+      videoEditorId: a.assignedToId,
+      creativeStrategistId: a.creativeStrategistId || null,
+      adsetName: a.autoName || null,
+      campaignId: a.metaCampaignId || null,
+      graveyardOutcome: null,
+      source: "assignment",
+    });
+  }
+  for (const o of owners) {
+    const ex = map.get(o.adsetId);
+    map.set(o.adsetId, {
+      adsetId: o.adsetId,
+      videoEditorId: o.videoEditorId ?? ex?.videoEditorId ?? null,
+      creativeStrategistId: o.creativeStrategistId ?? ex?.creativeStrategistId ?? null,
+      adsetName: o.adsetName || ex?.adsetName || null,
+      campaignId: o.campaignId || ex?.campaignId || null,
+      graveyardOutcome: o.graveyardOutcome ?? ex?.graveyardOutcome ?? null,
+      source: o.videoEditorId || o.creativeStrategistId ? (o.source || "analyzer") : (ex?.source || o.source || "analyzer"),
+    });
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * Lock in lifetime bonuses per AD SET. The ad set's performance is the aggregate
+ * of all its ads (sum spend + revenue → blended ROAS), in USD. Walks the daily
+ * aggregate chronologically and records every tier reached (tier ladder).
+ * Stored in ad_bonuses keyed by the ad set id.
+ */
+export async function recomputeAdsetBonuses(ownedAdsets: OwnedAdset[], sekPerUsd = 10.5, tiers: BonusTier[] = BONUS_TIERS) {
+  const rate = sekPerUsd > 0 ? sekPerUsd : 10.5;
+  const eligible = ownedAdsets.filter((a) => a.videoEditorId);
+  const adsetIds = eligible.map((a) => a.adsetId);
+  if (adsetIds.length === 0) return [] as (typeof schema.adBonuses.$inferSelect)[];
+  const editorByAdset = new Map(eligible.map((a) => [a.adsetId, a.videoEditorId as string]));
+
+  // Daily aggregate per ad set = sum of its ads' daily insights (join via ads_cache).
+  const daily = await db
+    .select({
+      adsetId: schema.adsCache.adsetId,
+      date: schema.insights.dateStart,
+      spend: sql<number>`coalesce(sum(${schema.insights.spend}),0)`,
+      purchaseValue: sql<number>`coalesce(sum(${schema.insights.purchaseValue}),0)`,
+    })
+    .from(schema.insights)
+    .innerJoin(schema.adsCache, eq(schema.insights.entityId, schema.adsCache.id))
+    .where(and(eq(schema.insights.entityType, "ad"), inArray(schema.adsCache.adsetId, adsetIds)))
+    .groupBy(schema.adsCache.adsetId, schema.insights.dateStart)
+    .orderBy(schema.adsCache.adsetId, schema.insights.dateStart);
+
+  const byAdset = new Map<string, Array<{ date: string; spend: number; pv: number }>>();
+  for (const r of daily) {
+    const list = byAdset.get(r.adsetId) || [];
+    list.push({ date: String(r.date), spend: Number(r.spend) || 0, pv: Number(r.purchaseValue) || 0 });
+    byAdset.set(r.adsetId, list);
+  }
+
+  const existing = await db.select().from(schema.adBonuses).where(inArray(schema.adBonuses.adId, adsetIds));
+  const existingByAdset = new Map(existing.map((r) => [r.adId, r]));
+  const now = new Date();
+
+  for (const adsetId of adsetIds) {
+    const editorId = editorByAdset.get(adsetId);
+    if (!editorId) continue;
+    const rows = byAdset.get(adsetId) || [];
+    const prev = existingByAdset.get(adsetId);
+    const tierLog: Record<string, string> = { ...((prev?.tierLog as Record<string, string>) || {}) };
+    let cumSpendSek = 0, cumRevSek = 0, maxBonus = 0, maxTier = 0;
+    for (const day of rows) {
+      cumSpendSek += day.spend;
+      cumRevSek += day.pv;
+      const roas = cumSpendSek > 0 ? cumRevSek / cumSpendSek : 0;
+      const usd = cumSpendSek / rate;
+      for (const t of tiers) {
+        if (usd >= t.minSpend && roas >= t.minRoas) {
+          if (!tierLog[String(t.bonus)]) tierLog[String(t.bonus)] = day.date;
+          if (t.bonus > maxBonus) { maxBonus = t.bonus; maxTier = t.bonus; }
+        }
+      }
+    }
+    const finalSpendUsd = cumSpendSek / rate;
+    const finalRoas = cumSpendSek > 0 ? cumRevSek / cumSpendSek : 0;
+    const earnedBonus = Math.max(prev?.earnedBonus || 0, maxBonus);
+    const earnedTier = Math.max(prev?.earnedTier || 0, maxTier);
+    if (!prev) {
+      if (earnedBonus <= 0 && finalSpendUsd <= 0) continue;
+      await db.insert(schema.adBonuses).values({
+        adId: adsetId, editorId, earnedBonus, earnedTier, tierLog,
+        peakSpend: finalSpendUsd, peakRoas: finalRoas,
+        firstQualifiedAt: earnedBonus > 0 ? now : null, lastEvaluatedAt: now,
+      });
+    } else {
+      await db.update(schema.adBonuses).set({
+        editorId, earnedBonus, earnedTier, tierLog,
+        peakSpend: Math.max(prev.peakSpend, finalSpendUsd), peakRoas: finalRoas,
+        firstQualifiedAt: prev.firstQualifiedAt || (earnedBonus > 0 ? now : null),
+        lastEvaluatedAt: now, updatedAt: now,
+      }).where(eq(schema.adBonuses.adId, adsetId));
+    }
+  }
+  return db.select().from(schema.adBonuses).where(inArray(schema.adBonuses.adId, adsetIds));
+}
+
 /** Record a payment against a set of ad bonuses (called when a payout is marked paid). */
 export async function applyBonusPayment(breakdown: Array<{ adId: string; bonus: number }>) {
   for (const item of breakdown) {
