@@ -30,6 +30,7 @@ export interface EditorAdRow {
   videoThruplays: number;
   bonus: number;
   bonusTier: number;
+  tierLog: Record<string, string>;
   paidForAd: number;
   outstanding: number;
   lifetimeSpend: number;
@@ -125,6 +126,7 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
 
     const bonus = ledger?.earnedBonus || 0;
     const bonusTier = ledger?.earnedTier || 0;
+    const tierLog = (ledger?.tierLog as Record<string, string>) || {};
     const paidForAd = ledger?.paidAmount || 0;
     const outstanding = Math.max(bonus - paidForAd, 0);
     const lifetimeSpend = ledger?.peakSpend || 0;
@@ -179,6 +181,7 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
       videoThruplays,
       bonus,
       bonusTier,
+      tierLog,
       paidForAd,
       outstanding,
       lifetimeSpend,

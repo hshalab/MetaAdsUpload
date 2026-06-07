@@ -413,6 +413,7 @@ export const adBonuses = pgTable("ad_bonuses", {
   editorId: text("editor_id").notNull(), // video editor who earned it
   earnedBonus: real("earned_bonus").default(0).notNull(), // highest tier $ ever reached (locked)
   earnedTier: integer("earned_tier").default(0).notNull(), // 0 | 10 | 20 | 30 | 50
+  tierLog: jsonb("tier_log").$type<Record<string, string>>().default({}), // { "10": "2026-06-05", ... } first date each tier was reached (grows only)
   paidAmount: real("paid_amount").default(0).notNull(), // sum already paid out for this ad
   peakSpend: real("peak_spend").default(0).notNull(), // lifetime spend at last evaluation
   peakRoas: real("peak_roas").default(0).notNull(), // lifetime ROAS at last evaluation

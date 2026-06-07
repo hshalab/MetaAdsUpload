@@ -71,6 +71,13 @@
       "when": 1780868635960,
       "tag": "0009_evolve_sek_per_usd",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1780869680422,
+      "tag": "0010_ad_bonuses_tier_log",
+      "breakpoints": true
     }
   ]
 }

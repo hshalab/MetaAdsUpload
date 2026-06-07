@@ -1,0 +1,1 @@
+ALTER TABLE "ad_bonuses" ADD COLUMN "tier_log" jsonb DEFAULT '{}'::jsonb;

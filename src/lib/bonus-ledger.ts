@@ -104,16 +104,25 @@ export async function recomputeAdBonuses(ownedAds: OwnedAd[], sekPerUsd = 10.5) 
 
   const editorByAd = new Map(eligible.map((a) => [a.adId, a.videoEditorId as string]));
 
-  // Lifetime (all-time) insights per ad.
-  const lifetime = await db
+  // Daily insights per ad, in chronological order, so we can capture EVERY tier
+  // the ad passes through during its run — not just the latest cumulative state.
+  const daily = await db
     .select({
       adId: schema.insights.entityId,
-      spend: sql<number>`coalesce(sum(${schema.insights.spend}), 0)`,
-      purchaseValue: sql<number>`coalesce(sum(${schema.insights.purchaseValue}), 0)`,
+      date: schema.insights.dateStart,
+      spend: schema.insights.spend,
+      purchaseValue: schema.insights.purchaseValue,
     })
     .from(schema.insights)
     .where(and(eq(schema.insights.entityType, "ad"), inArray(schema.insights.entityId, adIds)))
-    .groupBy(schema.insights.entityId);
+    .orderBy(schema.insights.entityId, schema.insights.dateStart);
+
+  const dailyByAd = new Map<string, Array<{ date: string; spend: number; purchaseValue: number }>>();
+  for (const r of daily) {
+    const list = dailyByAd.get(r.adId) || [];
+    list.push({ date: String(r.date), spend: Number(r.spend) || 0, purchaseValue: Number(r.purchaseValue) || 0 });
+    dailyByAd.set(r.adId, list);
+  }
 
   const existing = await db
     .select()
@@ -123,47 +132,62 @@ export async function recomputeAdBonuses(ownedAds: OwnedAd[], sekPerUsd = 10.5) 
 
   const now = new Date();
 
-  for (const row of lifetime) {
-    const spendSek = Number(row.spend) || 0;
-    const purchaseValue = Number(row.purchaseValue) || 0;
-    const roas = spendSek > 0 ? purchaseValue / spendSek : 0; // currency-agnostic ratio
-    const spend = spendSek / rate; // convert to USD for the USD bonus thresholds
-    const { bonus, tier } = calculateBonus(spend, roas);
-    const editorId = editorByAd.get(row.adId);
+  for (const adId of adIds) {
+    const editorId = editorByAd.get(adId);
     if (!editorId) continue;
+    const rows = dailyByAd.get(adId) || [];
+    const prev = existingByAd.get(adId);
 
-    const prev = existingByAd.get(row.adId);
+    // Walk day-by-day, accumulating spend + revenue. At each step evaluate the
+    // tier and record the first date each tier is reached. tierLog only grows.
+    const tierLog: Record<string, string> = { ...(prev?.tierLog || {}) };
+    let cumSpendSek = 0;
+    let cumRevSek = 0;
+    let maxBonus = 0;
+    let maxTier = 0;
+    for (const day of rows) {
+      cumSpendSek += day.spend;
+      cumRevSek += day.purchaseValue;
+      const roas = cumSpendSek > 0 ? cumRevSek / cumSpendSek : 0;
+      const usdSpend = cumSpendSek / rate;
+      const { bonus, tier } = calculateBonus(usdSpend, roas);
+      if (bonus > maxBonus) { maxBonus = bonus; maxTier = tier; }
+      if (bonus > 0 && !tierLog[String(bonus)]) tierLog[String(bonus)] = day.date;
+    }
+
+    const finalSpendUsd = cumSpendSek / rate;
+    const finalRoas = cumSpendSek > 0 ? cumRevSek / cumSpendSek : 0;
+    const earnedBonus = Math.max(prev?.earnedBonus || 0, maxBonus);
+    const earnedTier = Math.max(prev?.earnedTier || 0, maxTier);
 
     if (!prev) {
-      // Track any ad with spend (for the "on the way to bonus" progress), and
-      // lock the bonus the moment it first qualifies.
-      if (bonus <= 0 && spend <= 0) continue;
+      if (earnedBonus <= 0 && finalSpendUsd <= 0) continue;
       await db.insert(schema.adBonuses).values({
-        adId: row.adId,
+        adId,
         editorId,
-        earnedBonus: bonus,
-        earnedTier: tier,
-        peakSpend: spend,
-        peakRoas: roas,
-        firstQualifiedAt: bonus > 0 ? now : null,
+        earnedBonus,
+        earnedTier,
+        tierLog,
+        peakSpend: finalSpendUsd,
+        peakRoas: finalRoas,
+        firstQualifiedAt: earnedBonus > 0 ? now : null,
         lastEvaluatedAt: now,
       });
     } else {
-      const earnedBonus = Math.max(prev.earnedBonus, bonus);
-      const earnedTier = Math.max(prev.earnedTier, tier);
       await db
         .update(schema.adBonuses)
         .set({
           editorId, // keep owner in sync if it changed
           earnedBonus,
           earnedTier,
-          peakSpend: Math.max(prev.peakSpend, spend),
-          peakRoas: roas,
-          firstQualifiedAt: prev.firstQualifiedAt || (bonus > 0 ? now : null),
+          tierLog,
+          peakSpend: Math.max(prev.peakSpend, finalSpendUsd),
+          peakRoas: finalRoas,
+          firstQualifiedAt: prev.firstQualifiedAt || (earnedBonus > 0 ? now : null),
           lastEvaluatedAt: now,
           updatedAt: now,
         })
-        .where(eq(schema.adBonuses.adId, row.adId));
+        .where(eq(schema.adBonuses.adId, adId));
     }
   }
 

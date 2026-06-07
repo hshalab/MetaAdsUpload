@@ -48,6 +48,7 @@ interface Ad {
   cpm: number;
   bonus: number;
   bonusTier: number;
+  tierLog: Record<string, string>;
   paidForAd: number;
   outstanding: number;
   lifetimeSpend: number;
@@ -56,6 +57,30 @@ interface Ad {
   angle: string | null;
   problem: string | null;
   graveyardOutcome: string | null;
+}
+
+const BONUS_LADDER = [10, 20, 30, 50];
+function TierLadder({ tierLog }: { tierLog: Record<string, string> }) {
+  return (
+    <div className="flex items-center gap-1 mt-1">
+      {BONUS_LADDER.map((t) => {
+        const hit = tierLog?.[String(t)];
+        return (
+          <span
+            key={t}
+            title={hit ? `$${t} nådd ${hit}` : `$${t} ej nådd ännu`}
+            className={
+              "rounded px-1.5 py-0.5 text-[9px] font-bold border " +
+              (hit ? bonusTierColor(t) : "bg-white/[0.02] text-slate-600 border-white/5")
+            }
+          >
+            ${t}
+            {hit ? " ✓" : ""}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 interface Editor {
   editorId: string;
@@ -328,6 +353,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
                         {ad.outstanding === 0 && ad.bonus > 0 && <span className="text-emerald-500"> · betald</span>}
                         {ad.outstanding > 0 && <span className="text-amber-400"> · ${fmt(ad.outstanding)} kvar</span>}
                       </p>
+                      <TierLadder tierLog={ad.tierLog} />
                     </div>
                     <span className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs font-bold ${bonusTierColor(ad.bonus)}`}>
                       ${ad.bonus}
