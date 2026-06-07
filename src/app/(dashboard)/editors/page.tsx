@@ -47,6 +47,7 @@ import {
   Flame,
   BarChart3,
   Skull,
+  CloudDownload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -351,6 +352,7 @@ export default function EditorsPage() {
   const [strategists, setStrategists] = useState<StrategistStat[]>([]);
   const [templates, setTemplates] = useState<TemplateStat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [seriesByEditor, setSeriesByEditor] = useState<Record<string, Series>>({});
 
   const [showPayoutModal, setShowPayoutModal] = useState(false);
@@ -390,6 +392,21 @@ export default function EditorsPage() {
   }, [dateRange]);
 
   useEffect(() => { fetchEditors(); }, [fetchEditors]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/editors/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync misslyckades");
+      toast.success(`Synkad från Meta: ${data.synced?.adInsightRows ?? 0} annons-rader, ${data.synced?.ads ?? 0} annonser`);
+      fetchEditors();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync misslyckades");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const loadSeries = useCallback(async (editorId: string) => {
     if (seriesByEditor[editorId]) return;
@@ -521,6 +538,10 @@ export default function EditorsPage() {
           <button onClick={fetchEditors} disabled={loading} className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Uppdatera
+          </button>
+          <button onClick={handleSync} disabled={syncing} title="Hämta senaste spend/ROAS/video-data från Meta" className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
+            <CloudDownload className={`h-4 w-4 ${syncing ? "animate-pulse text-cyan-400" : ""}`} />
+            {syncing ? "Synkar..." : "Synka Meta"}
           </button>
           <button onClick={() => setShowCreateMember(true)} className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-sm font-medium text-white transition-all">
             <Plus className="h-4 w-4" />

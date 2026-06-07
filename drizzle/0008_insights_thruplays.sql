@@ -1,0 +1,1 @@
+ALTER TABLE "insights" ADD COLUMN "video_thruplays" integer DEFAULT 0;

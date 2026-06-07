@@ -25,6 +25,8 @@ import {
   Video,
   Lightbulb,
   Medal,
+  Gauge,
+  MousePointerClick,
 } from "lucide-react";
 import { nextTierProgress, bonusTierColor, type BonusTier } from "@/lib/bonus";
 
@@ -41,6 +43,9 @@ interface Ad {
   roas: number;
   ctr: number;
   hookRate: number;
+  holdRate: number;
+  cpc: number;
+  cpm: number;
   bonus: number;
   bonusTier: number;
   paidForAd: number;
@@ -64,6 +69,9 @@ interface Editor {
   roas: number;
   ctr: number;
   hookRate: number;
+  holdRate: number;
+  cpc: number;
+  cpm: number;
   totalBonus: number;
   paidAmount: number;
   unpaidAmount: number;
@@ -98,6 +106,9 @@ function isoDaysAgo(days: number) {
 }
 function hookColor(h: number) {
   return h >= 30 ? "text-emerald-400" : h >= 20 ? "text-amber-400" : h > 0 ? "text-red-400" : "text-slate-600";
+}
+function holdColor(h: number) {
+  return h >= 50 ? "text-emerald-400" : h >= 40 ? "text-amber-400" : h > 0 ? "text-red-400" : "text-slate-600";
 }
 
 export default function PublicEditorPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -261,6 +272,10 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
               tint={editor.roas >= 2.5 ? "text-emerald-400" : editor.roas >= 2.0 ? "text-amber-400" : "text-red-400"}
             />
             <Kpi icon={Flame} label="Hook Rate" value={`${editor.hookRate.toFixed(1)}%`} tint={hookColor(editor.hookRate)} sub="mål 30%+" />
+            <Kpi icon={Gauge} label="Hold Rate" value={`${editor.holdRate.toFixed(1)}%`} tint={holdColor(editor.holdRate)} sub="mål 50%+" />
+            <Kpi icon={MousePointerClick} label="CTR" value={`${editor.ctr.toFixed(2)}%`} tint="text-cyan-400" />
+            <Kpi icon={DollarSign} label="CPC" value={`$${editor.cpc.toFixed(2)}`} tint="text-slate-300" sub="per länkklick" />
+            <Kpi icon={DollarSign} label="CPM" value={`$${editor.cpm.toFixed(2)}`} tint="text-slate-300" />
             <Kpi icon={Zap} label="Köp" value={fmt(editor.totalPurchases)} tint="text-cyan-400" />
           </div>
 
@@ -395,7 +410,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/5">
-                    {["Annons", "Angle", "Spend", "ROAS", "Hook", "Köp", "Bonus"].map((h, i) => (
+                    {["Annons", "Angle", "Spend", "ROAS", "Hook", "Hold", "CTR", "Köp", "Bonus"].map((h, i) => (
                       <th key={h} className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${i > 1 ? "text-right" : "text-left"}`}>
                         {h}
                       </th>
@@ -419,6 +434,8 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
                         </span>
                       </td>
                       <td className={`px-4 py-2.5 text-right text-sm ${hookColor(ad.hookRate)}`}>{ad.hookRate.toFixed(1)}%</td>
+                      <td className={`px-4 py-2.5 text-right text-sm ${holdColor(ad.holdRate)}`}>{ad.holdRate.toFixed(1)}%</td>
+                      <td className="px-4 py-2.5 text-right text-sm text-slate-400">{ad.ctr.toFixed(2)}%</td>
                       <td className="px-4 py-2.5 text-right text-sm text-slate-400">{ad.purchases}</td>
                       <td className="px-4 py-2.5 text-right">
                         {ad.bonus > 0 ? (
@@ -431,7 +448,7 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
                   ))}
                   {editor.ads.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-600">
+                      <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-600">
                         Inga annonser tilldelade dig ännu.
                       </td>
                     </tr>

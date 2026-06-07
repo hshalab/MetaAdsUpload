@@ -57,6 +57,13 @@
       "when": 1780763152268,
       "tag": "0007_ad_metadata_graveyard",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780854890705,
+      "tag": "0008_insights_thruplays",
+      "breakpoints": true
     }
   ]
 }

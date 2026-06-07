@@ -22,6 +22,11 @@ export interface EditorAdRow {
   roas: number;
   ctr: number;
   hookRate: number;
+  holdRate: number;
+  cpc: number;
+  cpm: number;
+  videoViews3s: number;
+  videoThruplays: number;
   bonus: number;
   bonusTier: number;
   paidForAd: number;
@@ -74,6 +79,7 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
           purchases: sql<number>`coalesce(sum(${schema.insights.purchases}), 0)`,
           purchaseValue: sql<number>`coalesce(sum(${schema.insights.purchaseValue}), 0)`,
           videoViews3s: sql<number>`coalesce(sum(${schema.insights.videoViews3s}), 0)`,
+          videoThruplays: sql<number>`coalesce(sum(${schema.insights.videoThruplays}), 0)`,
         })
         .from(schema.insights)
         .where(
@@ -102,9 +108,13 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
     const purchases = Number(period?.purchases) || 0;
     const purchaseValue = Number(period?.purchaseValue) || 0;
     const videoViews3s = Number(period?.videoViews3s) || 0;
+    const videoThruplays = Number(period?.videoThruplays) || 0;
     const roas = spend > 0 ? purchaseValue / spend : 0;
     const ctr = impressions > 0 ? (linkClicks / impressions) * 100 : 0;
     const hookRate = impressions > 0 ? (videoViews3s / impressions) * 100 : 0;
+    const holdRate = videoViews3s > 0 ? (videoThruplays / videoViews3s) * 100 : 0;
+    const cpc = linkClicks > 0 ? spend / linkClicks : 0;
+    const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0;
 
     const bonus = ledger?.earnedBonus || 0;
     const bonusTier = ledger?.earnedTier || 0;
@@ -155,6 +165,11 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
       roas,
       ctr,
       hookRate,
+      holdRate,
+      cpc,
+      cpm,
+      videoViews3s,
+      videoThruplays,
       bonus,
       bonusTier,
       paidForAd,
@@ -195,10 +210,14 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
     const totalPurchases = e.ads.reduce((s, a) => s + a.purchases, 0);
     const totalImpressions = e.ads.reduce((s, a) => s + a.impressions, 0);
     const totalLinkClicks = e.ads.reduce((s, a) => s + a.linkClicks, 0);
-    const totalVideoViews3s = e.ads.reduce((s, a) => s + (a.hookRate * a.impressions) / 100, 0);
+    const totalVideoViews3s = e.ads.reduce((s, a) => s + a.videoViews3s, 0);
+    const totalVideoThruplays = e.ads.reduce((s, a) => s + a.videoThruplays, 0);
     const roas = totalSpend > 0 ? totalPurchaseValue / totalSpend : 0;
     const ctr = totalImpressions > 0 ? (totalLinkClicks / totalImpressions) * 100 : 0;
     const hookRate = totalImpressions > 0 ? (totalVideoViews3s / totalImpressions) * 100 : 0;
+    const holdRate = totalVideoViews3s > 0 ? (totalVideoThruplays / totalVideoViews3s) * 100 : 0;
+    const cpc = totalLinkClicks > 0 ? totalSpend / totalLinkClicks : 0;
+    const cpm = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
 
     const totalBonus = e.ads.reduce((s, a) => s + a.bonus, 0);
     const paidAmount = e.ads.reduce((s, a) => s + a.paidForAd, 0);
@@ -235,6 +254,9 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
       roas,
       ctr,
       hookRate,
+      holdRate,
+      cpc,
+      cpm,
       totalBonus,
       paidAmount,
       pendingAmount,

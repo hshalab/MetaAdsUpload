@@ -18,6 +18,7 @@ export interface InsightData {
   video_30_sec_watched_actions?: Array<{ action_type: string; value: string }>;
   video_avg_time_watched_actions?: Array<{ action_type: string; value: string }>;
   video_p25_watched_actions?: Array<{ action_type: string; value: string }>;
+  video_thruplay_watched_actions?: Array<{ action_type: string; value: string }>;
 }
 
 // Core fields only — ctr/cpc/cpm are derivable from spend/clicks/impressions
@@ -33,6 +34,7 @@ const INSIGHT_FIELDS_WITH_VIDEO = [
   "spend", "impressions", "reach", "clicks",
   "actions", "action_values",
   "video_30_sec_watched_actions", "video_avg_time_watched_actions",
+  "video_thruplay_watched_actions",
 ].join(",");
 
 export async function getInsights(params: {
@@ -43,8 +45,10 @@ export async function getInsights(params: {
   actionBreakdowns?: string[];
   limit?: number;
   includeVideoMetrics?: boolean;
+  /** When set (e.g. 1), Meta returns one row per day instead of one aggregated row. */
+  timeIncrement?: number;
 }) {
-  const { entityId, level = "campaign", dateRange, breakdowns, actionBreakdowns, limit = 500, includeVideoMetrics = false } = params;
+  const { entityId, level = "campaign", dateRange, breakdowns, actionBreakdowns, limit = 500, includeVideoMetrics = false, timeIncrement } = params;
   const adAccountId = entityId || await getAdAccountId();
   const endpoint = `/${adAccountId}/insights`;
 
@@ -53,6 +57,10 @@ export async function getInsights(params: {
     level,
     limit,
   };
+
+  if (timeIncrement) {
+    queryParams.time_increment = timeIncrement;
+  }
 
   if (dateRange) {
     queryParams.time_range = JSON.stringify({
@@ -84,6 +92,12 @@ export function extractPurchaseValue(actionValues?: Array<{ action_type: string;
 
 export function calculateROAS(purchaseValue: number, spend: number) {
   return spend > 0 ? purchaseValue / spend : 0;
+}
+
+/** ThruPlays (≥15s, or full play for shorter videos) — denominator-ish for hold rate. */
+export function extractThruplays(thruplayActions?: Array<{ action_type: string; value: string }>) {
+  if (!thruplayActions || thruplayActions.length === 0) return 0;
+  return parseInt(thruplayActions[0]?.value || "0", 10);
 }
 
 /**

@@ -285,6 +285,7 @@ export const insights = pgTable("insights", {
   purchaseValue: real("purchase_value").default(0),
   roas: real("roas").default(0),
   videoViews3s: integer("video_views_3s").default(0),
+  videoThruplays: integer("video_thruplays").default(0),
   videoAvgWatchTime: real("video_avg_watch_time").default(0),
   videoLength: real("video_length").default(0),
   hookRate: real("hook_rate").default(0),
