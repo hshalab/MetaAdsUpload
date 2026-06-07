@@ -15,6 +15,7 @@ import {
 } from "./insights";
 import { getCampaigns } from "./campaigns";
 import { getAds } from "./ads";
+import { metaApi } from "./client";
 
 function extractLinkClicks(actions?: Array<{ action_type: string; value: string }>): number {
   return parseInt(actions?.find((a) => a.action_type === "link_click")?.value || "0", 10);
@@ -92,6 +93,14 @@ export async function runEditorInsightsSync() {
 
   for (const adsetId of adsetIds) {
     try {
+      // Keep the ad set's display name fresh on its owner row.
+      try {
+        const info = await metaApi<{ name?: string }>(`/${adsetId}`, { params: { fields: "name" } });
+        if (info?.name) {
+          await db.update(schema.adsetOwners).set({ adsetName: info.name, updatedAt: new Date() }).where(eq(schema.adsetOwners.adsetId, adsetId));
+        }
+      } catch { /* name is best-effort */ }
+
       // Refresh ad metadata (names + ad→adset mapping) for this ad set.
       const ads = await getAds(adsetId, 200);
       for (const ad of ads) {
