@@ -67,13 +67,21 @@ export interface NextTierProgress {
  */
 export function nextTierProgress(spend: number, roas: number, lockedBonus = 0, tiers: BonusTier[] = BONUS_TIERS): NextTierProgress {
   const current = Math.max(lockedBonus, calculateBonus(spend, roas, tiers).bonus);
-  // Tiers strictly above current, lowest first.
-  const ascending = [...tiers].sort((a, b) => a.bonus - b.bonus);
-  const next = ascending.find((t) => t.bonus > current) || null;
+  const candidates = tiers.filter((t) => t.bonus > current);
 
-  if (!next) {
+  if (candidates.length === 0) {
     return { next: null, current, spendProgress: 1, roasMet: true, hint: "Top tier reached 🎉" };
   }
+
+  // Pick the most ACHIEVABLE next tier, not just the next-highest payout.
+  // A "slow winner" at 2.0–2.4 ROAS can't reach $10/$20 (need 2.5) but is on
+  // track for $30/$50 (need 2.0). Prefer tiers whose ROAS is already met
+  // (reachable by spend alone), nearest by spend; otherwise the tier with the
+  // smallest ROAS gap.
+  const met = candidates.filter((t) => roas >= t.minRoas).sort((a, b) => a.minSpend - b.minSpend);
+  const next = met.length
+    ? met[0]
+    : [...candidates].sort((a, b) => a.minRoas - b.minRoas || a.minSpend - b.minSpend)[0];
 
   const spendProgress = Math.min(spend / next.minSpend, 1);
   const roasMet = roas >= next.minRoas;

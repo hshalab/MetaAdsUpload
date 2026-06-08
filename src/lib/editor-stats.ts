@@ -127,6 +127,8 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
   const editorMap = new Map<string, { editorId: string; adsets: EditorAdsetRow[] }>();
   const strategistMap = new Map<string, { id: string; adsets: number; winners: number }>();
   const templateMap = new Map<number, { templateId: number; templateName: string; ads: number; winners: number; spend: number; revenue: number }>();
+  const anglePerf = new Map<string, { name: string; ads: number; winners: number; spend: number; revenue: number }>();
+  const problemPerf = new Map<string, { name: string; ads: number; winners: number; spend: number; revenue: number }>();
 
   for (const owned of ownedAdsets) {
     const ledger = ledgerByAdset.get(owned.adsetId);
@@ -150,6 +152,16 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
         const t = templateMap.get(meta.templateId) || { templateId: meta.templateId, templateName: meta.templateName || `Template ${meta.templateId}`, ads: 0, winners: 0, spend: 0, revenue: 0 };
         t.ads += 1; if (isWinnerAdset) t.winners += 1; t.spend += spend; t.revenue += pvSek / rate;
         templateMap.set(meta.templateId, t);
+      }
+      if (meta?.angle) {
+        const g = anglePerf.get(meta.angle) || { name: meta.angle, ads: 0, winners: 0, spend: 0, revenue: 0 };
+        g.ads += 1; if (isWinnerAdset) g.winners += 1; g.spend += spend; g.revenue += pvSek / rate;
+        anglePerf.set(meta.angle, g);
+      }
+      if (meta?.problem) {
+        const g = problemPerf.get(meta.problem) || { name: meta.problem, ads: 0, winners: 0, spend: 0, revenue: 0 };
+        g.ads += 1; if (isWinnerAdset) g.winners += 1; g.spend += spend; g.revenue += pvSek / rate;
+        problemPerf.set(meta.problem, g);
       }
       return {
         id: ad.id,
@@ -316,7 +328,17 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
     .map((t) => ({ templateId: t.templateId, templateName: t.templateName, ads: t.ads, winners: t.winners, winRate: t.ads > 0 ? (t.winners / t.ads) * 100 : 0, spend: t.spend, roas: t.spend > 0 ? t.revenue / t.spend : 0 }))
     .sort((a, b) => b.roas - a.roas || b.winners - a.winners);
 
-  return { editors, leaderboard, strategists, templates, bonusTiers: settings.bonusTiers, sekPerUsd: rate, dateRange: { from, to } };
+  const mapPerf = (m: Map<string, { name: string; ads: number; winners: number; spend: number; revenue: number }>) =>
+    Array.from(m.values())
+      .map((g) => ({ name: g.name, ads: g.ads, winners: g.winners, winRate: g.ads > 0 ? (g.winners / g.ads) * 100 : 0, spend: g.spend, roas: g.spend > 0 ? g.revenue / g.spend : 0 }))
+      .sort((a, b) => b.winners - a.winners || b.spend - a.spend);
+
+  return {
+    editors, leaderboard, strategists, templates,
+    angles: mapPerf(anglePerf),
+    problems: mapPerf(problemPerf),
+    bonusTiers: settings.bonusTiers, sekPerUsd: rate, dateRange: { from, to },
+  };
 }
 
 /** Daily spend / revenue / ROAS series for a set of ads — powers the performance graph. Money in USD. */

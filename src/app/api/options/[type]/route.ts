@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { asc, sql } from "drizzle-orm";
-
-type OptionType = "angles" | "products" | "formats" | "countries" | "offer-types" | "customer-avatars" | "script-structures";
+import { asc, sql, eq } from "drizzle-orm";
 
 function getTable(type: string) {
   switch (type) {
     case "angles": return schema.angles;
+    case "problems": return schema.problems;
     case "products": return schema.products;
     case "formats": return schema.formats;
     case "countries": return schema.countries;
@@ -89,6 +88,34 @@ export async function POST(
     console.error("Options type POST error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create option" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE — soft-deactivate an option (keeps any already-stored values intact).
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ type: string }> }
+) {
+  try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const { type } = await params;
+    const { id } = await request.json();
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    const table = getTable(type);
+    if (!table) return NextResponse.json({ error: "Invalid option type" }, { status: 400 });
+
+    await db.update(table).set({ isActive: false }).where(eq(table.id, id));
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Options type DELETE error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to delete option" },
       { status: 500 }
     );
   }

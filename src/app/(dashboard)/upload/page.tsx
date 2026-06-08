@@ -40,6 +40,7 @@ import {
   Lightbulb,
 } from "lucide-react";
 import { MemberQuickAdd } from "@/components/editors/member-quick-add";
+import { OptionPicker } from "@/components/editors/option-picker";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1912,13 +1913,7 @@ export default function UploadPage() {
               Angle <span className="text-slate-600 normal-case">· the angle the ad leans on</span>
             </h3>
           </div>
-          <input
-            type="text"
-            value={adAngle}
-            onChange={(e) => setAdAngle(e.target.value)}
-            placeholder="e.g. Fatigue, Itching, Price"
-            className={inputCls}
-          />
+          <OptionPicker type="angles" value={adAngle} onChange={setAdAngle} selectClassName={inputCls} />
         </div>
         <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
           <div className="flex items-center gap-2 mb-2.5">
@@ -1927,13 +1922,7 @@ export default function UploadPage() {
               Problem <span className="text-slate-600 normal-case">· the pain/problem it addresses</span>
             </h3>
           </div>
-          <input
-            type="text"
-            value={adProblem}
-            onChange={(e) => setAdProblem(e.target.value)}
-            placeholder="e.g. The dog scratches constantly"
-            className={inputCls}
-          />
+          <OptionPicker type="problems" value={adProblem} onChange={setAdProblem} selectClassName={inputCls} />
         </div>
       </div>
 

@@ -50,6 +50,7 @@ import {
   CloudDownload,
   Pencil,
   X,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -135,7 +136,47 @@ interface EditorData {
 interface LeaderEntry { editorId: string; name: string; slug: string | null; winners: number; hookRate: number; earned: number }
 interface StrategistStat { id: string; name: string; slug: string | null; ads: number; winners: number; winRate: number }
 interface TemplateStat { templateId: number; templateName: string; ads: number; winners: number; winRate: number; spend: number; roas: number }
+interface PerfRow { name: string; ads: number; winners: number; winRate: number; spend: number; roas: number }
+interface Member { id: string; name: string; email?: string; userType?: string; isActive?: boolean }
 type Series = Array<{ date: string; spend: number; revenue: number; roas: number; purchases: number }>;
+
+function PerfTable({ title, label, rows }: { title: string; label: string; rows: PerfRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-white/5 bg-[#111827] overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
+        <BarChart3 className="h-4 w-4 text-cyan-400" />
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <span className="text-xs text-slate-600">best → worst by ROAS</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-white/5">
+              {[label, "Ads", "Winners", "Win rate", "Spend", "ROAS"].map((h, i) => (
+                <th key={h} className={cn("px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider", i > 0 && "text-right")}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...rows].sort((a, b) => b.roas - a.roas || b.winners - a.winners).map((r) => (
+              <tr key={r.name} className="border-b border-white/5 hover:bg-white/[0.02]">
+                <td className="px-4 py-3 text-sm text-slate-200">{r.name}</td>
+                <td className="px-4 py-3 text-right text-sm text-slate-400">{r.ads}</td>
+                <td className="px-4 py-3 text-right text-sm text-amber-400">{r.winners}</td>
+                <td className="px-4 py-3 text-right text-sm text-slate-400">{r.winRate.toFixed(0)}%</td>
+                <td className="px-4 py-3 text-right text-sm text-slate-400">${fmt(r.spend)}</td>
+                <td className="px-4 py-3 text-right text-sm font-semibold">
+                  <span className={r.roas >= 2.5 ? "text-emerald-400" : r.roas >= 2.0 ? "text-amber-400" : r.roas > 0 ? "text-red-400" : "text-slate-600"}>{r.roas.toFixed(2)}x</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function fmt(n: number, decimals = 0): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -403,6 +444,9 @@ export default function EditorsPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
   const [strategists, setStrategists] = useState<StrategistStat[]>([]);
   const [templates, setTemplates] = useState<TemplateStat[]>([]);
+  const [anglePerf, setAnglePerf] = useState<PerfRow[]>([]);
+  const [problemPerf, setProblemPerf] = useState<PerfRow[]>([]);
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [bonusTiers, setBonusTiers] = useState<BonusTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -441,6 +485,8 @@ export default function EditorsPage() {
       setLeaderboard(data.leaderboard || []);
       setStrategists(data.strategists || []);
       setTemplates(data.templates || []);
+      setAnglePerf(data.angles || []);
+      setProblemPerf(data.problems || []);
       setBonusTiers(data.bonusTiers || []);
       setSeriesByEditor({});
     } catch (err) {
@@ -451,6 +497,29 @@ export default function EditorsPage() {
   }, [dateRange]);
 
   useEffect(() => { fetchEditors(); }, [fetchEditors]);
+
+  const fetchMembers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/users");
+      if (!res.ok) return;
+      const { users } = await res.json();
+      setAllMembers((users || []).filter((u: Member) => u.isActive !== false));
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => { fetchMembers(); }, [fetchMembers]);
+
+  const removeMember = async (m: Member) => {
+    if (!confirm(`Remove ${m.name}? (deactivated — bonus history is kept)`)) return;
+    try {
+      const res = await fetch(`/api/users/${m.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed");
+      toast.success(`${m.name} removed`);
+      fetchMembers();
+      fetchEditors();
+    } catch {
+      toast.error("Could not remove member");
+    }
+  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -601,6 +670,7 @@ export default function EditorsPage() {
       setNewMemberType("video_editor");
       setShowPassword(false);
       fetchEditors();
+      fetchMembers();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Could not create member");
     } finally {
@@ -638,8 +708,8 @@ export default function EditorsPage() {
             {syncing ? "Syncing..." : "Sync Meta"}
           </button>
           <button onClick={() => setShowCreateMember(true)} className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-sm font-medium text-white transition-all">
-            <Plus className="h-4 w-4" />
-            Add member
+            <Users className="h-4 w-4" />
+            Manage team
           </button>
         </div>
       </div>
@@ -767,6 +837,12 @@ export default function EditorsPage() {
           </div>
         </div>
       )}
+
+      {/* Angle + Problem performance */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PerfTable title="Angle Performance" label="Angle" rows={anglePerf} />
+        <PerfTable title="Problem Performance" label="Problem" rows={problemPerf} />
+      </div>
 
       {/* Bonus Tiers (editable) */}
       <div className="rounded-xl border border-white/5 bg-[#111827] p-5">
@@ -900,8 +976,8 @@ export default function EditorsPage() {
       <Dialog open={showCreateMember} onOpenChange={setShowCreateMember}>
         <DialogContent className="max-w-md bg-[#111827] border-white/10">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2"><Plus className="h-4 w-4 text-cyan-400" />Add team member</DialogTitle>
-            <DialogDescription className="text-slate-400 text-sm">Create an account. A public performance page (/e/name) is generated automatically.</DialogDescription>
+            <DialogTitle className="text-white flex items-center gap-2"><Users className="h-4 w-4 text-cyan-400" />Manage team</DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm">Add a member (a public page /e/name is generated automatically) or remove existing ones below.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -942,6 +1018,25 @@ export default function EditorsPage() {
             {createError && (
               <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />{createError}
+              </div>
+            )}
+
+            {/* Existing team — remove */}
+            {allMembers.length > 0 && (
+              <div className="pt-3 border-t border-white/5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Team ({allMembers.length}) — click trash to remove</p>
+                <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                  {allMembers.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
+                      {m.userType === "creative_strategist" ? <Lightbulb className="h-3.5 w-3.5 text-purple-400 shrink-0" /> : <Video className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                      <span className="flex-1 truncate text-sm text-slate-300">{m.name}</span>
+                      <span className="text-[10px] text-slate-600">{m.userType === "creative_strategist" ? "Strategist" : "Editor"}</span>
+                      <button type="button" onClick={() => removeMember(m)} title={`Remove ${m.name}`} className="text-slate-500 hover:text-red-400 transition-colors">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

@@ -28,6 +28,14 @@ export const angles = pgTable("angles", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const problems = pgTable("problems", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const products = pgTable("products", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull().unique(),
