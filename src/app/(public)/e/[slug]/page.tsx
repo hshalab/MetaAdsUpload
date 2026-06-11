@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   Trophy, DollarSign, TrendingUp, Target, Zap, Clock, CheckCircle2, Lock, Flame, Video, Lightbulb,
-  Medal, Gauge, MousePointerClick, ChevronDown, ChevronRight, Layers,
+  Gauge, MousePointerClick, ChevronDown, ChevronRight, Layers,
 } from "lucide-react";
 import { nextTierProgress, bonusTierColor, type BonusTier } from "@/lib/bonus";
 
@@ -278,26 +278,6 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
               </div>
             </div>
           </div>
-
-          {/* Leaderboard */}
-          {data && data.leaderboard.length > 1 && (
-            <div className="rounded-2xl border border-white/5 bg-[#111827] overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5"><Medal className="h-4 w-4 text-amber-400" /><h2 className="text-sm font-semibold text-white">Leaderboard — most winners</h2><span className="text-xs text-slate-600">friendly comparison, no pay shown</span></div>
-              <div className="divide-y divide-white/5">
-                {data.leaderboard.slice(0, 8).map((l, i) => {
-                  const isMe = l.editorId === editor.editorId;
-                  return (
-                    <div key={l.editorId} className={`flex items-center gap-3 px-5 py-2.5 ${isMe ? "bg-cyan-500/5" : ""}`}>
-                      <span className={`w-6 text-center text-sm font-bold ${i === 0 ? "text-yellow-400" : i === 1 ? "text-slate-300" : i === 2 ? "text-amber-600" : "text-slate-600"}`}>{i + 1}</span>
-                      <span className={`flex-1 text-sm ${isMe ? "text-cyan-300 font-semibold" : "text-slate-300"}`}>{isMe ? `${l.name} (you)` : l.name}</span>
-                      <span className="text-xs text-slate-500">{l.hookRate.toFixed(1)}% hook</span>
-                      <span className="flex items-center gap-1 text-sm font-semibold text-amber-400"><Trophy className="h-3.5 w-3.5" /> {l.winners}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Ad sets (expandable → per-ad) */}
           <div className="rounded-2xl border border-white/5 bg-[#111827] overflow-hidden">
