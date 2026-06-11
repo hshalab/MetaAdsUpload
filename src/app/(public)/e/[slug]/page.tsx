@@ -27,7 +27,7 @@ interface Editor {
   editorId: string; editor: string; fullName: string; slug: string | null; userType: string;
   totalSpend: number; totalPurchaseValue: number; totalPurchases: number;
   roas: number; ctr: number; hookRate: number; holdRate: number; cpc: number; cpm: number;
-  totalBonus: number; paidAmount: number; unpaidAmount: number;
+  totalBonus: number; paidAmount: number; pendingAmount: number; unpaidAmount: number;
   adsetCount: number; winnerCount: number; graveyardSpendWinners: number; graveyardLosers: number;
   adsets: Adset[];
 }
@@ -169,7 +169,11 @@ export default function PublicEditorPage({ params }: { params: Promise<{ slug: s
             <div className="rounded-2xl border border-white/5 bg-[#111827] p-5">
               <div className="flex items-center gap-2 text-cyan-400 mb-1"><CheckCircle2 className="h-4 w-4" /><span className="text-[11px] font-semibold uppercase tracking-wider">Paid out</span></div>
               <div className="text-4xl font-bold text-emerald-400">${fmt(editor.paidAmount)}</div>
-              <p className="text-xs text-slate-500 mt-1">already paid to you</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {editor.pendingAmount > 0
+                  ? <>already paid to you · <span className="text-cyan-400">${fmt(editor.pendingAmount)} on its way</span></>
+                  : "already paid to you"}
+              </p>
             </div>
             <div className={`rounded-2xl border p-5 ${editor.unpaidAmount > 0 ? "border-amber-500/30 bg-amber-500/5" : "border-white/5 bg-[#111827]"}`}>
               <div className={`flex items-center gap-2 mb-1 ${editor.unpaidAmount > 0 ? "text-amber-400" : "text-slate-500"}`}><Clock className="h-4 w-4" /><span className="text-[11px] font-semibold uppercase tracking-wider">Outstanding</span></div>
