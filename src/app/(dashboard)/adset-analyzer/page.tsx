@@ -12,6 +12,8 @@ import {
   Pause,
   Skull,
   Check,
+  Tag,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -77,6 +79,16 @@ const CLASS_CONFIG: Record<Classification, { label: string; color: string; bg: s
 
 type DateMode = "preset" | "today" | "custom";
 
+interface AdsetMeta {
+  videoEditorId: string | null;
+  creativeStrategistId: string | null;
+  angle: string | null;
+  problem: string | null;
+  verdict: string | null;
+}
+
+const EMPTY_META: AdsetMeta = { videoEditorId: null, creativeStrategistId: null, angle: null, problem: null, verdict: null };
+
 export default function AdSetAnalyzerPage() {
   const [data, setData] = useState<AdsetAnalyzerData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,11 +99,14 @@ export default function AdSetAnalyzerPage() {
   const [customTo, setCustomTo] = useState(format(new Date(), "yyyy-MM-dd"));
   const [campaignFilter, setCampaignFilter] = useState("");
   const [classFilter, setClassFilter] = useState<Classification | null>(null);
+  const [tagFilter, setTagFilter] = useState<"confirmed" | "untagged" | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
   const [graveyardChoiceFor, setGraveyardChoiceFor] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const [ownersByAdset, setOwnersByAdset] = useState<Record<string, { videoEditorId: string | null; creativeStrategistId: string | null }>>({});
+  const [ownersByAdset, setOwnersByAdset] = useState<Record<string, AdsetMeta>>({});
+  const [angleOptions, setAngleOptions] = useState<string[]>([]);
+  const [problemOptions, setProblemOptions] = useState<string[]>([]);
 
   // Team members for the owner picker (admin only — silently empty otherwise).
   useEffect(() => {
@@ -111,6 +126,19 @@ export default function AdSetAnalyzerPage() {
             }))
         );
       } catch { /* not admin / not logged in */ }
+    })();
+  }, []);
+
+  // Angle/problem options for the tag selects (shared with the uploader).
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/options");
+        if (!res.ok) return;
+        const j = await res.json();
+        setAngleOptions((j.angles || []).map((a: { name: string }) => a.name));
+        setProblemOptions((j.problems || []).map((p: { name: string }) => p.name));
+      } catch { /* ignore */ }
     })();
   }, []);
 
@@ -146,9 +174,9 @@ export default function AdSetAnalyzerPage() {
     return () => clearTimeout(timer);
   }, [fetchData]);
 
-  // Load existing owners for the ad sets currently shown.
+  // Load existing owners + tags/verdict for the ad sets currently shown.
   useEffect(() => {
-    if (!data || members.length === 0) return;
+    if (!data) return;
     const adsetIds = data.adsets.map((a) => a.id);
     if (adsetIds.length === 0) return;
     (async () => {
@@ -156,14 +184,20 @@ export default function AdSetAnalyzerPage() {
         const res = await fetch(`/api/adset-owner?adsetIds=${encodeURIComponent(adsetIds.join(","))}`);
         if (!res.ok) return;
         const { owners } = await res.json();
-        const map: Record<string, { videoEditorId: string | null; creativeStrategistId: string | null }> = {};
+        const map: Record<string, AdsetMeta> = {};
         for (const o of owners || []) {
-          map[o.adsetId] = { videoEditorId: o.videoEditorId, creativeStrategistId: o.creativeStrategistId };
+          map[o.adsetId] = {
+            videoEditorId: o.videoEditorId,
+            creativeStrategistId: o.creativeStrategistId,
+            angle: o.angle ?? null,
+            problem: o.problem ?? null,
+            verdict: o.verdict ?? null,
+          };
         }
         setOwnersByAdset(map);
       } catch { /* ignore */ }
     })();
-  }, [data, members.length]);
+  }, [data]);
 
   const executeAction = async (adsetId: string, action: string, adset: ClassifiedAdset, graveyardOutcome?: "spend_winner" | "loser") => {
     setActing(adsetId);
@@ -215,10 +249,36 @@ export default function AdSetAnalyzerPage() {
     });
   };
 
+  // Save a set-level tag or the manual verdict (partial update, optimistic).
+  const saveAdsetMeta = async (adset: ClassifiedAdset, patch: Partial<Pick<AdsetMeta, "angle" | "problem" | "verdict">>) => {
+    const prev = ownersByAdset[adset.id] || EMPTY_META;
+    setOwnersByAdset((m) => ({ ...m, [adset.id]: { ...prev, ...patch } }));
+    try {
+      const res = await fetch("/api/adset-owner", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adsetId: adset.id, adsetName: adset.name, campaignId: adset.campaignId, ...patch }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Kunde inte spara");
+      }
+    } catch (err) {
+      setOwnersByAdset((m) => ({ ...m, [adset.id]: prev }));
+      toast.error(err instanceof Error ? err.message : "Kunde inte spara");
+    }
+  };
+
+  const isUntagged = (id: string) => !ownersByAdset[id]?.angle && !ownersByAdset[id]?.problem;
+
   const filteredAdsets = data?.adsets.filter((a) =>
     (!campaignFilter || a.campaignId === campaignFilter) &&
-    (!classFilter || a.classification === classFilter)
+    (!classFilter || a.classification === classFilter) &&
+    (!tagFilter || (tagFilter === "confirmed" ? ownersByAdset[a.id]?.verdict === "confirmed_winner" : isUntagged(a.id)))
   ) || [];
+
+  const confirmedCount = data?.adsets.filter((a) => ownersByAdset[a.id]?.verdict === "confirmed_winner").length || 0;
+  const untaggedCount = data?.adsets.filter((a) => isUntagged(a.id)).length || 0;
 
   return (
     <div className="space-y-5">
@@ -323,6 +383,17 @@ export default function AdSetAnalyzerPage() {
                   activeColor={c.color} activeBg={c.bg} activeBorder={c.border} />
               );
             })}
+            <div className="w-px bg-white/10 mx-1 self-stretch" />
+            <FilterTab active={tagFilter === "confirmed"}
+              onClick={() => setTagFilter(tagFilter === "confirmed" ? null : "confirmed")}
+              label={`✓ Confirmed (${confirmedCount})`}
+              activeColor="text-emerald-400" activeBg="bg-emerald-500/10" activeBorder="border-emerald-500/20" />
+            {untaggedCount > 0 && (
+              <FilterTab active={tagFilter === "untagged"}
+                onClick={() => setTagFilter(tagFilter === "untagged" ? null : "untagged")}
+                label={`Otaggad (${untaggedCount})`}
+                activeColor="text-amber-400" activeBg="bg-amber-500/10" activeBorder="border-amber-500/20" />
+            )}
           </div>
 
           {/* Ad Set Cards */}
@@ -331,6 +402,8 @@ export default function AdSetAnalyzerPage() {
               const config = CLASS_CONFIG[adset.classification];
               const isExpanded = expanded.has(adset.id);
               const isActing = acting === adset.id;
+              const meta = ownersByAdset[adset.id] || EMPTY_META;
+              const isConfirmed = meta.verdict === "confirmed_winner";
 
               return (
                 <div key={adset.id} className={cn("rounded-xl border bg-[#111827] overflow-hidden transition-all", config.border)}>
@@ -350,10 +423,24 @@ export default function AdSetAnalyzerPage() {
                       {config.label}
                     </div>
 
-                    {/* Name + campaign */}
+                    {/* Manual verdict badge */}
+                    {isConfirmed && (
+                      <div className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <Trophy className="h-3 w-3" /> Winner
+                      </div>
+                    )}
+
+                    {/* Name + campaign + tags */}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white truncate">{adset.name}</p>
-                      <p className="text-[10px] text-slate-600 truncate">{adset.campaignName} &middot; {adset.adCount} ads</p>
+                      <p className="text-[10px] text-slate-600 truncate">
+                        {adset.campaignName} &middot; {adset.adCount} ads
+                        {meta.angle || meta.problem ? (
+                          <span className="text-cyan-500/80"> &middot; <Tag className="inline h-2.5 w-2.5 -mt-px" /> {[meta.angle, meta.problem].filter(Boolean).join(" / ")}</span>
+                        ) : (
+                          <span className="text-amber-500/80"> &middot; otaggad — expandera för att tagga</span>
+                        )}
+                      </p>
                     </div>
 
                     {/* Metrics */}
@@ -388,7 +475,7 @@ export default function AdSetAnalyzerPage() {
                         members={members}
                         videoEditorId={ownersByAdset[adset.id]?.videoEditorId || null}
                         creativeStrategistId={ownersByAdset[adset.id]?.creativeStrategistId || null}
-                        onSaved={(ve, cs) => setOwnersByAdset((prev) => ({ ...prev, [adset.id]: { videoEditorId: ve, creativeStrategistId: cs } }))}
+                        onSaved={(ve, cs) => setOwnersByAdset((prev) => ({ ...prev, [adset.id]: { ...(prev[adset.id] || EMPTY_META), videoEditorId: ve, creativeStrategistId: cs } }))}
                       />
                     </div>
 
@@ -398,7 +485,20 @@ export default function AdSetAnalyzerPage() {
                         <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
                       ) : (
                         <>
-                          {(adset.classification === "loser" || adset.classification === "spend_winner") && (
+                          <button
+                            onClick={() => saveAdsetMeta(adset, { verdict: isConfirmed ? null : "confirmed_winner" })}
+                            className={cn(
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border transition-all",
+                              isConfirmed
+                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                : "bg-white/5 text-slate-400 border-white/10 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20"
+                            )}
+                            title={isConfirmed ? "Ta bort manuell winner-markering" : "Bekräfta manuellt att detta ad set går bra (oberoende av auto-klassningen)"}
+                          >
+                            <Trophy className="h-3.5 w-3.5" />
+                            {isConfirmed ? "Winner ✓" : "Winner?"}
+                          </button>
+                          {(
                             graveyardChoiceFor === adset.id ? (
                               <div className="flex items-center gap-1">
                                 <span className="text-[10px] text-slate-500 mr-0.5">Graveyard as:</span>
@@ -463,6 +563,34 @@ export default function AdSetAnalyzerPage() {
                   <div className={cn("px-4 py-2 text-xs border-t", config.bg, config.border, config.color)}>
                     {adset.recommendation}
                   </div>
+
+                  {/* Expanded: set-level creative tags (inherited by every ad in the set) */}
+                  {isExpanded && (
+                    <div className="border-t border-white/5 px-4 py-3 flex items-center gap-3 flex-wrap bg-white/[0.01]">
+                      <span className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                        <Tag className="h-3 w-3" /> Taggar
+                      </span>
+                      <select
+                        value={meta.angle || ""}
+                        onChange={(e) => saveAdsetMeta(adset, { angle: e.target.value || null })}
+                        className={cn("rounded-lg border px-2.5 py-1.5 text-xs [color-scheme:dark]",
+                          meta.angle ? "bg-white/5 border-white/10 text-white" : "bg-amber-500/5 border-amber-500/20 text-amber-400")}
+                      >
+                        <option value="">Angle…</option>
+                        {angleOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                      <select
+                        value={meta.problem || ""}
+                        onChange={(e) => saveAdsetMeta(adset, { problem: e.target.value || null })}
+                        className={cn("rounded-lg border px-2.5 py-1.5 text-xs [color-scheme:dark]",
+                          meta.problem ? "bg-white/5 border-white/10 text-white" : "bg-amber-500/5 border-amber-500/20 text-amber-400")}
+                      >
+                        <option value="">Problem…</option>
+                        {problemOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                      <span className="text-[10px] text-slate-600">ärvs av alla ads i settet · per-ad-taggar från uppladdningen vinner</span>
+                    </div>
+                  )}
 
                   {/* Expanded: creatives inside this ad set */}
                   {isExpanded && adset.ads.length > 0 && (

@@ -146,6 +146,9 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
       const thru = Number(p?.videoThruplays) || 0;
       aggSpendSek += spendSek; aggImpr += impressions; aggLink += linkClicks; aggPurch += purchases; aggPvSek += pvSek; aggV3 += v3; aggThru += thru;
       const meta = adMetaById.get(ad.id);
+      // Ad-level tag wins; otherwise the ad inherits the ad set's tag.
+      const effAngle = meta?.angle ?? owned.angle ?? null;
+      const effProblem = meta?.problem ?? owned.problem ?? null;
       const spend = spendSek / rate;
       const isWinnerAdset = (ledger?.earnedBonus || 0) > 0;
       if (meta?.templateId) {
@@ -153,15 +156,15 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
         t.ads += 1; if (isWinnerAdset) t.winners += 1; t.spend += spend; t.revenue += pvSek / rate;
         templateMap.set(meta.templateId, t);
       }
-      if (meta?.angle) {
-        const g = anglePerf.get(meta.angle) || { name: meta.angle, ads: 0, winners: 0, spend: 0, revenue: 0 };
+      if (effAngle) {
+        const g = anglePerf.get(effAngle) || { name: effAngle, ads: 0, winners: 0, spend: 0, revenue: 0 };
         g.ads += 1; if (isWinnerAdset) g.winners += 1; g.spend += spend; g.revenue += pvSek / rate;
-        anglePerf.set(meta.angle, g);
+        anglePerf.set(effAngle, g);
       }
-      if (meta?.problem) {
-        const g = problemPerf.get(meta.problem) || { name: meta.problem, ads: 0, winners: 0, spend: 0, revenue: 0 };
+      if (effProblem) {
+        const g = problemPerf.get(effProblem) || { name: effProblem, ads: 0, winners: 0, spend: 0, revenue: 0 };
         g.ads += 1; if (isWinnerAdset) g.winners += 1; g.spend += spend; g.revenue += pvSek / rate;
-        problemPerf.set(meta.problem, g);
+        problemPerf.set(effProblem, g);
       }
       return {
         id: ad.id,
@@ -176,8 +179,8 @@ export async function getEditorsOverview({ from, to }: { from: string; to: strin
         holdRate: v3 > 0 ? (thru / v3) * 100 : 0,
         cpc: linkClicks > 0 ? spend / linkClicks : 0,
         cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
-        angle: meta?.angle ?? null,
-        problem: meta?.problem ?? null,
+        angle: effAngle,
+        problem: effProblem,
         templateName: meta?.templateName ?? null,
       };
     });

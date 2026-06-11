@@ -420,6 +420,13 @@ export const adsetOwners = pgTable("adset_owners", {
   creativeStrategistId: text("creative_strategist_id"), // FK users — stats only
   campaignId: text("campaign_id"),
   adsetName: text("adset_name"),
+  // Set-level creative tags — every ad in the set inherits these unless the ad
+  // has its own ad_owners tag (ad-level overrides set-level).
+  angle: text("angle"),
+  problem: text("problem"),
+  // Manual verdict, independent of the window-based auto-classification
+  verdict: text("verdict"), // "confirmed_winner" | null
+  verdictAt: timestamp("verdict_at"),
   graveyardOutcome: text("graveyard_outcome"), // "spend_winner" | "loser"
   graveyardAt: timestamp("graveyard_at"),
   source: text("source").default("analyzer"), // "uploader" | "analyzer"

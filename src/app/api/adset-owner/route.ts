@@ -82,6 +82,52 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PATCH — update set-level creative tags / manual verdict without touching
+// ownership (admin). Body: { adsetId, angle?, problem?, verdict?, adsetName?, campaignId? }
+// Only provided fields are written; pass null to clear one. Creates a
+// metadata-only row if the ad set has no owner yet.
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const body = await request.json();
+    const { adsetId, angle, problem, verdict, adsetName, campaignId } = body;
+    if (!adsetId) return NextResponse.json({ error: "adsetId is required" }, { status: 400 });
+    if (verdict !== undefined && verdict !== null && verdict !== "confirmed_winner") {
+      return NextResponse.json({ error: "Invalid verdict" }, { status: 400 });
+    }
+
+    const now = new Date();
+    const set: Record<string, unknown> = { updatedAt: now };
+    if (angle !== undefined) set.angle = angle || null;
+    if (problem !== undefined) set.problem = problem || null;
+    if (verdict !== undefined) { set.verdict = verdict || null; set.verdictAt = verdict ? now : null; }
+
+    const [row] = await db
+      .insert(schema.adsetOwners)
+      .values({
+        adsetId,
+        adsetName: adsetName || null,
+        campaignId: campaignId || null,
+        angle: angle ?? null,
+        problem: problem ?? null,
+        verdict: verdict ?? null,
+        verdictAt: verdict ? now : null,
+        source: "analyzer",
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({ target: schema.adsetOwners.adsetId, set })
+      .returning();
+
+    return NextResponse.json({ owner: row });
+  } catch (error) {
+    console.error("adset-owner PATCH error:", error);
+    return NextResponse.json({ error: "Failed to update ad set tags" }, { status: 500 });
+  }
+}
+
 // DELETE — clear ad set ownership. Body: { adsetId }
 export async function DELETE(request: NextRequest) {
   try {

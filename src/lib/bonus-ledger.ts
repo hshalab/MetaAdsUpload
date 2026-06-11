@@ -208,6 +208,9 @@ export interface OwnedAdset {
   creativeStrategistId: string | null;
   adsetName: string | null;
   campaignId: string | null;
+  angle: string | null;
+  problem: string | null;
+  verdict: string | null;
   graveyardOutcome: string | null;
   source: string;
 }
@@ -227,6 +230,9 @@ export async function resolveOwnedAdsets(): Promise<OwnedAdset[]> {
       creativeStrategistId: a.creativeStrategistId || null,
       adsetName: a.autoName || null,
       campaignId: a.metaCampaignId || null,
+      angle: null,
+      problem: null,
+      verdict: null,
       graveyardOutcome: null,
       source: "assignment",
     });
@@ -239,6 +245,9 @@ export async function resolveOwnedAdsets(): Promise<OwnedAdset[]> {
       creativeStrategistId: o.creativeStrategistId ?? ex?.creativeStrategistId ?? null,
       adsetName: o.adsetName || ex?.adsetName || null,
       campaignId: o.campaignId || ex?.campaignId || null,
+      angle: o.angle ?? ex?.angle ?? null,
+      problem: o.problem ?? ex?.problem ?? null,
+      verdict: o.verdict ?? ex?.verdict ?? null,
       graveyardOutcome: o.graveyardOutcome ?? ex?.graveyardOutcome ?? null,
       source: o.videoEditorId || o.creativeStrategistId ? (o.source || "analyzer") : (ex?.source || o.source || "analyzer"),
     });
