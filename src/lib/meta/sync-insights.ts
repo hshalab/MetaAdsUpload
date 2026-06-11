@@ -95,7 +95,9 @@ export async function runEditorInsightsSync() {
   const windowSince = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
   const oldestAllowed = new Date(Date.now() - MAX_HISTORY_DAYS * 86400000).toISOString().split("T")[0];
 
-  const owners = await db.select().from(schema.adsetOwners);
+  // source='demo' rows are fabricated showcase data — they don't exist in Meta,
+  // so they must never reach the API.
+  const owners = (await db.select().from(schema.adsetOwners)).filter((o) => o.source !== "demo");
   const ownerByAdset = new Map(owners.map((o) => [o.adsetId, o]));
   const assigns = await db
     .select({ adsetId: schema.assignments.metaAdsetId })
