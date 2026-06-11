@@ -527,7 +527,12 @@ export default function EditorsPage() {
       const res = await fetch("/api/editors/sync", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Sync failed");
-      toast.success(`Synced from Meta: ${data.synced?.adInsightRows ?? 0} ad rows, ${data.synced?.ads ?? 0} ads`);
+      const pending = data.synced?.backfillsPending ?? 0;
+      toast.success(
+        `Synced from Meta: ${data.synced?.adInsightRows ?? 0} ad rows, ${data.synced?.ads ?? 0} ads` +
+        (data.synced?.backfilled ? `, ${data.synced.backfilled} lifetime backfills` : "") +
+        (pending > 0 ? ` — ${pending} ad sets still need backfill, run sync again` : "")
+      );
       fetchEditors();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Sync failed");

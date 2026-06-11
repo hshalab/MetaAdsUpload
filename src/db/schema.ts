@@ -424,6 +424,7 @@ export const adsetOwners = pgTable("adset_owners", {
   graveyardAt: timestamp("graveyard_at"),
   source: text("source").default("analyzer"), // "uploader" | "analyzer"
   assignedById: text("assigned_by_id"),
+  backfilledAt: timestamp("backfilled_at"), // lifetime insights pulled from Meta (set once)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [

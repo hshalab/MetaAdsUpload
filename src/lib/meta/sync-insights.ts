@@ -67,44 +67,85 @@ async function replaceInsights(entityType: string, since: string, until: string,
   }
 }
 
+// The bonus is computed on LIFETIME spend/ROAS, so the very first sync of an ad
+// set must pull its entire history — not just the rolling window. Meta caps
+// daily-granularity insight queries, so long ranges are fetched in chunks.
+const BACKFILL_CHUNK_DAYS = 90;
+const MAX_BACKFILLS_PER_RUN = 8; // keep a single run within Hobby function limits
+const MAX_HISTORY_DAYS = 1100; // Meta retains ~37 months of insights
+
+function addDays(date: string, n: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().split("T")[0];
+}
+
 /**
  * Targeted sync for the editor dashboard: pulls daily insights ONLY for the ad
  * sets that are assigned to an editor (adset_owners + published assignments).
  * For each owned ad set it refreshes ad metadata (names + ad→adset mapping) and
- * pulls per-ad daily insights in one call. Scales with owned ad sets, not the
- * whole (thousands-of-ads) account, so it stays within Hobby function limits.
+ * pulls per-ad daily insights. The first time an ad set is seen it backfills
+ * the full lifetime (from the ad set's created_time) and records backfilledAt;
+ * after that, only the rolling 30-day window is refreshed. Writes happen per ad
+ * set so a timeout mid-run never loses completed work. Scales with owned ad
+ * sets, not the whole (thousands-of-ads) account.
  */
 export async function runEditorInsightsSync() {
   const today = new Date().toISOString().split("T")[0];
-  const since = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+  const windowSince = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+  const oldestAllowed = new Date(Date.now() - MAX_HISTORY_DAYS * 86400000).toISOString().split("T")[0];
 
-  const owners = await db.select({ adsetId: schema.adsetOwners.adsetId }).from(schema.adsetOwners);
+  const owners = await db.select().from(schema.adsetOwners);
+  const ownerByAdset = new Map(owners.map((o) => [o.adsetId, o]));
   const assigns = await db
     .select({ adsetId: schema.assignments.metaAdsetId })
     .from(schema.assignments)
     .where(isNotNull(schema.assignments.metaAdsetId));
 
   const adsetIds = [...new Set([...owners.map((o) => o.adsetId), ...(assigns.map((a) => a.adsetId).filter(Boolean) as string[])])];
-  if (adsetIds.length === 0) return { adsets: 0, ads: 0, adInsightRows: 0 };
+  if (adsetIds.length === 0) return { adsets: 0, ads: 0, adInsightRows: 0, backfilled: 0, backfillsPending: 0 };
 
-  const rows: InsightRow[] = [];
+  // Backfill the never-backfilled ad sets first so repeated manual runs make progress.
+  adsetIds.sort((a, b) => {
+    const aPending = ownerByAdset.has(a) && !ownerByAdset.get(a)!.backfilledAt ? 0 : 1;
+    const bPending = ownerByAdset.has(b) && !ownerByAdset.get(b)!.backfilledAt ? 0 : 1;
+    return aPending - bPending;
+  });
+
   const allAdIds = new Set<string>();
   const failed: string[] = [];
+  let totalRows = 0;
+  let backfillsDone = 0;
 
   for (const adsetId of adsetIds) {
+    const ownerRow = ownerByAdset.get(adsetId);
+    const wantsBackfill = !!ownerRow && !ownerRow.backfilledAt;
+    const doBackfill = wantsBackfill && backfillsDone < MAX_BACKFILLS_PER_RUN;
+
     try {
-      // Keep the ad set's display name fresh on its owner row.
+      let since = windowSince;
+
+      // Keep the ad set's display name fresh; created_time bounds the backfill.
       try {
-        const info = await metaApi<{ name?: string }>(`/${adsetId}`, { params: { fields: "name" } });
-        if (info?.name) {
+        const info = await metaApi<{ name?: string; created_time?: string }>(`/${adsetId}`, { params: { fields: "name,created_time" } });
+        if (info?.name && ownerRow) {
           await db.update(schema.adsetOwners).set({ adsetName: info.name, updatedAt: new Date() }).where(eq(schema.adsetOwners.adsetId, adsetId));
         }
-      } catch { /* name is best-effort */ }
+        if (doBackfill) {
+          const created = info?.created_time?.slice(0, 10);
+          since = created && created > oldestAllowed ? created : oldestAllowed;
+        }
+      } catch {
+        // Name/created_time are best-effort; a backfill without created_time
+        // falls back to the full retention window.
+        if (doBackfill) since = oldestAllowed;
+      }
 
       // Refresh ad metadata (names + ad→adset mapping) for this ad set.
       const ads = await getAds(adsetId, 200);
+      const adsetAdIds = new Set<string>();
       for (const ad of ads) {
-        allAdIds.add(ad.id);
+        adsetAdIds.add(ad.id);
         await db.insert(schema.adsCache).values({
           id: ad.id,
           adsetId: ad.adset_id || adsetId,
@@ -117,36 +158,61 @@ export async function runEditorInsightsSync() {
           set: { name: ad.name, status: ad.status, adsetId: ad.adset_id || adsetId, syncedAt: new Date() },
         });
       }
-      // Per-ad daily insights for the whole ad set in one call.
-      const data = await getAdsetInsightsByAd(adsetId, { since, until: today }, 1);
-      for (const r of data) {
-        if (r.ad_id) { rows.push(toRow(r, r.ad_id, "ad")); allAdIds.add(r.ad_id); }
+
+      // Per-ad daily insights, chunked so lifetime backfills stay within Meta's
+      // limits on daily-granularity queries.
+      const rows: InsightRow[] = [];
+      let cursor = since;
+      while (cursor <= today) {
+        const chunkEnd = addDays(cursor, BACKFILL_CHUNK_DAYS - 1) < today ? addDays(cursor, BACKFILL_CHUNK_DAYS - 1) : today;
+        const data = await getAdsetInsightsByAd(adsetId, { since: cursor, until: chunkEnd }, 1);
+        for (const r of data) {
+          if (r.ad_id) { rows.push(toRow(r, r.ad_id, "ad")); adsetAdIds.add(r.ad_id); }
+        }
+        cursor = addDays(chunkEnd, 1);
       }
+
+      // Replace this ad set's rows within the fetched range, then persist
+      // immediately — a later failure must not lose this ad set's data.
+      const adIdArr = [...adsetAdIds];
+      if (adIdArr.length) {
+        await db.delete(schema.insights).where(
+          and(
+            eq(schema.insights.entityType, "ad"),
+            inArray(schema.insights.entityId, adIdArr),
+            gte(schema.insights.dateStart, since),
+            lte(schema.insights.dateStop, today),
+          )
+        );
+      }
+      const CHUNK = 200;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const slice = rows.slice(i, i + CHUNK);
+        if (slice.length) await db.insert(schema.insights).values(slice);
+      }
+
+      if (doBackfill) {
+        await db.update(schema.adsetOwners).set({ backfilledAt: new Date(), updatedAt: new Date() }).where(eq(schema.adsetOwners.adsetId, adsetId));
+        backfillsDone++;
+      }
+
+      totalRows += rows.length;
+      adIdArr.forEach((id) => allAdIds.add(id));
     } catch (e) {
       failed.push(adsetId);
       console.error(`Insights fetch failed for ad set ${adsetId}:`, e instanceof Error ? e.message : e);
     }
   }
 
-  // Replace ad-level insights for all ads in these ad sets within the window.
-  const adIdArr = [...allAdIds];
-  if (adIdArr.length) {
-    await db.delete(schema.insights).where(
-      and(
-        eq(schema.insights.entityType, "ad"),
-        inArray(schema.insights.entityId, adIdArr),
-        gte(schema.insights.dateStart, since),
-        lte(schema.insights.dateStop, today),
-      )
-    );
-  }
-  const CHUNK = 200;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const slice = rows.slice(i, i + CHUNK);
-    if (slice.length) await db.insert(schema.insights).values(slice);
-  }
-
-  return { adsets: adsetIds.length, ads: adIdArr.length, adInsightRows: rows.length, failed: failed.length };
+  const backfillsPending = owners.filter((o) => !o.backfilledAt).length - backfillsDone;
+  return {
+    adsets: adsetIds.length,
+    ads: allAdIds.size,
+    adInsightRows: totalRows,
+    backfilled: backfillsDone,
+    backfillsPending: Math.max(backfillsPending, 0),
+    failed: failed.length,
+  };
 }
 
 export async function runSync() {
