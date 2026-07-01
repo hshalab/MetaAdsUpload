@@ -3,6 +3,7 @@
 import { Video, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration, formatFileSize, formatResolution } from "@/lib/format-utils";
+import { fmtSpend } from "./library-card";
 import { TableRow, TableCell } from "@/components/ui/table";
 import type { Creative } from "./use-library-store";
 
@@ -77,6 +78,32 @@ export function LibraryListRow({ creative: c, selected, focused, onClick }: Libr
 
       {/* Size */}
       <TableCell className="text-slate-500">{formatFileSize(c.fileSize)}</TableCell>
+
+      {/* Spend */}
+      <TableCell className="text-white font-mono">
+        {c.metrics && c.metrics.adCount > 0 ? fmtSpend(c.metrics.spend) : <span className="text-slate-600">—</span>}
+      </TableCell>
+
+      {/* ROAS */}
+      <TableCell className="font-mono">
+        {c.metrics && c.metrics.spend > 0 ? (
+          <span className={cn(c.metrics.roas >= 2 ? "text-emerald-400" : c.metrics.roas >= 1 ? "text-yellow-400" : "text-red-400")}>
+            {c.metrics.roas.toFixed(2)}
+          </span>
+        ) : (
+          <span className="text-slate-600">—</span>
+        )}
+      </TableCell>
+
+      {/* Hook rate */}
+      <TableCell className="text-slate-400 font-mono">
+        {c.metrics && c.metrics.hookRate > 0 ? `${c.metrics.hookRate.toFixed(1)}%` : <span className="text-slate-600">—</span>}
+      </TableCell>
+
+      {/* Hold rate */}
+      <TableCell className="text-slate-400 font-mono">
+        {c.metrics && c.metrics.holdRate > 0 ? `${c.metrics.holdRate.toFixed(1)}%` : <span className="text-slate-600">—</span>}
+      </TableCell>
 
       {/* Status */}
       <TableCell>

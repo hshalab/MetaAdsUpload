@@ -6,11 +6,11 @@ export interface Ad {
   campaign_id: string;
   name: string;
   status: string;
-  creative?: { id: string };
+  creative?: { id: string; video_id?: string; image_hash?: string };
   preview_shareable_link?: string;
 }
 
-const AD_FIELDS = "id,adset_id,campaign_id,name,status,creative{id},preview_shareable_link";
+const AD_FIELDS = "id,adset_id,campaign_id,name,status,creative{id,video_id,image_hash},preview_shareable_link";
 
 export async function getAds(adsetId?: string, limit = 200, statusFilter?: "ACTIVE" | "PAUSED" | "ARCHIVED") {
   const endpoint = adsetId ? `/${adsetId}/ads` : `/${await getAdAccountId()}/ads`;

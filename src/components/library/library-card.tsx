@@ -14,6 +14,19 @@ const STATUS_COLORS: Record<string, string> = {
   archived: "bg-slate-500/10 text-slate-400 border-slate-500/20",
 };
 
+export const CLASSIFICATION_BADGES: Record<string, { label: string; className: string }> = {
+  breakthrough: { label: "🏆 Breakthrough", className: "bg-violet-500/15 text-violet-300 border-violet-500/30" },
+  spend_winner: { label: "🏆 Winner", className: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+  kpi_winner: { label: "📈 KPI Winner", className: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30" },
+  new: { label: "🧪 Testing", className: "bg-blue-500/15 text-blue-300 border-blue-500/30" },
+  loser: { label: "💀 Loser", className: "bg-red-500/15 text-red-300 border-red-500/30" },
+};
+
+const nf = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 });
+export function fmtSpend(v: number): string {
+  return v >= 10000 ? `${nf.format(Math.round(v / 1000))}k` : nf.format(Math.round(v));
+}
+
 interface LibraryCardProps {
   creative: Creative;
   selected: boolean;
@@ -121,6 +134,18 @@ export function LibraryCard({
         >
           {c.status === "in_review" ? "review" : c.status}
         </span>
+
+        {/* Classification badge (from Evolve ad classifications) */}
+        {c.metrics?.classification && CLASSIFICATION_BADGES[c.metrics.classification] && (
+          <span
+            className={cn(
+              "absolute top-2 left-8 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border",
+              CLASSIFICATION_BADGES[c.metrics.classification].className
+            )}
+          >
+            {CLASSIFICATION_BADGES[c.metrics.classification].label}
+          </span>
+        )}
       </div>
 
       {/* Info */}
@@ -176,6 +201,34 @@ export function LibraryCard({
             </span>
           )}
         </div>
+        {/* Performance strip */}
+        {c.metrics && c.metrics.adCount > 0 && (
+          <div className="mt-1.5 grid grid-cols-4 gap-1 rounded-md bg-white/[0.03] border border-white/[0.05] px-1.5 py-1">
+            <div className="min-w-0">
+              <p className="text-[8px] uppercase tracking-wide text-slate-600">Spend</p>
+              <p className="text-[10px] font-semibold text-white truncate">{fmtSpend(c.metrics.spend)}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[8px] uppercase tracking-wide text-slate-600">ROAS</p>
+              <p className={cn("text-[10px] font-semibold truncate", c.metrics.roas >= 2 ? "text-emerald-400" : c.metrics.roas >= 1 ? "text-yellow-400" : "text-red-400")}>
+                {c.metrics.spend > 0 ? c.metrics.roas.toFixed(2) : "—"}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[8px] uppercase tracking-wide text-slate-600">Hook</p>
+              <p className="text-[10px] font-semibold text-white truncate">
+                {c.metrics.hookRate > 0 ? `${c.metrics.hookRate.toFixed(1)}%` : "—"}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[8px] uppercase tracking-wide text-slate-600">Hold</p>
+              <p className="text-[10px] font-semibold text-white truncate">
+                {c.metrics.holdRate > 0 ? `${c.metrics.holdRate.toFixed(1)}%` : "—"}
+              </p>
+            </div>
+          </div>
+        )}
+
         {c.tags.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {c.tags.slice(0, 3).map((tag) => (

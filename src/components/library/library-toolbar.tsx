@@ -14,10 +14,23 @@ import type {
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "date_desc", label: "Newest first" },
   { value: "date_asc", label: "Oldest first" },
+  { value: "spend_desc", label: "Top spend" },
+  { value: "roas_desc", label: "Best ROAS" },
+  { value: "hook_desc", label: "Best hook rate" },
+  { value: "hold_desc", label: "Best hold rate" },
+  { value: "ctr_desc", label: "Best CTR" },
   { value: "name_asc", label: "Name A-Z" },
   { value: "name_desc", label: "Name Z-A" },
   { value: "size_desc", label: "Largest" },
   { value: "size_asc", label: "Smallest" },
+];
+
+const METRIC_WINDOWS: { days: number; label: string }[] = [
+  { days: 7, label: "7D" },
+  { days: 14, label: "14D" },
+  { days: 30, label: "30D" },
+  { days: 90, label: "90D" },
+  { days: 0, label: "ALL" },
 ];
 
 const DENSITY_ICONS: Record<Density, typeof Minus> = {
@@ -36,6 +49,7 @@ interface LibraryToolbarProps {
   showFilters: boolean;
   editorFilter: string;
   batchFilter: string;
+  metricDays: number;
   dispatch: Dispatch<LibraryAction>;
 }
 
@@ -49,6 +63,7 @@ export function LibraryToolbar({
   showFilters,
   editorFilter,
   batchFilter,
+  metricDays,
   dispatch,
 }: LibraryToolbarProps) {
   const currentSort = SORT_OPTIONS.find((o) => o.value === sort)!;
@@ -119,6 +134,22 @@ export function LibraryToolbar({
 
         {/* Spacer */}
         <div className="flex-1" />
+
+        {/* Performance window */}
+        <div className="flex gap-0.5 border border-white/[0.06] rounded-lg p-0.5" title="Performance data window">
+          {METRIC_WINDOWS.map((w) => (
+            <button
+              key={w.days}
+              onClick={() => dispatch({ type: "SET_METRIC_DAYS", days: w.days })}
+              className={cn(
+                "px-2 py-1 rounded-md text-[10px] font-semibold transition-all",
+                metricDays === w.days ? "bg-cyan-500/10 text-cyan-400" : "text-slate-600 hover:text-slate-400"
+              )}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
 
         {/* Sort dropdown */}
         <div className="relative group">

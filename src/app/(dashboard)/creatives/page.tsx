@@ -39,6 +39,7 @@ export default function CreativesPage() {
       if (state.editorFilter) params.set("editor", state.editorFilter);
       if (state.batchFilter) params.set("batch", state.batchFilter);
       if (state.sort !== "date_desc") params.set("sort", state.sort);
+      params.set("days", String(state.metricDays));
 
       try {
         const res = await fetch(`/api/library?${params}`);
@@ -53,7 +54,7 @@ export default function CreativesPage() {
         dispatch({ type: "SET_LOADING", loading: false });
       }
     },
-    [state.search, state.typeFilter, state.statusFilter, state.editorFilter, state.batchFilter, state.sort, dispatch]
+    [state.search, state.typeFilter, state.statusFilter, state.editorFilter, state.batchFilter, state.sort, state.metricDays, dispatch]
   );
 
   useEffect(() => {
@@ -270,6 +271,7 @@ export default function CreativesPage() {
         showFilters={state.showFilters}
         editorFilter={state.editorFilter}
         batchFilter={state.batchFilter}
+        metricDays={state.metricDays}
         dispatch={dispatch}
       />
 
@@ -453,6 +455,7 @@ export default function CreativesPage() {
       {/* Detail Side Panel */}
       {detailAsset && (
         <LibraryDetailPanel
+          metricDays={state.metricDays}
           creative={detailAsset}
           onClose={() => dispatch({ type: "SET_DETAIL", id: null })}
           onRefresh={fetchCreatives}

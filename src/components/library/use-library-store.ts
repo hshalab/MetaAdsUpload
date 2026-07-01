@@ -4,6 +4,20 @@ import { useReducer, useCallback } from "react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+export interface CreativeMetricsClient {
+  adCount: number;
+  activeAdCount: number;
+  spend: number;
+  revenue: number;
+  purchases: number;
+  roas: number;
+  cpa: number | null;
+  ctr: number;
+  hookRate: number;
+  holdRate: number;
+  classification: string | null;
+}
+
 export interface Creative {
   id: number;
   name: string;
@@ -22,11 +36,14 @@ export interface Creative {
   status: string;
   assignmentId: string | null;
   createdAt: string;
+  metrics?: CreativeMetricsClient | null;
 }
 
 export type ViewMode = "grid" | "list";
 export type Density = "sm" | "md" | "lg";
-export type SortOption = "date_desc" | "date_asc" | "name_asc" | "name_desc" | "size_desc" | "size_asc";
+export type SortOption =
+  | "date_desc" | "date_asc" | "name_asc" | "name_desc" | "size_desc" | "size_asc"
+  | "spend_desc" | "roas_desc" | "hook_desc" | "hold_desc" | "ctr_desc";
 export type StatusFilter = "all" | "uploaded" | "in_review" | "approved" | "archived";
 export type TypeFilter = "all" | "video" | "image";
 
@@ -51,6 +68,7 @@ export interface LibraryState {
   editorFilter: string;
   batchFilter: string;
   sort: SortOption;
+  metricDays: number; // performance window: 7 | 14 | 30 | 90 | 0 (lifetime)
 
   // UI
   viewMode: ViewMode;
@@ -77,6 +95,7 @@ export type LibraryAction =
   | { type: "SET_EDITOR_FILTER"; filter: string }
   | { type: "SET_BATCH_FILTER"; filter: string }
   | { type: "SET_SORT"; sort: SortOption }
+  | { type: "SET_METRIC_DAYS"; days: number }
   | { type: "SET_VIEW_MODE"; mode: ViewMode }
   | { type: "SET_DENSITY"; density: Density }
   | { type: "TOGGLE_SELECT"; id: number }
@@ -103,6 +122,7 @@ export const initialState: LibraryState = {
   editorFilter: "",
   batchFilter: "",
   sort: "date_desc",
+  metricDays: 30,
   viewMode: "grid",
   density: "md",
   selectedIds: new Set(),
@@ -132,6 +152,8 @@ export function libraryReducer(state: LibraryState, action: LibraryAction): Libr
       return { ...state, batchFilter: action.filter };
     case "SET_SORT":
       return { ...state, sort: action.sort };
+    case "SET_METRIC_DAYS":
+      return { ...state, metricDays: action.days };
     case "SET_VIEW_MODE":
       return { ...state, viewMode: action.mode };
     case "SET_DENSITY":

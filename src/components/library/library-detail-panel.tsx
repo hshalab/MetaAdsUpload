@@ -1,14 +1,28 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
-  X, Film, Download, Trash2, Tag, ExternalLink, Copy,
+  X, Film, Download, Trash2, Tag, ExternalLink, Copy, TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration, formatFileSize, formatResolution } from "@/lib/format-utils";
 import { VideoPlayer } from "@/components/review/video-player";
 import type { Creative } from "./use-library-store";
 import { toast } from "sonner";
+import { CLASSIFICATION_BADGES, fmtSpend } from "./library-card";
+
+interface AdBreakdownRow {
+  adId: string;
+  adName: string;
+  adStatus: string;
+  spend: number;
+  roas: number;
+  purchases: number;
+  hookRate: number;
+  holdRate: number;
+  ctr: number;
+  classification: string | null;
+}
 
 const STATUS_COLORS: Record<string, string> = {
   uploaded: "bg-blue-500/10 text-blue-400 border-blue-500/20",
@@ -19,13 +33,31 @@ const STATUS_COLORS: Record<string, string> = {
 
 interface LibraryDetailPanelProps {
   creative: Creative;
+  metricDays: number;
   onClose: () => void;
   onRefresh: () => void;
 }
 
-export function LibraryDetailPanel({ creative: c, onClose, onRefresh }: LibraryDetailPanelProps) {
+export function LibraryDetailPanel({ creative: c, metricDays, onClose, onRefresh }: LibraryDetailPanelProps) {
   const [editTags, setEditTags] = useState<string[]>([...c.tags]);
   const [newTag, setNewTag] = useState("");
+  const [ads, setAds] = useState<AdBreakdownRow[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAds(null);
+    fetch(`/api/library/${c.id}/ads?days=${metricDays}`)
+      .then((r) => (r.ok ? r.json() : { ads: [] }))
+      .then((data) => {
+        if (!cancelled) setAds(data.ads || []);
+      })
+      .catch(() => {
+        if (!cancelled) setAds([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [c.id, metricDays]);
 
   const patchAsset = useCallback(
     async (updates: Record<string, unknown>) => {
@@ -136,6 +168,68 @@ export function LibraryDetailPanel({ creative: c, onClose, onRefresh }: LibraryD
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Performance (creative ↔ Meta ads) */}
+          <div>
+            <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <TrendingUp className="h-3 w-3" /> Performance · {metricDays === 0 ? "lifetime" : `last ${metricDays}d`}
+            </label>
+            {c.metrics && c.metrics.adCount > 0 ? (
+              <>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                  {[
+                    { label: "Spend", value: fmtSpend(c.metrics.spend) },
+                    { label: "ROAS", value: c.metrics.spend > 0 ? c.metrics.roas.toFixed(2) : "—" },
+                    { label: "Purchases", value: String(c.metrics.purchases) },
+                    { label: "Hook", value: c.metrics.hookRate > 0 ? `${c.metrics.hookRate.toFixed(1)}%` : "—" },
+                    { label: "Hold", value: c.metrics.holdRate > 0 ? `${c.metrics.holdRate.toFixed(1)}%` : "—" },
+                    { label: "CTR", value: c.metrics.ctr > 0 ? `${c.metrics.ctr.toFixed(2)}%` : "—" },
+                  ].map((m) => (
+                    <div key={m.label} className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-wide text-slate-600">{m.label}</p>
+                      <p className="text-xs font-semibold text-white">{m.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {ads === null ? (
+                    <p className="text-[10px] text-slate-600">Loading ads…</p>
+                  ) : ads.length === 0 ? (
+                    <p className="text-[10px] text-slate-600">No linked ads found.</p>
+                  ) : (
+                    ads.map((ad) => (
+                      <div key={ad.adId} className="rounded-lg bg-white/[0.02] border border-white/[0.05] px-2.5 py-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full shrink-0",
+                              ad.adStatus === "ACTIVE" ? "bg-emerald-400" : "bg-slate-600"
+                            )}
+                          />
+                          <p className="text-[10px] text-white truncate flex-1" title={ad.adName}>{ad.adName}</p>
+                          {ad.classification && CLASSIFICATION_BADGES[ad.classification] && (
+                            <span className={cn("text-[8px] font-semibold px-1 py-0.5 rounded-full border shrink-0", CLASSIFICATION_BADGES[ad.classification].className)}>
+                              {CLASSIFICATION_BADGES[ad.classification].label}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 flex gap-3 text-[9px] font-mono text-slate-500">
+                          <span>Spend {fmtSpend(ad.spend)}</span>
+                          <span>ROAS {ad.spend > 0 ? ad.roas.toFixed(2) : "—"}</span>
+                          <span>Hook {ad.hookRate > 0 ? `${ad.hookRate.toFixed(1)}%` : "—"}</span>
+                          <span>Hold {ad.holdRate > 0 ? `${ad.holdRate.toFixed(1)}%` : "—"}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="mt-1.5 text-[10px] text-slate-600">
+                Not linked to any Meta ad yet — it links automatically when the asset is published (or on the next ads sync).
+              </p>
+            )}
           </div>
 
           {/* Info grid */}

@@ -155,9 +155,17 @@ export async function runEditorInsightsSync() {
           name: ad.name,
           status: ad.status,
           creativeId: ad.creative?.id || null,
+          videoId: ad.creative?.video_id || null,
+          imageHash: ad.creative?.image_hash || null,
         }).onConflictDoUpdate({
           target: schema.adsCache.id,
-          set: { name: ad.name, status: ad.status, adsetId: ad.adset_id || adsetId, syncedAt: new Date() },
+          set: {
+            name: ad.name, status: ad.status, adsetId: ad.adset_id || adsetId,
+            creativeId: ad.creative?.id || null,
+            videoId: ad.creative?.video_id || null,
+            imageHash: ad.creative?.image_hash || null,
+            syncedAt: new Date(),
+          },
         });
       }
 
@@ -243,9 +251,17 @@ export async function runSync() {
       name: ad.name,
       status: ad.status,
       creativeId: ad.creative?.id || null,
+      videoId: ad.creative?.video_id || null,
+      imageHash: ad.creative?.image_hash || null,
     }).onConflictDoUpdate({
       target: schema.adsCache.id,
-      set: { name: ad.name, status: ad.status, syncedAt: new Date() },
+      set: {
+        name: ad.name, status: ad.status,
+        creativeId: ad.creative?.id || null,
+        videoId: ad.creative?.video_id || null,
+        imageHash: ad.creative?.image_hash || null,
+        syncedAt: new Date(),
+      },
     });
   }
 

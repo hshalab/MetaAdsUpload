@@ -268,11 +268,15 @@ export const adsCache = pgTable("ads_cache", {
   name: text("name").notNull(),
   status: text("status").notNull(),
   creativeId: text("creative_id"),
+  videoId: text("video_id"), // creative's video_id — links ads to library creatives
+  imageHash: text("image_hash"), // creative's image_hash — links ads to library creatives
   previewUrl: text("preview_url"),
   syncedAt: timestamp("synced_at").defaultNow().notNull(),
 }, (table) => [
   index("ads_cache_adset_id_idx").on(table.adsetId),
   index("ads_cache_campaign_id_idx").on(table.campaignId),
+  index("ads_cache_video_id_idx").on(table.videoId),
+  index("ads_cache_image_hash_idx").on(table.imageHash),
 ]);
 
 export const insights = pgTable("insights", {

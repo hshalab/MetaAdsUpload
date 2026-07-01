@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
-import { eq, and, ilike, or, desc, asc, sql } from "drizzle-orm";
+import { eq, and, ilike, or, desc, asc, sql, inArray } from "drizzle-orm";
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getR2Client } from "@/lib/r2";
+import { getCreativeMetrics, type CreativeMetrics } from "@/lib/creative-metrics";
+
+const METRIC_SORTS: Record<string, { key: keyof CreativeMetrics; dir: 1 | -1 }> = {
+  spend_desc: { key: "spend", dir: -1 },
+  roas_desc: { key: "roas", dir: -1 },
+  hook_desc: { key: "hookRate", dir: -1 },
+  hold_desc: { key: "holdRate", dir: -1 },
+  ctr_desc: { key: "ctr", dir: -1 },
+};
+
+// Metric sorting needs the whole filtered set aggregated before pagination —
+// capped so a huge library can't blow up the request.
+const METRIC_SORT_MAX_ROWS = 2000;
 
 // GET — List library assets with filters & pagination
 export async function GET(request: NextRequest) {
@@ -57,11 +70,61 @@ export async function GET(request: NextRequest) {
       size_asc: asc(schema.creatives.fileSize),
     };
     const orderClause = sortMap[sort] || sortMap.date_desc;
+    const days = Math.max(0, parseInt(searchParams.get("days") || "30"));
+    const metricSort = METRIC_SORTS[sort];
 
-    const [data, countResult] = await Promise.all([
+    if (metricSort) {
+      // 1. All matching ids (capped) → 2. aggregate → 3. sort → 4. paginate
+      const idRows = await db
+        .select({ id: schema.creatives.id })
+        .from(schema.creatives)
+        .where(where)
+        .orderBy(desc(schema.creatives.createdAt))
+        .limit(METRIC_SORT_MAX_ROWS);
+      const allIds = idRows.map((r) => r.id);
+      const metricsMap = await getCreativeMetrics(allIds, days);
+
+      const sorted = [...allIds].sort((a, b) => {
+        const ma = metricsMap.get(a);
+        const mb = metricsMap.get(b);
+        // creatives with no linked ads always sink to the bottom
+        if (!ma?.adCount && !mb?.adCount) return 0;
+        if (!ma?.adCount) return 1;
+        if (!mb?.adCount) return -1;
+        const va = (ma[metricSort.key] as number | null) ?? -Infinity;
+        const vb = (mb[metricSort.key] as number | null) ?? -Infinity;
+        return metricSort.dir === -1 ? vb - va : va - vb;
+      });
+
+      const pageIds = sorted.slice(offset, offset + limit);
+      const rows = pageIds.length
+        ? await db.select().from(schema.creatives).where(and(where, inArray(schema.creatives.id, pageIds))!)
+        : [];
+      const rowById = new Map(rows.map((r) => [r.id, r]));
+      const data = pageIds
+        .map((id) => rowById.get(id))
+        .filter(Boolean)
+        .map((row) => ({ ...row!, metrics: metricsMap.get(row!.id) ?? null }));
+
+      return NextResponse.json({
+        data,
+        pagination: {
+          page,
+          limit,
+          total: allIds.length,
+          totalPages: Math.ceil(allIds.length / limit),
+        },
+      });
+    }
+
+    const [rows, countResult] = await Promise.all([
       db.select().from(schema.creatives).where(where).orderBy(orderClause).limit(limit).offset(offset),
       db.select({ count: sql<number>`count(*)` }).from(schema.creatives).where(where),
     ]);
+
+    // Attach performance metrics for the returned page (one aggregate query)
+    const metricsMap = await getCreativeMetrics(rows.map((r) => r.id), days);
+    const data = rows.map((row) => ({ ...row, metrics: metricsMap.get(row.id) ?? null }));
 
     return NextResponse.json({
       data,
