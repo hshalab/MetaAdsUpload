@@ -163,7 +163,8 @@ export const templates = pgTable("templates", {
   // Campaign
   objective: text("objective").default("OUTCOME_SALES"),
   budgetType: text("budget_type").default("ABO"), // ABO or CBO
-  dailyBudget: real("daily_budget"), // in SEK
+  dailyBudget: real("daily_budget"), // in `currency` units
+  currency: text("currency").default("SEK"), // budget currency — must match the target ad account
 
   // Ad Copy
   headlines: jsonb("headlines").$type<string[]>().default([]),
@@ -226,6 +227,7 @@ export const creatives = pgTable("creatives", {
 
 export const campaignsCache = pgTable("campaigns_cache", {
   id: text("id").primaryKey(), // Meta campaign ID
+  adAccountId: text("ad_account_id"), // "act_..." — which ad account this belongs to
   name: text("name").notNull(),
   status: text("status").notNull(),
   objective: text("objective"),
@@ -244,6 +246,7 @@ export const campaignsCache = pgTable("campaigns_cache", {
 
 export const adsetsCache = pgTable("adsets_cache", {
   id: text("id").primaryKey(),
+  adAccountId: text("ad_account_id"),
   campaignId: text("campaign_id").notNull(),
   name: text("name").notNull(),
   status: text("status").notNull(),
@@ -263,6 +266,7 @@ export const adsetsCache = pgTable("adsets_cache", {
 
 export const adsCache = pgTable("ads_cache", {
   id: text("id").primaryKey(),
+  adAccountId: text("ad_account_id"),
   adsetId: text("adset_id").notNull(),
   campaignId: text("campaign_id").notNull(),
   name: text("name").notNull(),
@@ -281,6 +285,7 @@ export const adsCache = pgTable("ads_cache", {
 
 export const insights = pgTable("insights", {
   id: serial("id").primaryKey(),
+  adAccountId: text("ad_account_id"),
   entityId: text("entity_id").notNull(),
   entityType: text("entity_type").notNull(), // "campaign" | "adset" | "ad"
   dateStart: date("date_start").notNull(),

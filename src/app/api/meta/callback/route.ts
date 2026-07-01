@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
+import { encryptSecret } from "@/lib/crypto";
+import { invalidateAccountCache } from "@/lib/meta/client";
 
 export async function GET(request: NextRequest) {
   // C4: Auth + admin role check
@@ -74,7 +76,7 @@ export async function GET(request: NextRequest) {
     // Save new connection
     await db.insert(schema.metaConnections).values({
       name: meData.name || "Meta Account",
-      accessToken,
+      accessToken: encryptSecret(accessToken),
       tokenExpiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000) : null,
       facebookUserId: meData.id,
       adAccounts,
@@ -83,6 +85,7 @@ export async function GET(request: NextRequest) {
       activePageId: pages[0]?.id || null,
       isActive: true,
     });
+    invalidateAccountCache();
 
     return NextResponse.redirect(new URL("/settings?success=connected", request.url));
   } catch (err) {

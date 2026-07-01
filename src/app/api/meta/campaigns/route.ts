@@ -1,19 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getCampaigns, createCampaign, updateCampaign } from "@/lib/meta/campaigns";
+import { withAccount } from "@/lib/meta/client";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+// Optional multi-account scoping: pass ?connectionId=<id> (or connectionId in
+// the JSON body for writes) to target a non-active Meta connection.
+function scopeRunner(connectionId: unknown) {
+  const id = typeof connectionId === "string" ? parseInt(connectionId, 10) : typeof connectionId === "number" ? connectionId : NaN;
+  return <T,>(fn: () => Promise<T>): Promise<T> => (Number.isFinite(id) ? withAccount(id as number, fn) : fn());
+}
+
+
+export async function GET(request: NextRequest) {
   try {
     // H8: Auth + admin check
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const campaigns = await getCampaigns();
+    const run = scopeRunner(request.nextUrl.searchParams.get("connectionId"));
+    const campaigns = await run(() => getCampaigns());
 
     // Update cache
     for (const c of campaigns) {

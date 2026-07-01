@@ -4,7 +4,7 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { uploadImage, uploadVideo, createAdCreative, waitForVideoReady, getVideoThumbnail } from "@/lib/meta/creatives";
 import { createAdSet } from "@/lib/meta/adsets";
 import { createAd, createAdWithTextOptions } from "@/lib/meta/ads";
-import { getPageId, getPixelId, metaApi, getAdAccountId, MetaApiError } from "@/lib/meta/client";
+import { getPageId, getPixelId, metaApi, getAdAccountId, MetaApiError, withAccount } from "@/lib/meta/client";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { getR2Client, getR2Bucket } from "@/lib/r2";
@@ -171,6 +171,7 @@ export async function POST(request: NextRequest) {
       pageId: overridePageId,
       pixelId: overridePixelId,
       variants,
+      connectionId,
     } = body as {
       r2Key: string;
       r2Url: string;
@@ -193,11 +194,20 @@ export async function POST(request: NextRequest) {
       pageId?: string;
       pixelId?: string;
       variants?: Array<{ r2Key: string; r2Url: string; filename: string }>;
+      connectionId?: number; // optional: publish via a non-active Meta connection
     };
 
     if (!r2Key || !campaignId || !adCopy) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+
+    // Multi-account: scope every Meta call below to the requested connection.
+    // AsyncLocalStorage propagates it through getPageId/getAdAccountId/etc.
+    const runScoped = <T,>(fn: () => Promise<T>): Promise<T> =>
+      typeof connectionId === "number" && Number.isFinite(connectionId)
+        ? withAccount(connectionId, fn)
+        : fn();
+    return await runScoped(async () => {
 
     // Use existing job record if provided, otherwise create new one
     if (existingJobId) {
@@ -535,6 +545,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, jobId, ...results });
+    });
   } catch (error) {
     // Catch-all for unexpected errors (auth, DB, etc.)
     console.error("Upload from R2 error:", error);

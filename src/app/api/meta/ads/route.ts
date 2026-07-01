@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAds, createAd, updateAd } from "@/lib/meta/ads";
+import { withAccount } from "@/lib/meta/client";
 
 export const dynamic = "force-dynamic";
+
+// Optional multi-account scoping: pass ?connectionId=<id> (or connectionId in
+// the JSON body for writes) to target a non-active Meta connection.
+function scopeRunner(connectionId: unknown) {
+  const id = typeof connectionId === "string" ? parseInt(connectionId, 10) : typeof connectionId === "number" ? connectionId : NaN;
+  return <T,>(fn: () => Promise<T>): Promise<T> => (Number.isFinite(id) ? withAccount(id as number, fn) : fn());
+}
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +21,8 @@ export async function GET(request: NextRequest) {
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const adsetId = request.nextUrl.searchParams.get("adset_id") || undefined;
-    const ads = await getAds(adsetId);
+    const run = scopeRunner(request.nextUrl.searchParams.get("connectionId"));
+    const ads = await run(() => getAds(adsetId));
     return NextResponse.json({ data: ads });
   } catch (error) {
     return NextResponse.json(
@@ -29,7 +39,9 @@ export async function POST(request: NextRequest) {
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
-    const result = await createAd(body);
+    const { connectionId, ...params } = body;
+    const run = scopeRunner(connectionId);
+    const result = await run(() => createAd(params));
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(

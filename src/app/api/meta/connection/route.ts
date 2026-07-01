@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { guardAdmin } from "@/lib/auth-helpers";
+import { invalidateAccountCache } from "@/lib/meta/client";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     await db.update(schema.metaConnections).set(updates).where(eq(schema.metaConnections.id, id));
+    invalidateAccountCache();
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });

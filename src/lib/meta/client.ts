@@ -1,5 +1,7 @@
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { decryptSecret, encryptSecret, isEncrypted } from "@/lib/crypto";
 
 const META_API_VERSION = "v25.0";
 const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -175,7 +177,7 @@ async function refreshTokenIfNeeded(
     await db
       .update(schema.metaConnections)
       .set({
-        accessToken: data.access_token,
+        accessToken: encryptSecret(data.access_token),
         tokenExpiresAt: newExpiresAt,
         updatedAt: new Date(),
       })
@@ -189,39 +191,115 @@ async function refreshTokenIfNeeded(
   }
 }
 
-// Cache token + ad account per request lifecycle (serverless function invocation)
-let _cachedToken: string | null = null;
-let _cachedAdAccountId: string | null = null;
-let _cacheTimestamp = 0;
-const CACHE_TTL_MS = 30_000; // 30 seconds
+// ─── Account context (multi-account) ─────────────────────────────────────────
+// Every Meta call resolves an AccountContext: token + ad account + page +
+// pixel + currency for ONE connection. By default that's the active
+// connection (previous behaviour). Wrap any code in withAccount(connectionId,
+// fn) to target a different connection — nested lib calls pick it up
+// automatically via AsyncLocalStorage, no signature changes needed.
 
-function isCacheValid(): boolean {
-  return Date.now() - _cacheTimestamp < CACHE_TTL_MS;
+export interface AccountContext {
+  connectionId: number | null;
+  token: string;
+  adAccountId: string | null; // "act_..." formatted
+  pageId: string | null;
+  pixelId: string | null;
+  currency: string | null;
+}
+
+const accountAls = new AsyncLocalStorage<{ connectionId: number }>();
+
+/** Run fn with all nested Meta calls scoped to a specific connection. */
+export function withAccount<T>(connectionId: number, fn: () => Promise<T>): Promise<T> {
+  return accountAls.run({ connectionId }, fn);
+}
+
+const ctxCache = new Map<string, { ctx: AccountContext; ts: number }>();
+const CTX_CACHE_TTL_MS = 30_000;
+
+/** Call after changing connections/accounts in settings. */
+export function invalidateAccountCache(): void {
+  ctxCache.clear();
+}
+
+function formatActId(id: string | null | undefined): string | null {
+  if (!id) return null;
+  return id.startsWith("act_") ? id : `act_${id}`;
+}
+
+async function loadConnection(connectionId?: number) {
+  if (connectionId != null) {
+    const rows = await db
+      .select()
+      .from(schema.metaConnections)
+      .where(eq(schema.metaConnections.id, connectionId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+  return getActiveConnection();
+}
+
+export async function resolveAccount(connectionId?: number): Promise<AccountContext> {
+  const override = connectionId ?? accountAls.getStore()?.connectionId;
+  const key = override != null ? `conn:${override}` : "active";
+  const hit = ctxCache.get(key);
+  if (hit && Date.now() - hit.ts < CTX_CACHE_TTL_MS) return hit.ctx;
+
+  const conn = await loadConnection(override);
+  if (conn) {
+    const plainToken = decryptSecret(conn.accessToken);
+
+    // Lazy migration: encrypt legacy plaintext rows once a key is configured
+    if (!isEncrypted(conn.accessToken) && process.env.TOKEN_ENCRYPTION_KEY) {
+      await db
+        .update(schema.metaConnections)
+        .set({ accessToken: encryptSecret(plainToken), updatedAt: new Date() })
+        .where(eq(schema.metaConnections.id, conn.id));
+    }
+
+    const token = await refreshTokenIfNeeded({
+      id: conn.id,
+      accessToken: plainToken,
+      tokenExpiresAt: conn.tokenExpiresAt,
+    });
+
+    const adAccountId = formatActId(conn.activeAdAccountId);
+    const accounts = (conn.adAccounts ?? []) as Array<{ id: string; currency?: string }>;
+    const acc = accounts.find(
+      (a) => a.id === conn.activeAdAccountId || formatActId(a.id) === adAccountId
+    );
+
+    const ctx: AccountContext = {
+      connectionId: conn.id,
+      token,
+      adAccountId,
+      pageId: conn.activePageId ?? null,
+      pixelId: conn.pixelId ?? null,
+      currency: acc?.currency ?? null,
+    };
+    ctxCache.set(key, { ctx, ts: Date.now() });
+    return ctx;
+  }
+
+  // Env fallback (no DB connection configured)
+  const envToken = process.env.META_ACCESS_TOKEN;
+  if (!envToken) {
+    throw new Error("No Meta connection configured. Go to Settings to connect your Meta account.");
+  }
+  const ctx: AccountContext = {
+    connectionId: null,
+    token: envToken,
+    adAccountId: formatActId(process.env.META_AD_ACCOUNT_ID),
+    pageId: process.env.META_PAGE_ID || null,
+    pixelId: process.env.META_PIXEL_ID || null,
+    currency: null,
+  };
+  ctxCache.set(key, { ctx, ts: Date.now() });
+  return ctx;
 }
 
 export async function getAccessToken(): Promise<string> {
-  if (_cachedToken && isCacheValid()) return _cachedToken;
-
-  // First try DB connection
-  const conn = await getActiveConnection();
-  if (conn?.accessToken) {
-    _cachedToken = await refreshTokenIfNeeded(conn);
-    _cachedAdAccountId = conn.activeAdAccountId
-      ? (conn.activeAdAccountId.startsWith("act_") ? conn.activeAdAccountId : `act_${conn.activeAdAccountId}`)
-      : null;
-    _cacheTimestamp = Date.now();
-    return _cachedToken;
-  }
-
-  // Fallback to env var
-  const envToken = process.env.META_ACCESS_TOKEN;
-  if (envToken) {
-    _cachedToken = envToken;
-    _cacheTimestamp = Date.now();
-    return envToken;
-  }
-
-  throw new Error("No Meta connection configured. Go to Settings to connect your Meta account.");
+  return (await resolveAccount()).token;
 }
 
 export class MetaApiError extends Error {
@@ -391,31 +469,21 @@ export async function metaApiPaginated<T = unknown>(
 }
 
 export async function getAdAccountId(): Promise<string> {
-  if (_cachedAdAccountId && isCacheValid()) return _cachedAdAccountId;
-
-  // Calling getAccessToken populates the cache from DB
-  await getAccessToken();
-  if (_cachedAdAccountId) return _cachedAdAccountId;
-
-  // Fallback to env var
-  const id = process.env.META_AD_ACCOUNT_ID;
-  if (!id) throw new Error("No ad account selected. Go to Settings to connect your Meta account.");
-  const formatted = id.startsWith("act_") ? id : `act_${id}`;
-  _cachedAdAccountId = formatted;
-  return formatted;
+  const ctx = await resolveAccount();
+  if (!ctx.adAccountId) {
+    throw new Error("No ad account selected. Go to Settings to connect your Meta account.");
+  }
+  return ctx.adAccountId;
 }
 
 export async function getPageId(): Promise<string> {
-  const conn = await getActiveConnection();
-  if (conn?.activePageId) return conn.activePageId;
-
-  const id = process.env.META_PAGE_ID;
-  if (!id) throw new Error("No page selected. Go to Settings to configure your Meta page.");
-  return id;
+  const ctx = await resolveAccount();
+  if (!ctx.pageId) {
+    throw new Error("No page selected. Go to Settings to configure your Meta page.");
+  }
+  return ctx.pageId;
 }
 
 export async function getPixelId(): Promise<string | null> {
-  const conn = await getActiveConnection();
-  if (conn?.pixelId) return conn.pixelId;
-  return process.env.META_PIXEL_ID || null;
+  return (await resolveAccount()).pixelId;
 }

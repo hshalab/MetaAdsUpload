@@ -15,7 +15,7 @@ import {
 } from "./insights";
 import { getCampaigns } from "./campaigns";
 import { getAds } from "./ads";
-import { metaApi } from "./client";
+import { metaApi, resolveAccount } from "./client";
 
 function extractLinkClicks(actions?: Array<{ action_type: string; value: string }>): number {
   return parseInt(actions?.find((a) => a.action_type === "link_click")?.value || "0", 10);
@@ -27,10 +27,11 @@ function extractVideoViews3s(actions?: Array<{ action_type: string; value: strin
 
 type InsightRow = typeof schema.insights.$inferInsert;
 
-function toRow(row: InsightData, entityId: string, entityType: string): InsightRow {
+function toRow(row: InsightData, entityId: string, entityType: string, adAccountId: string | null): InsightRow {
   const spend = parseFloat(row.spend || "0");
   const purchaseValue = extractPurchaseValue(row.action_values);
   return {
+    adAccountId,
     entityId,
     entityType,
     dateStart: row.date_start,
@@ -91,6 +92,8 @@ function addDays(date: string, n: number): string {
  * sets, not the whole (thousands-of-ads) account.
  */
 export async function runEditorInsightsSync() {
+  const account = await resolveAccount();
+  const adAccountId = account.adAccountId;
   const today = new Date().toISOString().split("T")[0];
   const windowSince = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
   const oldestAllowed = new Date(Date.now() - MAX_HISTORY_DAYS * 86400000).toISOString().split("T")[0];
@@ -150,6 +153,7 @@ export async function runEditorInsightsSync() {
         adsetAdIds.add(ad.id);
         await db.insert(schema.adsCache).values({
           id: ad.id,
+          adAccountId,
           adsetId: ad.adset_id || adsetId,
           campaignId: ad.campaign_id || "",
           name: ad.name,
@@ -161,6 +165,7 @@ export async function runEditorInsightsSync() {
           target: schema.adsCache.id,
           set: {
             name: ad.name, status: ad.status, adsetId: ad.adset_id || adsetId,
+            adAccountId,
             creativeId: ad.creative?.id || null,
             videoId: ad.creative?.video_id || null,
             imageHash: ad.creative?.image_hash || null,
@@ -177,7 +182,7 @@ export async function runEditorInsightsSync() {
         const chunkEnd = addDays(cursor, BACKFILL_CHUNK_DAYS - 1) < today ? addDays(cursor, BACKFILL_CHUNK_DAYS - 1) : today;
         const data = await getAdsetInsightsByAd(adsetId, { since: cursor, until: chunkEnd }, 1);
         for (const r of data) {
-          if (r.ad_id) { rows.push(toRow(r, r.ad_id, "ad")); adsetAdIds.add(r.ad_id); }
+          if (r.ad_id) { rows.push(toRow(r, r.ad_id, "ad", adAccountId)); adsetAdIds.add(r.ad_id); }
         }
         cursor = addDays(chunkEnd, 1);
       }
@@ -226,6 +231,8 @@ export async function runEditorInsightsSync() {
 }
 
 export async function runSync() {
+  const account = await resolveAccount();
+  const adAccountId = account.adAccountId;
   const today = new Date().toISOString().split("T")[0];
   const since = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
 
@@ -233,11 +240,11 @@ export async function runSync() {
   const campaigns = await getCampaigns();
   for (const c of campaigns) {
     await db.insert(schema.campaignsCache).values({
-      id: c.id, name: c.name, status: c.status, objective: c.objective,
+      id: c.id, adAccountId, name: c.name, status: c.status, objective: c.objective,
       dailyBudget: c.daily_budget ? parseFloat(c.daily_budget) / 100 : null,
     }).onConflictDoUpdate({
       target: schema.campaignsCache.id,
-      set: { name: c.name, status: c.status, syncedAt: new Date() },
+      set: { name: c.name, status: c.status, adAccountId, syncedAt: new Date() },
     });
   }
 
@@ -246,6 +253,7 @@ export async function runSync() {
   for (const ad of ads) {
     await db.insert(schema.adsCache).values({
       id: ad.id,
+      adAccountId,
       adsetId: ad.adset_id,
       campaignId: ad.campaign_id,
       name: ad.name,
@@ -257,6 +265,7 @@ export async function runSync() {
       target: schema.adsCache.id,
       set: {
         name: ad.name, status: ad.status,
+        adAccountId,
         creativeId: ad.creative?.id || null,
         videoId: ad.creative?.video_id || null,
         imageHash: ad.creative?.image_hash || null,
@@ -271,7 +280,7 @@ export async function runSync() {
     dateRange: { since, until: today },
     timeIncrement: 1,
   });
-  const campaignRows = campaignInsights.filter((r) => r.campaign_id).map((r) => toRow(r, r.campaign_id!, "campaign"));
+  const campaignRows = campaignInsights.filter((r) => r.campaign_id).map((r) => toRow(r, r.campaign_id!, "campaign", adAccountId));
   await replaceInsights("campaign", since, today, campaignRows);
 
   // 4. Ad-level daily insights (powers the editor dashboard) — with video metrics
@@ -281,7 +290,7 @@ export async function runSync() {
     timeIncrement: 1,
     includeVideoMetrics: true,
   });
-  const adRows = adInsights.filter((r) => r.ad_id).map((r) => toRow(r, r.ad_id!, "ad"));
+  const adRows = adInsights.filter((r) => r.ad_id).map((r) => toRow(r, r.ad_id!, "ad", adAccountId));
   await replaceInsights("ad", since, today, adRows);
 
   return {
