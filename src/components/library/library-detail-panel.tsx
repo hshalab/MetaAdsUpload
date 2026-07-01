@@ -41,18 +41,22 @@ interface LibraryDetailPanelProps {
 export function LibraryDetailPanel({ creative: c, metricDays, onClose, onRefresh }: LibraryDetailPanelProps) {
   const [editTags, setEditTags] = useState<string[]>([...c.tags]);
   const [newTag, setNewTag] = useState("");
-  const [ads, setAds] = useState<AdBreakdownRow[] | null>(null);
+  // keyed by creative+window so switching assets shows "loading" without a
+  // synchronous state reset inside the effect
+  const [adsState, setAdsState] = useState<{ key: string; rows: AdBreakdownRow[] } | null>(null);
+  const adsKey = `${c.id}:${metricDays}`;
+  const ads = adsState && adsState.key === adsKey ? adsState.rows : null;
 
   useEffect(() => {
     let cancelled = false;
-    setAds(null);
+    const key = `${c.id}:${metricDays}`;
     fetch(`/api/library/${c.id}/ads?days=${metricDays}`)
       .then((r) => (r.ok ? r.json() : { ads: [] }))
       .then((data) => {
-        if (!cancelled) setAds(data.ads || []);
+        if (!cancelled) setAdsState({ key, rows: data.ads || [] });
       })
       .catch(() => {
-        if (!cancelled) setAds([]);
+        if (!cancelled) setAdsState({ key, rows: [] });
       });
     return () => {
       cancelled = true;
