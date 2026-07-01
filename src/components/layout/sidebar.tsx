@@ -95,6 +95,7 @@ const navSections: NavSection[] = [
       { href: "/shopify", label: "Shopify ncROAS", icon: ShoppingBag },
       { href: "/options", label: "Options", icon: SlidersHorizontal },
       { href: "/editors", label: "Editors", icon: Users },
+      { href: "/scorecards", label: "Scorecards", icon: Users },
       { href: "/trueprofit", label: "TrueProfit", icon: DollarSign },
       { href: "/rules", label: "Rules", icon: Zap },
       { href: "/settings", label: "Settings", icon: Settings },

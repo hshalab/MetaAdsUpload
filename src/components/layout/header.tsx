@@ -13,6 +13,7 @@ const pageTitles: Record<string, string> = {
   "/timer": "Timer",
   "/options": "Options",
   "/editors": "Editor Performance",
+  "/scorecards": "Editor Scorecards",
   "/rules": "Automation Rules",
   "/settings": "Settings",
 };

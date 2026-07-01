@@ -1,14 +1,33 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rate-limit";
 import * as bcrypt from "bcryptjs";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { slugify } from "@/lib/bonus";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const rateLimitResponse = checkRateLimit(request, 5, 60_000);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const body = await request.json();
-    const { name, email, password, userType } = body;
+    const { name, email, password, userType, inviteCode } = body;
+
+    // Invite gate: with REGISTRATION_INVITE_CODE set, the code is required.
+    // In production WITHOUT a configured code, registration is closed —
+    // an ops tool must never expose open self-signup.
+    const requiredCode = process.env.REGISTRATION_INVITE_CODE;
+    if (requiredCode) {
+      if (inviteCode !== requiredCode) {
+        return NextResponse.json({ error: "A valid invite code is required" }, { status: 403 });
+      }
+    } else if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        { error: "Registration is closed. Ask your admin for an invite (set REGISTRATION_INVITE_CODE to enable)." },
+        { status: 403 }
+      );
+    }
 
     // Validate required fields
     if (!name || !name.trim()) {

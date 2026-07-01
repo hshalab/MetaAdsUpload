@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
+import { notifyAssignmentEvent } from "@/lib/notifications";
 import { eq, desc, sql } from "drizzle-orm";
 
 // GET /api/assignments/:id/versions — list all versions for an assignment
@@ -135,6 +136,9 @@ export async function POST(
         reviewStatus: "no_status",
       })
       .returning();
+
+    // Fire-and-forget WhatsApp notification to admin
+    void notifyAssignmentEvent("version_uploaded", assignment);
 
     // Update assignment's currentVersionId and deliverableUrl
     await db

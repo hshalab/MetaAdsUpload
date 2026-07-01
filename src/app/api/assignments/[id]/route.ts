@@ -118,7 +118,7 @@ export async function PUT(
       offerTypeId, scriptStructureId, customerAvatarIds, landingPage, assignedToId,
       creativeStrategistId, creativeStrategistName, priority, dueDate, estimatedMinutes,
       videoLengthSeconds, description, scriptContent, revisionFeedback,
-      strategistNotes,
+      strategistNotes, briefContent, references,
     } = body;
 
     // H2: Input validation — normalize priority to lowercase for DB
@@ -167,6 +167,8 @@ export async function PUT(
     if (videoLengthSeconds !== undefined) updateData.videoLengthSeconds = videoLengthSeconds;
     if (description !== undefined) updateData.description = description;
     if (scriptContent !== undefined) updateData.scriptContent = scriptContent;
+    if (briefContent !== undefined) updateData.briefContent = briefContent;
+    if (references !== undefined) updateData.references = Array.isArray(references) ? references : [];
     if (revisionFeedback !== undefined) updateData.revisionFeedback = revisionFeedback;
     if (strategistNotes !== undefined) updateData.strategistNotes = strategistNotes;
 

@@ -13,6 +13,7 @@ export const users = pgTable("users", {
   publicPagePassword: text("public_page_password"), // optional bcrypt hash to gate the public page
   isActive: boolean("is_active").default(true).notNull(),
   hourlyRate: real("hourly_rate"),
+  phone: text("phone"), // E.164, e.g. +46701234567 — used for WhatsApp notifications
   timezone: text("timezone").default("Europe/Stockholm"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -116,6 +117,8 @@ export const assignments = pgTable("assignments", {
   completedAt: timestamp("completed_at"),
   estimatedMinutes: integer("estimated_minutes"),
   videoLengthSeconds: integer("video_length_seconds"),
+  briefContent: text("brief_content"), // full brief body (markdown) — replaces Notion
+  references: jsonb("references").$type<Array<{ id: string; kind: "url" | "library"; value: string; label?: string; note?: string }>>().default([]),
   scriptContent: jsonb("script_content").$type<{ hooks: Array<{ id: string; label: string; eng: string; se: string }>; body: { eng: string; se: string } }>(),
   autoName: text("auto_name"),
   revisionFeedback: text("revision_feedback"),
@@ -135,6 +138,25 @@ export const assignments = pgTable("assignments", {
 ]);
 
 // ─── Time Entries ────────────────────────────────────────────────────────────
+
+export const briefTemplates = pgTable("brief_templates", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  briefContent: text("brief_content"),
+  formatId: text("format_id"),
+  angleId: text("angle_id"),
+  productId: text("product_id"),
+  countryId: text("country_id"),
+  offerTypeId: text("offer_type_id"),
+  scriptStructureId: text("script_structure_id"),
+  customerAvatarIds: jsonb("customer_avatar_ids").$type<string[]>().default([]),
+  estimatedMinutes: integer("estimated_minutes"),
+  priority: text("priority").default("medium"),
+  references: jsonb("references").$type<Array<{ id: string; kind: "url" | "library"; value: string; label?: string; note?: string }>>().default([]),
+  scriptContent: jsonb("script_content").$type<{ hooks: Array<{ id: string; label: string; eng: string; se: string }>; body: { eng: string; se: string } }>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 export const timeEntries = pgTable("time_entries", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),

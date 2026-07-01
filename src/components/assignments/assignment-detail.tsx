@@ -545,6 +545,27 @@ export function AssignmentDetail({
               )}
 
               {/* Description */}
+              {(assignment as { briefContent?: string | null }).briefContent && (
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Full Brief</h4>
+                  <div className="text-sm bg-muted/50 rounded-lg p-3 whitespace-pre-wrap">
+                    {(assignment as { briefContent?: string | null }).briefContent}
+                  </div>
+                </div>
+              )}
+              {((assignment as { references?: Array<{ id: string; value: string; note?: string }> }).references?.length ?? 0) > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">References</h4>
+                  <div className="space-y-1">
+                    {(assignment as { references?: Array<{ id: string; value: string; note?: string }> }).references!.map((ref) => (
+                      <div key={ref.id} className="flex items-center gap-2 text-xs">
+                        <a href={ref.value} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline truncate max-w-[260px]">{ref.value}</a>
+                        {ref.note && <span className="text-slate-500">— {ref.note}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {assignment.description && (
                 <div>
                   <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">

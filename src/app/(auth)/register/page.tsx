@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [userType, setUserType] = useState<UserType>(null);
   const [error, setError] = useState("");
@@ -53,7 +54,7 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, userType }),
+        body: JSON.stringify({ name, email, password, userType, inviteCode }),
       });
 
       const data = await res.json();
@@ -121,6 +122,17 @@ export default function RegisterPage() {
 
             {/* Password */}
             <div className="space-y-1.5">
+              <label htmlFor="inviteCode" className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Invite code
+              </label>
+              <input
+                id="inviteCode"
+                type="text"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                placeholder="From your admin"
+                className="w-full mt-1.5 mb-4 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50"
+              />
               <label htmlFor="password" className="text-xs font-medium text-slate-400 uppercase tracking-wider">
                 Password
               </label>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
+import { notifyAssignmentEvent } from "@/lib/notifications";
 import { eq } from "drizzle-orm";
 
 export async function PATCH(
@@ -84,6 +85,13 @@ export async function PATCH(
       .set(updateData)
       .where(eq(schema.assignments.id, id))
       .returning();
+
+    // Fire-and-forget WhatsApp notifications
+    if (dbStatus === "revision") {
+      void notifyAssignmentEvent("revision_requested", current);
+    } else if (dbStatus === "posted") {
+      void notifyAssignmentEvent("completed", current);
+    }
 
     return NextResponse.json(assignment);
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { eq, and, sql, desc, asc, inArray } from "drizzle-orm";
+import { notifyAssignmentEvent } from "@/lib/notifications";
 import { generateAutoName } from "@/lib/auto-name";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     // Get total tracked seconds for each assignment
     const assignmentIds = assignments.map(a => a.id);
-    let timeMap = new Map<string, number>();
+    const timeMap = new Map<string, number>();
 
     if (assignmentIds.length > 0) {
       const timeSums = await db
@@ -146,6 +147,8 @@ export async function POST(request: NextRequest) {
       estimatedMinutes,
       description,
       scriptContent,
+      briefContent,
+      references,
     } = body;
 
     // ─── Draft creation: instant empty assignment ───
@@ -254,11 +257,16 @@ export async function POST(request: NextRequest) {
         dueDate: dueDate ? new Date(dueDate) : null,
         estimatedMinutes: estimatedMinutes || null,
         scriptContent: scriptContent || null,
+        briefContent: typeof briefContent === "string" ? briefContent : null,
+        references: Array.isArray(references) ? references : [],
         autoName,
         createdAt: now,
         updatedAt: now,
       })
       .returning();
+
+    // Fire-and-forget WhatsApp notification to the assigned editor
+    void notifyAssignmentEvent("assigned", assignment);
 
     return NextResponse.json(assignment, { status: 201 });
   } catch (error) {

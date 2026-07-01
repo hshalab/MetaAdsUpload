@@ -76,6 +76,8 @@ interface FormState {
   priority: AssignmentPriority;
   dueDate: string | undefined;
   description: string;
+  briefContent: string;
+  references: Array<{ id: string; kind: "url" | "library"; value: string; label?: string; note?: string }>;
 }
 
 const PRIORITIES: { value: AssignmentPriority; label: string; color: string }[] = [
@@ -134,6 +136,8 @@ const emptyForm: FormState = {
   priority: "MEDIUM",
   dueDate: undefined,
   description: "",
+  briefContent: "",
+  references: [],
 };
 
 const emptyScript: ScriptContent = {
@@ -291,6 +295,8 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
     payload.priority = f.priority;
     payload.dueDate = f.dueDate ? new Date(f.dueDate).toISOString().split("T")[0] : null;
     payload.description = f.description || null;
+    payload.briefContent = f.briefContent || null;
+    payload.references = f.references;
     payload.scriptContent = hasScriptContent ? s : null;
 
     try {
@@ -380,6 +386,8 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
         priority: assignment.priority,
         dueDate: assignment.dueDate ? new Date(assignment.dueDate).toISOString() : undefined,
         description: assignment.description || "",
+        briefContent: (assignment as { briefContent?: string | null }).briefContent || "",
+        references: (assignment as { references?: FormState["references"] }).references || [],
       });
       if (assignment.scriptContent) {
         setScript(assignment.scriptContent);
@@ -832,6 +840,50 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
                         onChange={(e) => updateForm({ description: e.target.value })}
                         rows={4} placeholder="Anything the editor needs to know..."
                         className="bg-white/[0.03] border-white/[0.06] text-sm resize-none" />
+                    </div>
+
+                    {/* Full Brief (Notion replacement) */}
+                    <div className="rounded-xl border border-white/[0.04] bg-white/[0.015] p-5 space-y-3">
+                      <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Full Brief</Label>
+                      <Textarea value={form.briefContent}
+                        onChange={(e) => updateForm({ briefContent: e.target.value })}
+                        rows={10} placeholder={"The complete brief (markdown supported):\n\n## Concept\n## Hook direction\n## Must-include shots\n## Don'ts"}
+                        className="bg-white/[0.03] border-white/[0.06] text-sm font-mono resize-y" />
+                    </div>
+
+                    {/* References / inspiration links */}
+                    <div className="rounded-xl border border-white/[0.04] bg-white/[0.015] p-5 space-y-3">
+                      <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        References {form.references.length > 0 && <span className="text-cyan-400 normal-case font-normal">({form.references.length})</span>}
+                      </Label>
+                      <div className="space-y-2">
+                        {form.references.map((ref, i) => (
+                          <div key={ref.id} className="flex gap-2 items-start">
+                            <Input value={ref.value}
+                              onChange={(e) => {
+                                const next = [...form.references];
+                                next[i] = { ...next[i], value: e.target.value };
+                                updateForm({ references: next });
+                              }}
+                              placeholder="https:// link (ad, video, swipe, drive...)"
+                              className="bg-white/[0.03] border-white/[0.06] text-xs flex-[2]" />
+                            <Input value={ref.note || ""}
+                              onChange={(e) => {
+                                const next = [...form.references];
+                                next[i] = { ...next[i], note: e.target.value };
+                                updateForm({ references: next });
+                              }}
+                              placeholder="Why it matters"
+                              className="bg-white/[0.03] border-white/[0.06] text-xs flex-1" />
+                            <button type="button"
+                              onClick={() => updateForm({ references: form.references.filter((_, j) => j !== i) })}
+                              className="text-slate-600 hover:text-red-400 text-xs px-2 py-2">✕</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button type="button"
+                        onClick={() => updateForm({ references: [...form.references, { id: crypto.randomUUID(), kind: "url", value: "" }] })}
+                        className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">+ Add reference</button>
                     </div>
 
                     {/* Customer Avatars */}
