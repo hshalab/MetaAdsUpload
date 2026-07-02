@@ -118,7 +118,7 @@ export const assignments = pgTable("assignments", {
   estimatedMinutes: integer("estimated_minutes"),
   videoLengthSeconds: integer("video_length_seconds"),
   briefContent: text("brief_content"), // full brief body (markdown) — replaces Notion
-  references: jsonb("references").$type<Array<{ id: string; kind: "url" | "library"; value: string; label?: string; note?: string }>>().default([]),
+  references: jsonb("references").$type<Array<{ id: string; kind: "url" | "library" | "file"; value: string; label?: string; note?: string }>>().default([]),
   scriptContent: jsonb("script_content").$type<{ hooks: Array<{ id: string; label: string; eng: string; se: string }>; body: { eng: string; se: string } }>(),
   autoName: text("auto_name"),
   revisionFeedback: text("revision_feedback"),
@@ -152,7 +152,7 @@ export const briefTemplates = pgTable("brief_templates", {
   customerAvatarIds: jsonb("customer_avatar_ids").$type<string[]>().default([]),
   estimatedMinutes: integer("estimated_minutes"),
   priority: text("priority").default("medium"),
-  references: jsonb("references").$type<Array<{ id: string; kind: "url" | "library"; value: string; label?: string; note?: string }>>().default([]),
+  references: jsonb("references").$type<Array<{ id: string; kind: "url" | "library" | "file"; value: string; label?: string; note?: string }>>().default([]),
   scriptContent: jsonb("script_content").$type<{ hooks: Array<{ id: string; label: string; eng: string; se: string }>; body: { eng: string; se: string } }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

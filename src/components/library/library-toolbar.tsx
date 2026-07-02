@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Search, Filter, ChevronDown, LayoutGrid, List,
   ArrowUpDown, Minus, Square as SquareIcon, Maximize2,
@@ -50,6 +51,8 @@ interface LibraryToolbarProps {
   editorFilter: string;
   batchFilter: string;
   metricDays: number;
+  winnersOnly: boolean;
+  angleFilter: string;
   dispatch: Dispatch<LibraryAction>;
 }
 
@@ -64,9 +67,19 @@ export function LibraryToolbar({
   editorFilter,
   batchFilter,
   metricDays,
+  winnersOnly,
+  angleFilter,
   dispatch,
 }: LibraryToolbarProps) {
   const currentSort = SORT_OPTIONS.find((o) => o.value === sort)!;
+  const [angles, setAngles] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    fetch("/api/options")
+      .then((r) => (r.ok ? r.json() : { angles: [] }))
+      .then((d) => setAngles(d.angles || []))
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="flex flex-col gap-3">
@@ -118,6 +131,20 @@ export function LibraryToolbar({
             </button>
           ))}
         </div>
+
+        {/* Winners quick filter */}
+        <button
+          onClick={() => dispatch({ type: "SET_WINNERS_ONLY", on: !winnersOnly })}
+          className={cn(
+            "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+            winnersOnly
+              ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-400"
+              : "border-white/[0.06] text-slate-500 hover:text-slate-300"
+          )}
+          title="Show only creatives classified as winners"
+        >
+          🏆 Winners
+        </button>
 
         {/* More filters toggle */}
         <button
@@ -233,6 +260,16 @@ export function LibraryToolbar({
             value={batchFilter}
             onChange={(e) => dispatch({ type: "SET_BATCH_FILTER", filter: e.target.value })}
           />
+          <select
+            className="w-40 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500/50"
+            value={angleFilter}
+            onChange={(e) => dispatch({ type: "SET_ANGLE_FILTER", angleId: e.target.value })}
+          >
+            <option value="" className="bg-[#111827]">All angles</option>
+            {angles.map((a) => (
+              <option key={a.id} value={a.id} className="bg-[#111827]">{a.name}</option>
+            ))}
+          </select>
         </div>
       )}
     </div>

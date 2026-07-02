@@ -201,9 +201,16 @@ export function LibraryCard({
             </span>
           )}
         </div>
-        {/* Performance strip */}
+        {/* Performance strip — always visible so the library reads as an ads library */}
+        {c.metrics && c.metrics.adCount === 0 && (
+          <div className="mt-1.5 rounded-md bg-white/[0.02] border border-white/[0.04] px-1.5 py-1"
+            title="Not linked to a Meta ad yet — publish it or run an insights sync">
+            <p className="text-[9px] text-slate-600">No linked ads yet — publish or sync</p>
+          </div>
+        )}
         {c.metrics && c.metrics.adCount > 0 && (
-          <div className="mt-1.5 grid grid-cols-4 gap-1 rounded-md bg-white/[0.03] border border-white/[0.05] px-1.5 py-1">
+          <div className="mt-1.5 grid grid-cols-4 gap-1 rounded-md bg-white/[0.03] border border-white/[0.05] px-1.5 py-1"
+            title={`${c.metrics.adCount} linked ad${c.metrics.adCount === 1 ? "" : "s"} (${c.metrics.activeAdCount} active)`}>
             <div className="min-w-0">
               <p className="text-[8px] uppercase tracking-wide text-slate-600">Spend</p>
               <p className="text-[10px] font-semibold text-white truncate">{fmtSpend(c.metrics.spend)}</p>

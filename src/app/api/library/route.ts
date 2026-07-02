@@ -18,6 +18,8 @@ const METRIC_SORTS: Record<string, { key: keyof CreativeMetrics; dir: 1 | -1 }> 
 // capped so a huge library can't blow up the request.
 const METRIC_SORT_MAX_ROWS = 2000;
 
+const WINNER_CLASSIFICATIONS = new Set(["breakthrough", "spend_winner", "kpi_winner"]);
+
 // GET — List library assets with filters & pagination
 export async function GET(request: NextRequest) {
   try {
@@ -56,6 +58,11 @@ export async function GET(request: NextRequest) {
     if (tag) {
       conditions.push(sql`${schema.creatives.tags}::jsonb ? ${tag}`);
     }
+    const angleId = searchParams.get("angleId");
+    if (angleId) {
+      // Filter by the angle of the assignment the creative belongs to
+      conditions.push(sql`${schema.creatives.assignmentId} IN (SELECT id FROM assignments WHERE angle_id = ${angleId})`);
+    }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -72,8 +79,9 @@ export async function GET(request: NextRequest) {
     const orderClause = sortMap[sort] || sortMap.date_desc;
     const days = Math.max(0, parseInt(searchParams.get("days") || "30"));
     const metricSort = METRIC_SORTS[sort];
+    const winnersOnly = searchParams.get("winners") === "1";
 
-    if (metricSort) {
+    if (metricSort || winnersOnly) {
       // 1. All matching ids (capped) → 2. aggregate → 3. sort → 4. paginate
       const idRows = await db
         .select({ id: schema.creatives.id })
@@ -81,9 +89,17 @@ export async function GET(request: NextRequest) {
         .where(where)
         .orderBy(desc(schema.creatives.createdAt))
         .limit(METRIC_SORT_MAX_ROWS);
-      const allIds = idRows.map((r) => r.id);
+      let allIds = idRows.map((r) => r.id);
       const metricsMap = await getCreativeMetrics(allIds, days);
 
+      if (winnersOnly) {
+        allIds = allIds.filter((id) => {
+          const c = metricsMap.get(id)?.classification;
+          return c != null && WINNER_CLASSIFICATIONS.has(c);
+        });
+      }
+
+      const effectiveSort = metricSort ?? METRIC_SORTS.spend_desc;
       const sorted = [...allIds].sort((a, b) => {
         const ma = metricsMap.get(a);
         const mb = metricsMap.get(b);
@@ -91,9 +107,9 @@ export async function GET(request: NextRequest) {
         if (!ma?.adCount && !mb?.adCount) return 0;
         if (!ma?.adCount) return 1;
         if (!mb?.adCount) return -1;
-        const va = (ma[metricSort.key] as number | null) ?? -Infinity;
-        const vb = (mb[metricSort.key] as number | null) ?? -Infinity;
-        return metricSort.dir === -1 ? vb - va : va - vb;
+        const va = (ma[effectiveSort.key] as number | null) ?? -Infinity;
+        const vb = (mb[effectiveSort.key] as number | null) ?? -Infinity;
+        return effectiveSort.dir === -1 ? vb - va : va - vb;
       });
 
       const pageIds = sorted.slice(offset, offset + limit);

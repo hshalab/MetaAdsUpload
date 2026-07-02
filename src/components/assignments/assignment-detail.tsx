@@ -559,7 +559,9 @@ export function AssignmentDetail({
                   <div className="space-y-1">
                     {(assignment as { references?: Array<{ id: string; value: string; note?: string }> }).references!.map((ref) => (
                       <div key={ref.id} className="flex items-center gap-2 text-xs">
-                        <a href={ref.value} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline truncate max-w-[260px]">{ref.value}</a>
+                        <a href={ref.value} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline truncate max-w-[260px]">
+                          {(ref as { kind?: string; label?: string }).kind === "file" ? `📎 ${(ref as { label?: string }).label || "File"}` : ref.value}
+                        </a>
                         {ref.note && <span className="text-slate-500">— {ref.note}</span>}
                       </div>
                     ))}

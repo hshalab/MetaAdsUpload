@@ -77,7 +77,7 @@ interface FormState {
   dueDate: string | undefined;
   description: string;
   briefContent: string;
-  references: Array<{ id: string; kind: "url" | "library"; value: string; label?: string; note?: string }>;
+  references: Array<{ id: string; kind: "url" | "library" | "file"; value: string; label?: string; note?: string }>;
 }
 
 const PRIORITIES: { value: AssignmentPriority; label: string; color: string }[] = [
@@ -262,6 +262,41 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
 
   const [form, setForm] = useState<FormState>(emptyForm);
   const [script, setScript] = useState<ScriptContent>(emptyScript);
+  const [uploadingRef, setUploadingRef] = useState(false);
+  const refFileInput = useRef<HTMLInputElement>(null);
+
+  // Upload raw source material (video/image) to the cloud and attach as reference
+  const uploadRefFile = async (file: File) => {
+    setUploadingRef(true);
+    try {
+      const presignRes = await fetch("/api/upload/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+          purpose: "brief",
+          assignmentId: assignment?.id,
+        }),
+      });
+      if (!presignRes.ok) throw new Error("Could not prepare upload");
+      const { uploadUrl, publicUrl } = await presignRes.json();
+      const putRes = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload failed");
+      setForm((prev) => ({
+        ...prev,
+        references: [...prev.references, { id: crypto.randomUUID(), kind: "file" as const, value: publicUrl, label: file.name }],
+      }));
+      scheduleDraftSave();
+      toast.success(`${file.name} uploaded`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploadingRef(false);
+      if (refFileInput.current) refFileInput.current.value = "";
+    }
+  };
 
   const draftKey = getDraftKey(assignment?.id);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -500,6 +535,8 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
       priority: form.priority,
       dueDate: form.dueDate ? format(new Date(form.dueDate), "yyyy-MM-dd") : undefined,
       description: form.description || undefined,
+      briefContent: form.briefContent || undefined,
+      references: form.references,
       scriptContent: hasScriptContent ? script : undefined,
     };
 
@@ -859,14 +896,21 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
                       <div className="space-y-2">
                         {form.references.map((ref, i) => (
                           <div key={ref.id} className="flex gap-2 items-start">
-                            <Input value={ref.value}
-                              onChange={(e) => {
-                                const next = [...form.references];
-                                next[i] = { ...next[i], value: e.target.value };
-                                updateForm({ references: next });
-                              }}
-                              placeholder="https:// link (ad, video, swipe, drive...)"
-                              className="bg-white/[0.03] border-white/[0.06] text-xs flex-[2]" />
+                            {ref.kind === "file" ? (
+                              <a href={ref.value} target="_blank" rel="noopener noreferrer"
+                                className="flex-[2] text-xs text-cyan-400 hover:underline truncate self-center">
+                                📎 {ref.label || ref.value}
+                              </a>
+                            ) : (
+                              <Input value={ref.value}
+                                onChange={(e) => {
+                                  const next = [...form.references];
+                                  next[i] = { ...next[i], value: e.target.value };
+                                  updateForm({ references: next });
+                                }}
+                                placeholder="https:// link (ad, video, swipe, drive...)"
+                                className="bg-white/[0.03] border-white/[0.06] text-xs flex-[2]" />
+                            )}
                             <Input value={ref.note || ""}
                               onChange={(e) => {
                                 const next = [...form.references];
@@ -881,9 +925,19 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
                           </div>
                         ))}
                       </div>
-                      <button type="button"
-                        onClick={() => updateForm({ references: [...form.references, { id: crypto.randomUUID(), kind: "url", value: "" }] })}
-                        className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">+ Add reference</button>
+                      <div className="flex items-center gap-4">
+                        <button type="button"
+                          onClick={() => updateForm({ references: [...form.references, { id: crypto.randomUUID(), kind: "url", value: "" }] })}
+                          className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">+ Add link</button>
+                        <button type="button" disabled={uploadingRef}
+                          onClick={() => refFileInput.current?.click()}
+                          className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors disabled:opacity-50">
+                          {uploadingRef ? "Uploading…" : "📎 Upload file (raw material)"}
+                        </button>
+                        <input ref={refFileInput} type="file" accept="video/mp4,video/quicktime,video/webm,image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadRefFile(f); }} />
+                      </div>
                     </div>
 
                     {/* Customer Avatars */}

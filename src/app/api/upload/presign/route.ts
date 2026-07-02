@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       contentType: string;
       fileSize?: number;
       assignmentId?: string;
-      purpose?: "deliverable" | "library" | "version";
+      purpose?: "deliverable" | "library" | "version" | "brief";
       tags?: string[];
       batchNumber?: string;
     };
@@ -78,13 +78,16 @@ export async function POST(request: NextRequest) {
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
     const isLibrary = purpose === "library";
     const isVersion = purpose === "version";
+    const isBrief = purpose === "brief";
 
     let key = isLibrary
       ? `library/${timestamp}-${sanitizedFilename}`
-      : `deliverables/${timestamp}-${sanitizedFilename}`;
+      : isBrief
+        ? `brief-material/${assignmentId || "general"}/${timestamp}-${sanitizedFilename}`
+        : `deliverables/${timestamp}-${sanitizedFilename}`;
 
     // If assignmentId provided, build folder structure: editor/Batch_N/file
-    if (assignmentId && !isLibrary) {
+    if (assignmentId && !isLibrary && !isBrief) {
       const [assignment] = await db
         .select({
           batchNumber: schema.assignments.batchNumber,

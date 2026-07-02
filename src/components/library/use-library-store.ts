@@ -69,6 +69,8 @@ export interface LibraryState {
   batchFilter: string;
   sort: SortOption;
   metricDays: number; // performance window: 7 | 14 | 30 | 90 | 0 (lifetime)
+  winnersOnly: boolean;
+  angleFilter: string;
 
   // UI
   viewMode: ViewMode;
@@ -96,6 +98,8 @@ export type LibraryAction =
   | { type: "SET_BATCH_FILTER"; filter: string }
   | { type: "SET_SORT"; sort: SortOption }
   | { type: "SET_METRIC_DAYS"; days: number }
+  | { type: "SET_WINNERS_ONLY"; on: boolean }
+  | { type: "SET_ANGLE_FILTER"; angleId: string }
   | { type: "SET_VIEW_MODE"; mode: ViewMode }
   | { type: "SET_DENSITY"; density: Density }
   | { type: "TOGGLE_SELECT"; id: number }
@@ -123,6 +127,8 @@ export const initialState: LibraryState = {
   batchFilter: "",
   sort: "date_desc",
   metricDays: 30,
+  winnersOnly: false,
+  angleFilter: "",
   viewMode: "grid",
   density: "md",
   selectedIds: new Set(),
@@ -154,6 +160,10 @@ export function libraryReducer(state: LibraryState, action: LibraryAction): Libr
       return { ...state, sort: action.sort };
     case "SET_METRIC_DAYS":
       return { ...state, metricDays: action.days };
+    case "SET_WINNERS_ONLY":
+      return { ...state, winnersOnly: action.on };
+    case "SET_ANGLE_FILTER":
+      return { ...state, angleFilter: action.angleId };
     case "SET_VIEW_MODE":
       return { ...state, viewMode: action.mode };
     case "SET_DENSITY":
