@@ -117,7 +117,7 @@ const CLASS_COLORS: Record<string, string> = {
 const BUDGET_ACTION_CONFIG: Record<string, { bg: string; border: string; icon: typeof TrendingUp; iconColor: string; label: string }> = {
   double: { bg: "bg-emerald-500/10", border: "border-emerald-500/20", icon: TrendingUp, iconColor: "text-emerald-400", label: "DUBBLA" },
   increase_20: { bg: "bg-emerald-500/10", border: "border-emerald-500/20", icon: TrendingUp, iconColor: "text-emerald-400", label: "+20%" },
-  hold: { bg: "bg-white/5", border: "border-white/10", icon: Minus, iconColor: "text-slate-400", label: "HÅLL" },
+  hold: { bg: "bg-white/5", border: "border-white/10", icon: Minus, iconColor: "text-slate-400", label: "HOLD" },
   decrease_20: { bg: "bg-red-500/10", border: "border-red-500/20", icon: TrendingDown, iconColor: "text-red-400", label: "-20%" },
   no_data: { bg: "bg-white/5", border: "border-white/10", icon: Minus, iconColor: "text-slate-500", label: "—" },
 };
@@ -208,11 +208,11 @@ export default function DailySummaryPage() {
       {/* Yesterday's Performance */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { label: "Spend igår", value: `${data.yesterday.spend.toFixed(0)} SEK`, sub: `Vecka: ${data.week.spend.toFixed(0)}`, color: "text-white" },
-          { label: "Revenue igår", value: `${data.yesterday.revenue.toFixed(0)} SEK`, sub: `Vecka: ${data.week.revenue.toFixed(0)}`, color: "text-white" },
-          { label: "ROAS igår", value: `${data.yesterday.roas.toFixed(2)}x`, sub: `Vecka: ${data.week.roas.toFixed(2)}x`, color: roasColor },
-          { label: "Purchases igår", value: data.yesterday.purchases.toString(), sub: `Vecka: ${data.week.purchases}`, color: "text-white" },
-          { label: "CPA igår", value: data.yesterday.cpa > 0 ? `${data.yesterday.cpa.toFixed(0)} SEK` : "-", sub: `Target: ${data.settings.targetCpa} SEK`, color: data.yesterday.cpa > 0 && data.yesterday.cpa <= data.settings.targetCpa ? "text-emerald-400" : data.yesterday.cpa > 0 ? "text-red-400" : "text-slate-500" },
+          { label: "Spend yesterday", value: `${data.yesterday.spend.toFixed(0)} SEK`, sub: `Vecka: ${data.week.spend.toFixed(0)}`, color: "text-white" },
+          { label: "Revenue yesterday", value: `${data.yesterday.revenue.toFixed(0)} SEK`, sub: `Vecka: ${data.week.revenue.toFixed(0)}`, color: "text-white" },
+          { label: "ROAS yesterday", value: `${data.yesterday.roas.toFixed(2)}x`, sub: `Vecka: ${data.week.roas.toFixed(2)}x`, color: roasColor },
+          { label: "Purchases yesterday", value: data.yesterday.purchases.toString(), sub: `Vecka: ${data.week.purchases}`, color: "text-white" },
+          { label: "CPA yesterday", value: data.yesterday.cpa > 0 ? `${data.yesterday.cpa.toFixed(0)} SEK` : "-", sub: `Target: ${data.settings.targetCpa} SEK`, color: data.yesterday.cpa > 0 && data.yesterday.cpa <= data.settings.targetCpa ? "text-emerald-400" : data.yesterday.cpa > 0 ? "text-red-400" : "text-slate-500" },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-xl border border-white/5 bg-[#111827] p-4">
             <span className="text-[10px] text-slate-500 uppercase tracking-wider">{kpi.label}</span>
@@ -231,7 +231,7 @@ export default function DailySummaryPage() {
               ? "border-emerald-500/20 bg-emerald-500/5"
               : "border-red-500/20 bg-red-500/5"
           )}>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">ncROAS igår</span>
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider">ncROAS yesterday</span>
             <div className={cn(
               "text-2xl font-bold mt-1",
               data.yesterday.ncRoas >= data.settings.targetRoas ? "text-emerald-400" : "text-red-400"
@@ -355,11 +355,11 @@ export default function DailySummaryPage() {
         </h3>
         <div className="grid grid-cols-5 gap-3">
           {[
-            { key: "breakthrough", label: "Breakthrough", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", desc: "Toppads! Låt köra." },
-            { key: "spend_winner", label: "Spend Winner", color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", desc: "Lönsam, under target → Graveyard" },
-            { key: "kpi_winner", label: "KPI Winner", color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/20", desc: "Bra ROAS, behöver mer spend" },
-            { key: "loser", label: "Loser", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20", desc: "Under breakeven → stäng av" },
-            { key: "new", label: "New", color: "text-slate-400", bg: "bg-white/5", border: "border-white/10", desc: "Inlärningsfas, avvakta" },
+            { key: "breakthrough", label: "Breakthrough", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", desc: "Top ads! Let them run." },
+            { key: "spend_winner", label: "Spend Winner", color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", desc: "Profitable, below target → Graveyard" },
+            { key: "kpi_winner", label: "KPI Winner", color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/20", desc: "Good ROAS, needs more spend" },
+            { key: "loser", label: "Loser", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20", desc: "Below breakeven → turn off" },
+            { key: "new", label: "New", color: "text-slate-400", bg: "bg-white/5", border: "border-white/10", desc: "Learning phase, wait" },
           ].map((cls) => (
             <div key={cls.key} className={cn("rounded-lg border p-3 text-center", cls.bg, cls.border)}>
               <div className={cn("text-2xl font-bold", cls.color)}>
@@ -487,7 +487,7 @@ export default function DailySummaryPage() {
       <div className="rounded-xl border border-white/5 bg-[#111827] p-5">
         <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
           <Activity className="h-4 w-4 text-cyan-400" />
-          Senaste Åtgärder
+          Recent Actions
         </h3>
         {data.activityLog.length === 0 ? (
           <p className="text-sm text-slate-600 py-4 text-center">Inga åtgärder registrerade senaste 7 dagarna.</p>

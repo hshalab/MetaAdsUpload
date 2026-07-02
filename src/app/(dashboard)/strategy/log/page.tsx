@@ -35,15 +35,15 @@ const classColors: Record<string, string> = {
 const actionLabels: Record<string, string> = {
   move_zombie: "Graveyard",
   pause: "Pausad",
-  let_run: "Låter köra",
+  let_run: "Letting it run",
   reviewed: "Granskad",
 };
 
 const ACTION_OPTIONS = [
-  { value: "", label: "Alla åtgärder" },
+  { value: "", label: "All actions" },
   { value: "pause", label: "Pausad" },
   { value: "move_zombie", label: "Graveyard" },
-  { value: "let_run", label: "Låter köra" },
+  { value: "let_run", label: "Letting it run" },
   { value: "reviewed", label: "Granskad" },
 ];
 

@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
     const authorMap = new Map<string, { name: string; tested: number; breakthroughs: number }>();
     for (const r of roadmapEntries) {
       if (!r.authorId) continue;
-      const entry = authorMap.get(r.authorId) || { name: r.authorName || "Okänd", tested: 0, breakthroughs: 0 };
+      const entry = authorMap.get(r.authorId) || { name: r.authorName || "Unknown", tested: 0, breakthroughs: 0 };
       entry.tested++;
       if (r.lastClassification === "breakthrough") entry.breakthroughs++;
       authorMap.set(r.authorId, entry);
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
     const desireMap = new Map<string, { name: string; tested: number; breakthroughs: number }>();
     for (const r of desireEntries) {
       if (!r.desireId) continue;
-      const entry = desireMap.get(r.desireId) || { name: r.desireName || "Okänd", tested: 0, breakthroughs: 0 };
+      const entry = desireMap.get(r.desireId) || { name: r.desireName || "Unknown", tested: 0, breakthroughs: 0 };
       entry.tested++;
       if (r.lastClassification === "breakthrough") entry.breakthroughs++;
       desireMap.set(r.desireId, entry);

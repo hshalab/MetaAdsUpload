@@ -728,7 +728,7 @@ export default function UploadPage() {
 
     const presignData = await presignRes.json();
     if (!presignRes.ok) {
-      throw new Error(presignData.error || "Kunde inte hämta presigned URL");
+      throw new Error(presignData.error || "Could not get a presigned URL");
     }
 
     const { uploadUrl, publicUrl, key } = presignData;
@@ -743,7 +743,7 @@ export default function UploadPage() {
       });
     } catch (fetchErr) {
       console.error("R2 PUT fetch error:", fetchErr, "URL:", uploadUrl?.substring(0, 100));
-      throw new Error(`R2 PUT nätverksfel: ${fetchErr instanceof Error ? fetchErr.message : "Unknown"}`);
+      throw new Error(`R2 PUT network error: ${fetchErr instanceof Error ? fetchErr.message : "Unknown"}`);
     }
 
     if (!putRes.ok) {
@@ -780,7 +780,7 @@ export default function UploadPage() {
     } catch (presignErr) {
       console.warn("Presigned URL upload failed, falling back to proxy:", presignErr);
       if (file.size > PROXY_SIZE_LIMIT) {
-        throw new Error(`Uppladdning misslyckades (${(file.size / 1024 / 1024).toFixed(0)}MB). Konfigurera CORS på R2-bucketen eller minska filstorleken.`);
+        throw new Error(`Upload failed (${(file.size / 1024 / 1024).toFixed(0)}MB). Configure CORS on the R2 bucket or reduce the file size.`);
       }
       return uploadViaProxy(file);
     }
@@ -927,7 +927,7 @@ export default function UploadPage() {
     }
 
     setJobs((prev) => [...prev, ...newJobs]);
-    toast.success(`${newJobs.length} ad(s) tillagda i kön`);
+    toast.success(`${newJobs.length} ad(s) added to the queue`);
     setShouldAutoStart(true);
   };
 
@@ -1009,10 +1009,10 @@ export default function UploadPage() {
       if (job.file && !job.r2Key) {
         setJobs((prev) =>
           prev.map((j) =>
-            j.id === job.id ? { ...j, status: "uploading_r2", step: "Laddar upp till Cloudflare R2...", dbJobId } : j
+            j.id === job.id ? { ...j, status: "uploading_r2", step: "Uploading to Cloudflare R2...", dbJobId } : j
           )
         );
-        if (dbJobId) await updateDbJob(dbJobId, { status: "uploading_r2", stepLabel: "Laddar upp till R2..." });
+        if (dbJobId) await updateDbJob(dbJobId, { status: "uploading_r2", stepLabel: "Uploading to R2..." });
 
         try {
           const { key, url } = await uploadFileToR2(job.file);
@@ -1035,7 +1035,7 @@ export default function UploadPage() {
                   failedStep: 0,
                   failedStepName: "Ladda upp till R2",
                   suggestion: errMsg.includes("presign")
-                    ? "Kunde inte hämta presigned URL. Kontrollera R2-konfigurationen i miljövariabler."
+                    ? "Could not get a presigned URL. Check the R2 configuration in the environment variables."
                     : `R2-uppladdning misslyckades: ${errMsg}`,
                   timestamp: new Date().toISOString(),
                 },
@@ -1208,14 +1208,14 @@ export default function UploadPage() {
         await updateDbJob(dbJobId, {
           status: "failed",
           error: errMsg,
-          stepLabel: "Oväntat fel",
+          stepLabel: "Unexpected error",
           config: {
             ...jobConfig,
             errorDetails: {
               message: errMsg,
               failedStep: 0,
-              failedStepName: "Okänt",
-              suggestion: "Ett oväntat fel uppstod. Försök igen eller kontrollera webbläsarens konsol.",
+              failedStepName: "Unknown",
+              suggestion: "An unexpected error occurred. Try again or check the browser console.",
               timestamp: new Date().toISOString(),
             },
           },
@@ -1274,7 +1274,7 @@ export default function UploadPage() {
     setJobs((prev) =>
       prev.map((j) =>
         j.id === jobId
-          ? { ...j, status: "pending" as const, step: "Väntar...", error: undefined, errorDetails: undefined, dbJobId: undefined, result: undefined, r2Key: undefined, r2Url: undefined }
+          ? { ...j, status: "pending" as const, step: "Waiting...", error: undefined, errorDetails: undefined, dbJobId: undefined, result: undefined, r2Key: undefined, r2Url: undefined }
           : j
       )
     );
@@ -1286,7 +1286,7 @@ export default function UploadPage() {
     // Re-process
     setIsUploading(true);
     // Read the reset job from state
-    const resetJob = { ...job, status: "pending" as const, step: "Väntar...", error: undefined, errorDetails: undefined, dbJobId: undefined, result: undefined, r2Key: undefined, r2Url: undefined };
+    const resetJob = { ...job, status: "pending" as const, step: "Waiting...", error: undefined, errorDetails: undefined, dbJobId: undefined, result: undefined, r2Key: undefined, r2Url: undefined };
     await processSingleJob(resetJob, adsetOverride);
     setIsUploading(false);
   };
@@ -1359,10 +1359,10 @@ export default function UploadPage() {
         await fetch("/api/upload-jobs", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: h.id, r2Key: key, r2Url: url, status: "uploading_meta", stepLabel: "Laddar upp till Meta..." }),
+          body: JSON.stringify({ id: h.id, r2Key: key, r2Url: url, status: "uploading_meta", stepLabel: "Uploading to Meta..." }),
         });
       } catch (e) {
-        toast.error(`R2-uppladdning misslyckades: ${e instanceof Error ? e.message : "Okänt fel"}`);
+        toast.error(`R2-uppladdning misslyckades: ${e instanceof Error ? e.message : "Unknown error"}`);
         setIsUploading(false);
         fetchHistory();
         return;
@@ -1403,12 +1403,12 @@ export default function UploadPage() {
 
       const result = await res.json();
       if (!res.ok) {
-        toast.error(`Retry misslyckades: ${result.error || "Okänt fel"}`);
+        toast.error(`Retry misslyckades: ${result.error || "Unknown error"}`);
       } else {
         toast.success(`${h.filename} uppladdad!`);
       }
     } catch (e) {
-      toast.error(`Retry misslyckades: ${e instanceof Error ? e.message : "Nätverksfel"}`);
+      toast.error(`Retry misslyckades: ${e instanceof Error ? e.message : "Network error"}`);
     } finally {
       setIsUploading(false);
       fetchHistory();
@@ -1558,7 +1558,7 @@ export default function UploadPage() {
                               onClick={() => retryHistoryJob(h)}
                               disabled={isUploading}
                               className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 px-1.5 py-1 rounded bg-cyan-500/5 border border-cyan-500/10 hover:bg-cyan-500/10 transition-all disabled:opacity-50"
-                              title={h.r2Key ? "Retry från R2" : "Välj fil och retry"}
+                              title={h.r2Key ? "Retry from R2" : "Choose file and retry"}
                             >
                               <RefreshCw className="h-3 w-3" />
                               Retry
@@ -2560,7 +2560,7 @@ export default function UploadPage() {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-white bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 transition-all disabled:opacity-50"
                 >
                   {isUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                  {isUploading ? "Laddar upp..." : "Ladda upp alla"}
+                  {isUploading ? "Uploading..." : "Ladda upp alla"}
                 </button>
               )}
             </div>

@@ -207,7 +207,7 @@ export default function UploadLogPage() {
           <div className="py-16 text-center">
             <History className="h-10 w-10 text-slate-600 mx-auto mb-3" />
             <p className="text-sm text-slate-500">
-              {filter === "all" ? "Inga uppladdningar ännu" : `Inga ${filter === "failed" ? "misslyckade" : "lyckade"} uppladdningar`}
+              {filter === "all" ? "No uploads yet" : `Inga ${filter === "failed" ? "misslyckade" : "lyckade"} uppladdningar`}
             </p>
           </div>
         ) : (
@@ -398,7 +398,7 @@ export default function UploadLogPage() {
                               ed?.failedStepName ? `Steg: ${ed.failedStep}/4 — ${ed.failedStepName}` : "",
                               ed?.metaErrorCode ? `Meta felkod: ${ed.metaErrorCode}${ed.metaErrorSubcode ? ` / ${ed.metaErrorSubcode}` : ""}` : "",
                               ed?.httpStatus ? `HTTP: ${ed.httpStatus}` : "",
-                              ed?.suggestion ? `Förslag: ${ed.suggestion}` : "",
+                              ed?.suggestion ? `Suggestion: ${ed.suggestion}` : "",
                               ed?.payload ? `Payload:\n${JSON.stringify(ed.payload, null, 2)}` : "",
                               `Tid: ${job.createdAt}`,
                             ]

@@ -106,42 +106,42 @@ function buildErrorDetails(error: unknown, step: number, payload?: Record<string
 
     // Provide actionable suggestions for common errors
     if (error.isAuthError) {
-      details.suggestion = "Din Meta-token har gått ut. Gå till Inställningar och koppla om ditt Meta-konto.";
+      details.suggestion = "Your Meta token has expired. Go to Settings and reconnect your Meta account.";
     } else if (error.isRateLimitError) {
-      details.suggestion = "Meta API rate limit nådd. Vänta några minuter och försök igen.";
+      details.suggestion = "Meta API rate limit reached. Wait a few minutes and try again.";
     } else if (error.metaErrorCode === 100) {
       if (error.metaErrorSubcode === 1487851) {
-        details.suggestion = "Ogiltig video. Kontrollera att videon är minst 1 sekund lång och i ett format som Meta stödjer (MP4, MOV).";
+        details.suggestion = "Invalid video. Make sure it is at least 1 second long and in a format Meta supports (MP4, MOV).";
       } else if (error.metaErrorSubcode === 1487390) {
-        details.suggestion = "Ogiltig bild. Kontrollera att bilden är minst 600x600px och i JPG/PNG-format.";
+        details.suggestion = "Invalid image. Make sure it is at least 600x600px and in JPG/PNG format.";
       } else {
-        details.suggestion = "Ogiltiga parametrar skickades till Meta. Kontrollera att alla fält är korrekt ifyllda. Se 'payload' för detaljer.";
+        details.suggestion = "Invalid parameters sent to Meta. Check that all fields are filled in correctly. See 'payload' for details.";
       }
     } else if (error.metaErrorCode === 2) {
-      details.suggestion = "Tillfälligt Meta API-fel. Försök igen om några sekunder.";
+      details.suggestion = "Temporary Meta API error. Try again in a few seconds.";
     } else if (error.metaErrorCode === 1) {
-      details.suggestion = "Okänt Meta API-fel. Det kan vara ett tillfälligt problem. Försök igen. Om det kvarstår, kontrollera Meta Ads Manager.";
+      details.suggestion = "Unknown Meta API error. It may be temporary — try again. If it persists, check Meta Ads Manager.";
     } else if (error.metaErrorCode === 10 || error.metaErrorCode === 200) {
-      details.suggestion = "Behörighetsproblem. Din Meta-token saknar nödvändiga rättigheter (ads_management). Koppla om kontot i Inställningar.";
+      details.suggestion = "Permission problem. Your Meta token is missing required permissions (ads_management). Reconnect the account in Settings.";
     } else if (error.metaErrorCode === 2635) {
       details.suggestion = "Dynamic Creative-fel. Kontrollera att ad set:et har is_dynamic_creative=true, eller skicka bara en headline/text.";
     } else if (error.message.includes("pixel")) {
-      details.suggestion = "Pixel-relaterat fel. Kontrollera att din Pixel ID är korrekt i Inställningar.";
+      details.suggestion = "Pixel-related error. Check that your Pixel ID is correct in Settings.";
     } else if (error.message.includes("page")) {
-      details.suggestion = "Page-relaterat fel. Kontrollera att rätt Facebook-sida är vald i Inställningar.";
+      details.suggestion = "Page-related error. Check that the correct Facebook Page is selected in Settings.";
     }
   } else if (error instanceof Error) {
     if (error.message.includes("R2") || error.message.includes("S3")) {
-      details.suggestion = "Cloudflare R2-fel. Kontrollera att R2-credentials är korrekt konfigurerade i miljövariabler.";
+      details.suggestion = "Cloudflare R2 error. Check that the R2 credentials are configured correctly in the environment variables.";
     } else if (error.message.includes("network") || error.message.includes("fetch")) {
-      details.suggestion = "Nätverksfel. Kontrollera internetanslutningen och försök igen.";
+      details.suggestion = "Network error. Check the internet connection and try again.";
     } else if (error.message.includes("timeout")) {
-      details.suggestion = "Timeout. Filen kan vara för stor. Försök med en mindre fil eller komprimera videon.";
+      details.suggestion = "Timeout. The file may be too large. Try a smaller file or compress the video.";
     }
   }
 
   if (!details.suggestion) {
-    details.suggestion = "Oväntat fel. Kopiera felmeddelandet och sök i Meta Business Help Center.";
+    details.suggestion = "Unexpected error. Copy the error message and search the Meta Business Help Center.";
   }
 
   return details;
@@ -398,7 +398,7 @@ export async function POST(request: NextRequest) {
       await updateJob(jobId, { creativeId: adCreative.id });
     } else {
       // Multiple texts or variants with image: creative will be created inline at ad level (step 4)
-      await updateJob(jobId, { currentStep, stepLabel: "Hoppar över (creative skapas med ad)..." });
+      await updateJob(jobId, { currentStep, stepLabel: "Skipping (creative is created with the ad)..." });
     }
 
     // ─── Step 3: Create or reuse ad set ───────────────────────────────────
@@ -461,7 +461,7 @@ export async function POST(request: NextRequest) {
         message: "Inget ad set valt och ingen ad set-konfiguration angiven",
         failedStep: currentStep,
         failedStepName: STEP_NAMES[currentStep - 1],
-        suggestion: "Välj ett befintligt ad set eller fyll i 'Create New' med budget och targeting.",
+        suggestion: "Choose an existing ad set or fill in 'Create New' med budget och targeting.",
         timestamp: new Date().toISOString(),
       };
       await updateJob(jobId, {

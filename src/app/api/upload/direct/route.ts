@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     ];
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: `Otillåten filtyp: ${file.type}. Tillåtna: ${allowedTypes.join(", ")}` },
+        { error: `Invalid file type: ${file.type}. Allowed: ${allowedTypes.join(", ")}` },
         { status: 400 }
       );
     }

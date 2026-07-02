@@ -307,7 +307,7 @@ export default function CreativesPage() {
             </button>
             <button
               onClick={async () => {
-                if (!confirm(`Ta bort ${state.selectedIds.size} filer permanent? De raderas från R2 och kan inte återställas.`)) return;
+                if (!confirm(`Delete ${state.selectedIds.size} files permanently? They are removed from R2 and cannot be restored.`)) return;
                 await fetch("/api/library", {
                   method: "DELETE",
                   headers: { "Content-Type": "application/json" },

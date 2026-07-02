@@ -62,7 +62,7 @@ export default function TrueProfitPage() {
       <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 px-4 py-2.5 flex items-center gap-3">
         <LogIn className="h-4 w-4 text-emerald-400 flex-shrink-0" />
         <p className="text-xs text-slate-400">
-          <span className="text-emerald-400 font-medium">Första gången?</span> Klicka "Log In First" för att logga in i en ny flik. Efter det visas dashboarden här automatiskt.
+          <span className="text-emerald-400 font-medium">First time?</span> Click "Log In First" för att logga in i en ny flik. Efter det visas dashboarden här automatiskt.
         </p>
       </div>
 

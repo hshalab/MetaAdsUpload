@@ -142,7 +142,7 @@ export default function AvatarLibraryPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Sök kundproblem, sub avatars, vinklar..."
+          placeholder="Search customer problems, sub avatars, angles..."
           className="w-full pl-10 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 placeholder:text-slate-600"
         />
       </div>
@@ -152,7 +152,7 @@ export default function AvatarLibraryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setAddingTo(null); setEditing(null); }}>
           <div className="bg-[#111827] border border-white/10 rounded-xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-white">
-              {editing ? "Redigera" : "Lägg till"} {(editing?.type || addingTo?.type) === "desire" ? "Kundproblem" : (editing?.type || addingTo?.type) === "sub_avatar" ? "Sub Avatar" : "Vinkel"}
+              {editing ? "Redigera" : "Add"} {(editing?.type || addingTo?.type) === "desire" ? "Kundproblem" : (editing?.type || addingTo?.type) === "sub_avatar" ? "Sub Avatar" : "Vinkel"}
             </h2>
             <input
               autoFocus
@@ -172,7 +172,7 @@ export default function AvatarLibraryPage() {
                 Avbryt
               </button>
               <button onClick={editing ? handleEdit : handleAdd} className="px-4 py-2 text-sm rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/20 transition-colors">
-                {editing ? "Spara" : "Lägg till"}
+                {editing ? "Save" : "Add"}
               </button>
             </div>
           </div>
@@ -182,7 +182,7 @@ export default function AvatarLibraryPage() {
       {filteredDesires.length === 0 ? (
         <div className="text-center py-16 text-slate-500">
           <Users2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>{search ? "Inga resultat hittades." : "Inga kundproblem ännu. Klicka \"Nytt Kundproblem\" för att börja."}</p>
+          <p>{search ? "No results found." : "No customer problems yet. Click \"Nytt Kundproblem\" to get started."}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -268,7 +268,7 @@ export default function AvatarLibraryPage() {
                             onClick={() => { setAddingTo({ type: "angle", parentId: sa.id }); setNewName(""); setNewDesc(""); }}
                             className="flex items-center gap-2 px-4 py-2 text-xs text-cyan-400/60 hover:text-cyan-400 transition-colors w-full"
                           >
-                            <Plus className="h-3 w-3" /> Lägg till vinkel
+                            <Plus className="h-3 w-3" /> Add vinkel
                           </button>
                         </div>
                       )}
@@ -278,7 +278,7 @@ export default function AvatarLibraryPage() {
                     onClick={() => { setAddingTo({ type: "sub_avatar", parentId: desire.id }); setNewName(""); setNewDesc(""); }}
                     className="flex items-center gap-2 px-4 py-2.5 text-xs text-blue-400/60 hover:text-blue-400 transition-colors w-full"
                   >
-                    <Plus className="h-3 w-3" /> Lägg till sub avatar
+                    <Plus className="h-3 w-3" /> Add sub avatar
                   </button>
                 </div>
               )}

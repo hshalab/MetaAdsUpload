@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "move_zombie" && graveyardOutcome !== "spend_winner" && graveyardOutcome !== "loser") {
-      return NextResponse.json({ error: "Välj om annonserna är Spend Winner eller Loser innan de flyttas till Graveyard." }, { status: 400 });
+      return NextResponse.json({ error: "Choose whether the ads are Spend Winner or Loser before moving them to the Graveyard." }, { status: 400 });
     }
 
     let actionDescription = "";
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         break;
 
       case "let_run":
-        actionDescription = "Ad set granskad — låter köra";
+        actionDescription = "Ad set reviewed — letting it run";
         break;
 
       case "move_zombie": {
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
         if (!targetGraveyardId) {
           return NextResponse.json({
-            error: "Ingen Graveyard-kampanj konfigurerad för denna kampanj. Gå till Evolve KPI Settings och koppla en Graveyard.",
+            error: "No Graveyard campaign configured for this campaign. Go to Evolve KPI Settings and connect one.",
           }, { status: 400 });
         }
 
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
           try {
             const postId = postIdMap.get(ad.id);
             if (!postId) {
-              errors.push(`${ad.name}: kunde inte hämta post-ID`);
+              errors.push(`${ad.name}: could not fetch post ID`);
               continue;
             }
 

@@ -140,7 +140,7 @@ export function auditZombieCampaign(
         category: "zombie",
         severity: "fail",
         title: "Konfigurerad Graveyard-kampanj hittades inte",
-        description: "Kampanjen som valts i Evolve Settings kunde inte hittas. Kontrollera inställningarna.",
+        description: "The campaign selected in Evolve Settings could not be found. Check the settings.",
       });
       return findings;
     }
@@ -158,7 +158,7 @@ export function auditZombieCampaign(
       category: "zombie",
       severity: "warning",
       title: "Ingen Graveyard-kampanj konfigurerad",
-      description: "Gå till Evolve KPI Settings och välj din Graveyard-kampanj, eller skapa en CBO-kampanj med cost cap.",
+      description: "Go to Evolve KPI Settings and choose your Graveyard campaign, or create a CBO campaign with a cost cap.",
     });
     return findings;
   }
@@ -223,7 +223,7 @@ export function auditZombieCampaign(
           category: "zombie",
           severity: "fail",
           title: `Graveyard ad set "${adset.name}" saknar cost cap`,
-          description: `Alla ad sets i Graveyard måste ha cost cap (${expectedCostCap.toFixed(0)} SEK). Utan cost cap riskerar du okontrollerad spend.`,
+          description: `All ad sets in the Graveyard must have a cost cap (${expectedCostCap.toFixed(0)} SEK). Without a cost cap you risk uncontrolled spend.`,
           entityId: adset.id,
           entityType: "adset",
         });
@@ -278,8 +278,8 @@ export function auditAdSetCount(
         severity: "warning",
         title: `"${campaign.name}" har ${campaignAdsets.length} aktiva ad sets`,
         description: dailyBudget > 0
-          ? `Budget ${dailyBudget.toFixed(0)} SEK / ${settings.targetCpa} SEK CPA = max ~${effectiveMax} ad sets. ${campaignAdsets.length} ad sets sprider budgeten för tunt.`
-          : `Över gränsen på ${effectiveMax}. Formel: Budget / Target CPA = max ad sets.`,
+          ? `Budget ${dailyBudget.toFixed(0)} SEK / ${settings.targetCpa} SEK CPA = max ~${effectiveMax} ad sets. ${campaignAdsets.length} ad sets spread the budget too thin.`
+          : `Over the limit of ${effectiveMax}. Formula: Budget / Target CPA = max ad sets.`,
         entityId: campaign.id,
         entityType: "campaign",
         details: { dailyBudget, targetCpa: settings.targetCpa, dynamicMax: effectiveMax, actual: campaignAdsets.length },
@@ -290,8 +290,8 @@ export function auditAdSetCount(
         severity: "pass",
         title: `"${campaign.name}": ${campaignAdsets.length} ad sets`,
         description: dailyBudget > 0
-          ? `Inom gränsen (${dailyBudget.toFixed(0)} SEK / ${settings.targetCpa} SEK CPA = max ~${effectiveMax}).`
-          : `Inom gränsen på ${effectiveMax}.`,
+          ? `Within the limit (${dailyBudget.toFixed(0)} SEK / ${settings.targetCpa} SEK CPA = max ~${effectiveMax}).`
+          : `Within the limit of ${effectiveMax}.`,
         entityId: campaign.id,
         entityType: "campaign",
       });
@@ -323,7 +323,7 @@ export function auditFrequency(
           category: "frequency",
           severity: "pass",
           title: `"${adset?.name || m.adsetId}" frequency: ${m.frequency.toFixed(1)} — but ROAS ${m.roas.toFixed(2)}x`,
-          description: `Hög frequency men levererar bra ROAS (ovanför target ${settings.targetRoas}x). Låt den vara — den träffar en engagerad publik.`,
+          description: `High frequency but delivering good ROAS (above target ${settings.targetRoas}x). Leave it — it is reaching an engaged audience.`,
           entityId: m.adsetId,
           entityType: "adset",
         });
@@ -333,7 +333,7 @@ export function auditFrequency(
           category: "frequency",
           severity: "warning",
           title: `"${adset?.name || m.adsetId}" frequency: ${m.frequency.toFixed(1)} med ROAS ${m.roas.toFixed(2)}x`,
-          description: `Hög frequency och ROAS under target. Håll koll — om ROAS sjunker under breakeven, byt kreativen.`,
+          description: `High frequency and ROAS below target. Keep an eye on it — if ROAS drops below breakeven, swap the creative.`,
           entityId: m.adsetId,
           entityType: "adset",
         });
@@ -343,7 +343,7 @@ export function auditFrequency(
           category: "frequency",
           severity: "fail",
           title: `"${adset?.name || m.adsetId}" frequency: ${m.frequency.toFixed(1)} med ROAS ${m.roas.toFixed(2)}x`,
-          description: `Hög frequency OCH dålig ROAS (under breakeven ${settings.breakevenRoas}x). Publiken är mättad. Byt kreativ eller pausa.`,
+          description: `High frequency AND poor ROAS (below breakeven ${settings.breakevenRoas}x). The audience is saturated. Swap the creative or pause.`,
           entityId: m.adsetId,
           entityType: "adset",
         });
@@ -356,7 +356,7 @@ export function auditFrequency(
       category: "frequency",
       severity: "pass",
       title: `${okFrequency.length} ad sets with healthy frequency`,
-      description: "Frequency ≤1.5 — bra prospecting-räckvidd.",
+      description: "Frequency ≤1.5 — good prospecting reach.",
     });
   }
 
@@ -439,7 +439,7 @@ export function auditCustomerExclusion(
       category: "structure",
       severity: "warning",
       title: "Ingen customer exclusion hittad",
-      description: "Med hög återköpsfrekvens bör du excluda befintliga kunder från prospecting-kampanjer. Skapa en Custom Audience av köpare (180 dagar) och lägg som exclusion på dina ad sets.",
+      description: "With a high repurchase rate you should exclude existing customers from prospecting campaigns. Create a Custom Audience of buyers (180 days) and add it as an exclusion on your ad sets.",
     });
   } else if (hasExclusion) {
     findings.push({

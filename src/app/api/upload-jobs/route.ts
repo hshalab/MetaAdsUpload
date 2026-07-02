@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       status: "pending",
       currentStep: 0,
       totalSteps: 4,
-      stepLabel: "Väntar...",
+      stepLabel: "Waiting...",
       campaignId,
       config: config || {},
     })

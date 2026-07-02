@@ -62,7 +62,7 @@ export function classifyAd(metrics: AdMetrics, settings: EvolveSettings): Classi
     if (spendVsCpa >= 3 && roas >= targetRoas) {
       return {
         classification: "breakthrough",
-        recommendation: `ROAS ${roas.toFixed(2)}x på ${spend.toFixed(0)} SEK redan under inlärning — Toppresultat!`,
+        recommendation: `ROAS ${roas.toFixed(2)}x at ${spend.toFixed(0)} SEK already during learning — Top result!`,
       };
     }
 
@@ -70,20 +70,20 @@ export function classifyAd(metrics: AdMetrics, settings: EvolveSettings): Classi
     if (isSuckingSpend && roas < breakevenRoas && ageDays >= 2) {
       return {
         classification: "loser",
-        recommendation: `Suger upp ${((spendShare || 0) * 100).toFixed(0)}% av spend med ${roas.toFixed(2)}x ROAS i ${ageDays} dagar — stäng av. Meta drog inte ner spend.`,
+        recommendation: `Absorbing ${((spendShare || 0) * 100).toFixed(0)}% of spend at ${roas.toFixed(2)}x ROAS for ${ageDays} days — turn it off. Meta did not reduce spend.`,
       };
     }
 
     if (isSuckingSpend && roas < breakevenRoas && ageDays < 2) {
       return {
         classification: "new",
-        recommendation: `Suger spend med ${roas.toFixed(2)}x ROAS — vänta 1-2 dagar. Meta brukar dra ner spend automatiskt.`,
+        recommendation: `Absorbing spend at ${roas.toFixed(2)}x ROAS — wait 1-2 days. Meta usually reduces spend automatically.`,
       };
     }
 
     return {
       classification: "new",
-      recommendation: `Dag ${ageDays}/${learningPeriodDays} — ${spend.toFixed(0)}/${spendThreshold.toFixed(0)} SEK spenderat. Låt den köra.`,
+      recommendation: `Dag ${ageDays}/${learningPeriodDays} — ${spend.toFixed(0)}/${spendThreshold.toFixed(0)} SEK spent. Let it run.`,
     };
   }
 
@@ -93,7 +93,7 @@ export function classifyAd(metrics: AdMetrics, settings: EvolveSettings): Classi
     if (roas >= targetRoas && purchases > 0) {
       return {
         classification: "kpi_winner",
-        recommendation: `ROAS ${roas.toFixed(2)}x men bara ${spend.toFixed(0)}/${spendThreshold.toFixed(0)} SEK spenderat — lovande, låt den köra.`,
+        recommendation: `ROAS ${roas.toFixed(2)}x men bara ${spend.toFixed(0)}/${spendThreshold.toFixed(0)} SEK spent — promising, let it run.`,
       };
     }
 
@@ -102,8 +102,8 @@ export function classifyAd(metrics: AdMetrics, settings: EvolveSettings): Classi
       return {
         classification: "loser",
         recommendation: spend === 0
-          ? `Ingen spend efter ${ageDays} dagar — får ingen distribution. Stäng av.`
-          : `${spend.toFixed(0)} SEK spenderat, 0 köp efter ${ageDays} dagar — stäng av.`,
+          ? `No spend after ${ageDays} days — getting no distribution. Turn it off.`
+          : `${spend.toFixed(0)} SEK spent, 0 purchases after ${ageDays} days — turn it off.`,
       };
     }
 
@@ -111,7 +111,7 @@ export function classifyAd(metrics: AdMetrics, settings: EvolveSettings): Classi
     if (spend > 0 && spend < targetCpa && ageDays >= 3 && roas < breakevenRoas) {
       return {
         classification: "loser",
-        recommendation: `Minimal spend (${spend.toFixed(0)} SEK) efter ${ageDays} dagar — får ingen distribution. Flytta till Graveyard.`,
+        recommendation: `Minimal spend (${spend.toFixed(0)} SEK) after ${ageDays} days — getting no distribution. Move to Graveyard.`,
       };
     }
 
@@ -119,14 +119,14 @@ export function classifyAd(metrics: AdMetrics, settings: EvolveSettings): Classi
     if (roas >= breakevenRoas) {
       return {
         classification: "kpi_winner",
-        recommendation: `ROAS ${roas.toFixed(2)}x på ${spend.toFixed(0)} SEK — behöver mer data (${spendVsCpa.toFixed(1)}x av 3x CPA). Låt den köra.`,
+        recommendation: `ROAS ${roas.toFixed(2)}x at ${spend.toFixed(0)} SEK — needs more data (${spendVsCpa.toFixed(1)}x of 3x CPA). Let it run.`,
       };
     }
 
     // Below breakeven, hasn't hit 3x CPA — too early to kill, but watch it
     return {
       classification: "new",
-      recommendation: `ROAS ${roas.toFixed(2)}x under breakeven, men bara ${spendVsCpa.toFixed(1)}x CPA spenderat. Vänta tills 3x CPA (${spendThreshold.toFixed(0)} SEK).`,
+      recommendation: `ROAS ${roas.toFixed(2)}x below breakeven, but only ${spendVsCpa.toFixed(1)}x CPA spent. Wait until 3x CPA (${spendThreshold.toFixed(0)} SEK).`,
     };
   }
 
@@ -137,12 +137,12 @@ export function classifyAd(metrics: AdMetrics, settings: EvolveSettings): Classi
     if (isTopSpender) {
       return {
         classification: "breakthrough",
-        recommendation: `ROAS ${roas.toFixed(2)}x på ${spend.toFixed(0)} SEK — Top spender + bäst KPI. Rör den INTE. Gör bättre creatives istället.`,
+        recommendation: `ROAS ${roas.toFixed(2)}x at ${spend.toFixed(0)} SEK — Top spender + best KPI. Do NOT touch it. Make better creatives instead.`,
       };
     }
     return {
       classification: "breakthrough",
-      recommendation: `ROAS ${roas.toFixed(2)}x på ${spend.toFixed(0)} SEK — Toppresultat! Låt den köra.`,
+      recommendation: `ROAS ${roas.toFixed(2)}x at ${spend.toFixed(0)} SEK — Top result! Let it run.`,
     };
   }
 
@@ -151,12 +151,12 @@ export function classifyAd(metrics: AdMetrics, settings: EvolveSettings): Classi
     if (isTopSpender) {
       return {
         classification: "spend_winner",
-        recommendation: `ROAS ${roas.toFixed(2)}x — lönsam, top spender. Stäng inte av — gör bättre creatives så tappar den spend naturligt. Eller flytta till Graveyard.`,
+        recommendation: `ROAS ${roas.toFixed(2)}x — profitable top spender. Do not turn it off — make better creatives and it loses spend naturally. Or move to Graveyard.`,
       };
     }
     return {
       classification: "spend_winner",
-      recommendation: `ROAS ${roas.toFixed(2)}x — lönsam men under target (${targetRoas}x). Flytta till Graveyard med cost cap.`,
+      recommendation: `ROAS ${roas.toFixed(2)}x — profitable but below target (${targetRoas}x). Move to Graveyard with a cost cap.`,
     };
   }
 
@@ -164,13 +164,13 @@ export function classifyAd(metrics: AdMetrics, settings: EvolveSettings): Classi
   if (isTopSpender) {
     return {
       classification: "loser",
-      recommendation: `ROAS ${roas.toFixed(2)}x under breakeven, top spender — stäng av och fokusera på nya creatives. Flytta till Graveyard.`,
+      recommendation: `ROAS ${roas.toFixed(2)}x below breakeven, top spender — turn it off and focus on new creatives. Move to Graveyard.`,
     };
   }
 
   return {
     classification: "loser",
-    recommendation: `ROAS ${roas.toFixed(2)}x under breakeven efter ${spend.toFixed(0)} SEK — stäng av eller flytta till Graveyard.`,
+    recommendation: `ROAS ${roas.toFixed(2)}x below breakeven after ${spend.toFixed(0)} SEK — turn it off or move to Graveyard.`,
   };
 }
 

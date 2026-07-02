@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         break;
 
       case "let_run":
-        actionDescription = "Granskad — låter köra";
+        actionDescription = "Reviewed — letting it run";
         break;
 
       case "reviewed":
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
         if (!targetGraveyardId) {
           return NextResponse.json({
-            error: "Ingen Graveyard-kampanj konfigurerad för denna kampanj. Gå till Evolve KPI Settings och koppla en Graveyard.",
+            error: "No Graveyard campaign configured for this campaign. Go to Evolve KPI Settings and connect one.",
           }, { status: 400 });
         }
 
@@ -64,13 +64,13 @@ export async function POST(request: NextRequest) {
         const postId = await getAdPostId(adId);
         if (!postId) {
           return NextResponse.json({
-            error: "Kunde inte hämta post-ID för denna annons. Annonsen kan sakna en publicerad post.",
+            error: "Could not fetch the post ID for this ad. The ad may be missing a published post.",
           }, { status: 400 });
         }
 
         // 2. Fetch source ad set's targeting to copy
         if (!adsetId) {
-          return NextResponse.json({ error: "adsetId krävs för move_zombie" }, { status: 400 });
+          return NextResponse.json({ error: "adsetId is required for move_zombie" }, { status: 400 });
         }
 
         const sourceAdset = await metaApi<{

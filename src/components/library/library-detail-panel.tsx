@@ -346,12 +346,12 @@ export function LibraryDetailPanel({ creative: c, metricDays, onClose, onRefresh
                 }}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-medium hover:bg-yellow-500/20 transition-all"
               >
-                <Trash2 className="h-3.5 w-3.5" /> Arkivera
+                <Trash2 className="h-3.5 w-3.5" /> Archive
               </button>
             ) : null}
             <button
               onClick={async () => {
-                if (!confirm("Ta bort permanent? Filen raderas från R2 och kan inte återställas.")) return;
+                if (!confirm("Delete permanently? The file is removed from R2 and cannot be restored.")) return;
                 try {
                   const res = await fetch("/api/library", {
                     method: "DELETE",
@@ -360,19 +360,19 @@ export function LibraryDetailPanel({ creative: c, metricDays, onClose, onRefresh
                   });
                   if (!res.ok) {
                     const data = await res.json();
-                    toast.error(data.error || "Kunde inte ta bort");
+                    toast.error(data.error || "Could not delete");
                     return;
                   }
-                  toast.success("Borttagen permanent");
+                  toast.success("Deleted permanently");
                   onClose();
                   onRefresh();
                 } catch {
-                  toast.error("Kunde inte ta bort");
+                  toast.error("Could not delete");
                 }
               }}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/20 transition-all"
             >
-              <Trash2 className="h-3.5 w-3.5" /> Ta bort permanent
+              <Trash2 className="h-3.5 w-3.5" /> Delete permanently
             </button>
           </div>
         </div>

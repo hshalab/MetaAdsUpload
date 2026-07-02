@@ -41,6 +41,25 @@ type NavSection = {
   items: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
 };
 
+// Video editors get a minimal menu: their workflow + their own public page.
+function editorNavSections(editorSlug?: string | null): NavSection[] {
+  return [
+    {
+      label: "WORKFLOW",
+      items: [
+        { href: "/my-work", label: "My Work", icon: ClipboardList },
+        { href: "/timer", label: "Timer", icon: Timer },
+      ],
+    },
+    ...(editorSlug
+      ? [{
+          label: "MY PAGE",
+          items: [{ href: `/e/${editorSlug}`, label: "My Editor Page", icon: TrendingUp }],
+        }]
+      : []),
+  ];
+}
+
 const navSections: NavSection[] = [
   {
     label: "OVERVIEW",
@@ -62,7 +81,7 @@ const navSections: NavSection[] = [
   {
     label: "EVOLVE",
     items: [
-      { href: "/daily-summary", label: "Daglig Sammanfattning", icon: Sun },
+      { href: "/daily-summary", label: "Daily Summary", icon: Sun },
       { href: "/adset-analyzer", label: "Ad Set Analyzer", icon: BarChart3 },
       { href: "/ad-analyzer", label: "Creative Analyzer", icon: Eye },
       { href: "/audit", label: "Audit", icon: ClipboardCheck },
@@ -70,13 +89,13 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    label: "STRATEGI",
+    label: "STRATEGY",
     requiredRole: "admin",
     items: [
-      { href: "/strategy/avatars", label: "Avatar-bibliotek", icon: Users2 },
+      { href: "/strategy/avatars", label: "Avatar Library", icon: Users2 },
       { href: "/strategy/roadmap", label: "Creative Roadmap", icon: Route },
       { href: "/strategy/hit-rate", label: "Hit Rate", icon: TrendingUp },
-      { href: "/strategy/log", label: "Aktivitetslogg", icon: ScrollText },
+      { href: "/strategy/log", label: "Activity Log", icon: ScrollText },
     ],
   },
   {
@@ -103,12 +122,13 @@ const navSections: NavSection[] = [
   },
 ];
 
-function SidebarContent({ onNavClick, userRole }: { onNavClick?: () => void; userRole: "admin" | "editor" }) {
+function SidebarContent({ onNavClick, userRole, editorSlug }: { onNavClick?: () => void; userRole: "admin" | "editor"; editorSlug?: string | null }) {
   const pathname = usePathname();
 
-  const filteredSections = navSections.filter(
-    (s) => !s.requiredRole || s.requiredRole === userRole
-  );
+  const filteredSections =
+    userRole === "admin"
+      ? navSections.filter((s) => !s.requiredRole || s.requiredRole === userRole)
+      : editorNavSections(editorSlug);
 
   return (
     <>
@@ -118,7 +138,7 @@ function SidebarContent({ onNavClick, userRole }: { onNavClick?: () => void; use
           <Megaphone className="h-4 w-4 text-white" />
         </div>
         <Link
-          href="/dashboard"
+          href={userRole === "admin" ? "/dashboard" : "/my-work"}
           className="font-bold text-base text-white tracking-tight"
           onClick={onNavClick}
         >
@@ -177,14 +197,14 @@ function SidebarContent({ onNavClick, userRole }: { onNavClick?: () => void; use
   );
 }
 
-export function Sidebar({ userRole = "editor" }: { userRole?: "admin" | "editor" }) {
+export function Sidebar({ userRole = "editor", editorSlug }: { userRole?: "admin" | "editor"; editorSlug?: string | null }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <>
       {/* Desktop sidebar — always visible at md+ */}
       <div className="hidden md:flex h-screen w-56 flex-col bg-[#0f1629] border-r border-white/5 shrink-0">
-        <SidebarContent userRole={userRole} />
+        <SidebarContent userRole={userRole} editorSlug={editorSlug} />
       </div>
 
       {/* Mobile drawer backdrop */}
@@ -211,7 +231,7 @@ export function Sidebar({ userRole = "editor" }: { userRole?: "admin" | "editor"
           <X className="h-5 w-5" />
         </button>
 
-        <SidebarContent onNavClick={() => setMobileOpen(false)} userRole={userRole} />
+        <SidebarContent onNavClick={() => setMobileOpen(false)} userRole={userRole} editorSlug={editorSlug} />
       </div>
 
       {/* Mobile top bar */}

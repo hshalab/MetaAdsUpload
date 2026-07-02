@@ -71,7 +71,7 @@ export function evaluateScalingProtocol(
       if (roas >= targetRoas * 1.5 && hasGoodClickRatio) {
         return {
           action: "double",
-          reason: `ROAS ${roas.toFixed(2)}x är 50%+ över target i ${consecutiveDaysAboveTarget} dagar med ${clickPurchaseRatio !== undefined ? (clickPurchaseRatio * 100).toFixed(0) : "?"}% klick-köp — dubbla budgeten`,
+          reason: `ROAS ${roas.toFixed(2)}x is 50%+ above target for ${consecutiveDaysAboveTarget} days with ${clickPurchaseRatio !== undefined ? (clickPurchaseRatio * 100).toFixed(0) : "?"}% click-to-purchase — double the budget`,
           newStatus: "scaling",
           budgetChange: 2.0,
         };
@@ -80,7 +80,7 @@ export function evaluateScalingProtocol(
       // Otherwise → always scale +20%
       return {
         action: "scale_20",
-        reason: `ROAS ${roas.toFixed(2)}x över target i ${consecutiveDaysAboveTarget} dagar — höj budgeten med 20%`,
+        reason: `ROAS ${roas.toFixed(2)}x above target for ${consecutiveDaysAboveTarget} days — raise the budget by 20%`,
         newStatus: "scaling",
         budgetChange: 1.2,
       };
@@ -89,7 +89,7 @@ export function evaluateScalingProtocol(
     // Not consistent yet — monitor and wait
     return {
       action: "monitor",
-      reason: `ROAS ${roas.toFixed(2)}x över target men bara ${consecutiveDaysAboveTarget}/${scalingProtocolDays} dagar — vänta på konsistens`,
+      reason: `ROAS ${roas.toFixed(2)}x above target but only ${consecutiveDaysAboveTarget}/${scalingProtocolDays} days — wait for consistency`,
       newStatus: "monitoring",
     };
   }
@@ -102,14 +102,14 @@ export function evaluateScalingProtocol(
     if (dailyBudget <= minDailySpend) {
       return {
         action: "pause",
-        reason: `ROAS ${roas.toFixed(2)}x under breakeven i ${consecutiveDaysBelowBreakeven} dagar vid minimibudget — överväg att pausa`,
+        reason: `ROAS ${roas.toFixed(2)}x below breakeven for ${consecutiveDaysBelowBreakeven} days at minimum budget — consider pausing`,
         newStatus: "decreasing",
         budgetChange: 0,
       };
     }
     return {
       action: "decrease_20",
-      reason: `ROAS ${roas.toFixed(2)}x under breakeven i ${consecutiveDaysBelowBreakeven} dagar — sänk budgeten med 20%`,
+      reason: `ROAS ${roas.toFixed(2)}x below breakeven for ${consecutiveDaysBelowBreakeven} days — lower the budget by 20%`,
       newStatus: "decreasing",
       budgetChange: 0.8,
     };
@@ -119,7 +119,7 @@ export function evaluateScalingProtocol(
   if (roas < breakevenRoas) {
     return {
       action: "monitor",
-      reason: `ROAS ${roas.toFixed(2)}x under breakeven i ${consecutiveDaysBelowBreakeven} dag(ar) — övervakar innan åtgärd`,
+      reason: `ROAS ${roas.toFixed(2)}x below breakeven for ${consecutiveDaysBelowBreakeven} day(s) — monitoring before action`,
       newStatus: "monitoring",
     };
   }
@@ -128,7 +128,7 @@ export function evaluateScalingProtocol(
   if (consecutiveDaysBelowTarget >= scalingProtocolDays) {
     return {
       action: "decrease_20",
-      reason: `ROAS ${roas.toFixed(2)}x under target i ${consecutiveDaysBelowTarget} dagar — sänk budgeten med 20%`,
+      reason: `ROAS ${roas.toFixed(2)}x below target for ${consecutiveDaysBelowTarget} days — lower the budget by 20%`,
       newStatus: "decreasing",
       budgetChange: 0.8,
     };
@@ -137,7 +137,7 @@ export function evaluateScalingProtocol(
   // Between breakeven and target, not long enough to act — hold
   return {
     action: "hold",
-    reason: `ROAS ${roas.toFixed(2)}x mellan breakeven och target — håll nuvarande budget`,
+    reason: `ROAS ${roas.toFixed(2)}x between breakeven and target — keep the current budget`,
     newStatus: "holding",
   };
 }

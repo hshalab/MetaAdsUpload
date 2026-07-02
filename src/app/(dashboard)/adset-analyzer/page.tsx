@@ -70,11 +70,11 @@ interface AdsetAnalyzerData {
 }
 
 const CLASS_CONFIG: Record<Classification, { label: string; color: string; bg: string; border: string; action: string }> = {
-  breakthrough: { label: "Breakthrough", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", action: "Behåll!" },
+  breakthrough: { label: "Breakthrough", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", action: "Keep!" },
   spend_winner: { label: "Spend Winner", color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", action: "Graveyard" },
-  kpi_winner: { label: "KPI Winner", color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/20", action: "Låt köra" },
-  loser: { label: "Loser", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20", action: "Stäng av" },
-  new: { label: "Ny", color: "text-slate-400", bg: "bg-white/5", border: "border-white/10", action: "Vänta" },
+  kpi_winner: { label: "KPI Winner", color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/20", action: "Let it run" },
+  loser: { label: "Loser", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20", action: "Turn off" },
+  new: { label: "Ny", color: "text-slate-400", bg: "bg-white/5", border: "border-white/10", action: "Wait" },
 };
 
 type DateMode = "preset" | "today" | "custom";
@@ -235,7 +235,7 @@ export default function AdSetAnalyzerPage() {
         } : prev);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Något gick fel");
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setActing(null);
     }
@@ -365,7 +365,7 @@ export default function AdSetAnalyzerPage() {
             <KpiCard label="Spend" value={`${data.summary.totalSpend.toFixed(0)} SEK`} />
             <KpiCard label="ROAS" value={`${data.summary.overallRoas.toFixed(2)}x`}
               color={data.summary.overallRoas >= data.settings.targetRoas ? "text-emerald-400" : data.summary.overallRoas >= data.settings.breakevenRoas ? "text-amber-400" : "text-red-400"} />
-            <KpiCard label="Köp" value={String(data.summary.totalPurchases)} />
+            <KpiCard label="Purchases" value={String(data.summary.totalPurchases)} />
           </div>
 
           {/* Filter tabs */}
@@ -452,7 +452,7 @@ export default function AdSetAnalyzerPage() {
                         color={adset.ncRoas != null && adset.ncRoas >= data.settings.targetRoas ? "text-emerald-400" : adset.ncRoas != null && adset.ncRoas >= data.settings.breakevenRoas ? "text-amber-400" : adset.ncRoas != null ? "text-red-400" : "text-slate-600"} />
                       <Metric label="CPA" value={adset.cpa > 0 ? adset.cpa.toFixed(0) : "-"}
                         color={adset.cpa > 0 && adset.cpa <= data.settings.targetCpa ? "text-emerald-400" : adset.cpa > 0 ? "text-red-400" : "text-slate-500"} />
-                      <Metric label="Köp" value={String(adset.purchases)} />
+                      <Metric label="Purchases" value={String(adset.purchases)} />
                       <Metric label="Freq" value={adset.frequency.toFixed(1)} />
                     </div>
 
@@ -493,7 +493,7 @@ export default function AdSetAnalyzerPage() {
                                 ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                                 : "bg-white/5 text-slate-400 border-white/10 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20"
                             )}
-                            title={isConfirmed ? "Ta bort manuell winner-markering" : "Bekräfta manuellt att detta ad set går bra (oberoende av auto-klassningen)"}
+                            title={isConfirmed ? "Ta bort manuell winner-markering" : "Manually confirm this ad set is performing well (independent of the auto-classification)"}
                           >
                             <Trophy className="h-3.5 w-3.5" />
                             {isConfirmed ? "Winner ✓" : "Winner?"}
@@ -638,8 +638,8 @@ export default function AdSetAnalyzerPage() {
             {filteredAdsets.length === 0 && (
               <div className="rounded-xl border border-white/5 bg-[#111827] py-12 text-center text-slate-500">
                 {data.adsets.length === 0
-                  ? "Inga ad sets hittade. Se till att du har aktiva kampanjer."
-                  : "Inga ad sets i denna kategori."}
+                  ? "No ad sets found. Make sure you have active campaigns."
+                  : "No ad sets in this category."}
               </div>
             )}
           </div>

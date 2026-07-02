@@ -368,8 +368,8 @@ export default function RoadmapPage() {
               <option value="">Awareness Level</option>
               {Object.entries(awarenessLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
-            <input placeholder="Länk till brief (valfritt)" value={form.linkToBrief} onChange={(e) => setForm({ ...form, linkToBrief: e.target.value })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50" />
-            <textarea placeholder="Hypotes — Vi tror att X funkar för att Y" value={form.hypothesis} onChange={(e) => setForm({ ...form, hypothesis: e.target.value })} rows={2} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 resize-none" />
+            <input placeholder="Link to brief (optional)" value={form.linkToBrief} onChange={(e) => setForm({ ...form, linkToBrief: e.target.value })} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50" />
+            <textarea placeholder="Hypothesis — We believe X works because Y" value={form.hypothesis} onChange={(e) => setForm({ ...form, hypothesis: e.target.value })} rows={2} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50 resize-none" />
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Avbryt</button>
               <button onClick={handleCreate} className="px-4 py-2 text-sm rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/20">Skapa</button>
@@ -476,7 +476,7 @@ export default function RoadmapPage() {
               </div>
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Länk till ad</label>
-                <input value={detail.linkToAd || ""} onChange={(e) => setDetail({ ...detail, linkToAd: e.target.value })} placeholder={detail.metaAdId ? "(auto från Meta Ad ID)" : "https://..."} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50" />
+                <input value={detail.linkToAd || ""} onChange={(e) => setDetail({ ...detail, linkToAd: e.target.value })} placeholder={detail.metaAdId ? "(auto from Meta Ad ID)" : "https://..."} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500/50" />
               </div>
             </div>
 

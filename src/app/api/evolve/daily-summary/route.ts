@@ -75,25 +75,25 @@ export async function GET(request: NextRequest) {
 
       if (spend === 0) {
         budgetAction = "no_data";
-        budgetReason = "Ingen spend igår — kan inte bedöma.";
+        budgetReason = "No spend yesterday — cannot assess.";
       } else if (roas >= settings.targetRoas * 1.5) {
         budgetAction = "double";
-        budgetReason = `ROAS ${roas.toFixed(2)}x var 50%+ över target (${settings.targetRoas}x). Dubbla CBO-budgeten!`;
+        budgetReason = `ROAS ${roas.toFixed(2)}x was 50%+ above target (${settings.targetRoas}x). Double the CBO budget!`;
         suggestedBudget = dailyBudget > 0 ? dailyBudget * 2 : undefined;
       } else if (roas >= settings.targetRoas) {
         budgetAction = "increase_20";
-        budgetReason = `ROAS ${roas.toFixed(2)}x var över target. Höj CBO-budgeten med 20%.`;
+        budgetReason = `ROAS ${roas.toFixed(2)}x was above target. Raise the CBO budget by 20%.`;
         suggestedBudget = dailyBudget > 0 ? Math.round(dailyBudget * 1.2) : undefined;
       } else if (roas >= settings.breakevenRoas) {
         budgetAction = "hold";
-        budgetReason = `ROAS ${roas.toFixed(2)}x mellan breakeven och target. Håll nuvarande budget.`;
+        budgetReason = `ROAS ${roas.toFixed(2)}x between breakeven and target. Keep the current budget.`;
       } else if (roas > 0) {
         budgetAction = "decrease_20";
-        budgetReason = `ROAS ${roas.toFixed(2)}x under breakeven (${settings.breakevenRoas}x). Sänk CBO-budgeten med 20%.`;
+        budgetReason = `ROAS ${roas.toFixed(2)}x below breakeven (${settings.breakevenRoas}x). Lower the CBO budget by 20%.`;
         suggestedBudget = dailyBudget > 0 ? Math.round(dailyBudget * 0.8) : undefined;
       } else {
         budgetAction = "no_data";
-        budgetReason = "Ingen ROAS-data tillgänglig.";
+        budgetReason = "No ROAS data available.";
       }
 
       return {

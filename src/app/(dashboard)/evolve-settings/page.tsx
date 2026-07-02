@@ -217,7 +217,7 @@ export default function EvolveSettingsPage() {
           />
           <SettingField
             label="SEK per USD"
-            description="Växelkurs för editor-bonus: annonsernas spend (SEK) räknas om till USD innan bonuströsklarna ($500/$1 000/$3 750/$7 500) jämförs"
+            description="Exchange rate for editor bonuses: ad spend (SEK) is converted to USD before the bonus thresholds ($500/$1,000/$3,750/$7,500) are compared"
             value={settings.sekPerUsd}
             onChange={(v) => update("sekPerUsd", v)}
             step="0.1"
@@ -341,7 +341,7 @@ export default function EvolveSettingsPage() {
 
           <SettingField
             label="Cost Cap Discount"
-            description="% under target CPA för zombie cost cap (0.20 = 20% under)"
+            description="% below target CPA for the zombie cost cap (0.20 = 20% below)"
             value={settings.zombieCostCapDiscount}
             onChange={(v) => update("zombieCostCapDiscount", v)}
             step="0.05"
@@ -357,7 +357,7 @@ export default function EvolveSettingsPage() {
         <div className="divide-y divide-white/5">
           <SettingField
             label="Max Ad Sets per Campaign"
-            description="For många ad sets i en kampanj gör att budgeten sprids för tunt och Meta's algoritm lär sig långsammare. Auditen varnar om en kampanj överstiger detta."
+            description="Too many ad sets in one campaign spreads the budget too thin and Meta's algorithm learns more slowly. The audit warns when a campaign exceeds this."
             value={settings.maxAdSetsPerCampaign}
             onChange={(v) => update("maxAdSetsPerCampaign", v)}
             step="1"

@@ -63,7 +63,7 @@ export default function HitRatePage() {
           </div>
         </div>
         <div className="flex items-center gap-1 bg-white/5 rounded-lg border border-white/10 p-0.5">
-          {[{ v: 3, l: "3 mån" }, { v: 6, l: "6 mån" }, { v: 12, l: "I år" }].map(({ v, l }) => (
+          {[{ v: 3, l: "3 mo" }, { v: 6, l: "6 mo" }, { v: 12, l: "This year" }].map(({ v, l }) => (
             <button
               key={v}
               onClick={() => setMonths(v)}
