@@ -470,6 +470,15 @@ export function AssignmentDetail({
                           <Eye className="h-3.5 w-3.5" />
                           Open Review
                         </Link>
+                        {isAdmin && (
+                          <Link
+                            href={`/upload?assignment=${assignment.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-medium text-emerald-400 hover:bg-emerald-500/20 transition-all"
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            Send to Uploader
+                          </Link>
+                        )}
                       </div>
                     )}
                     {assignment.googleDriveLink && (

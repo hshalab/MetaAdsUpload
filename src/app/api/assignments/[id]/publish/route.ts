@@ -5,7 +5,10 @@ import { eq } from "drizzle-orm";
 import { createCampaign } from "@/lib/meta/campaigns";
 import { createAdSet } from "@/lib/meta/adsets";
 import { createAd, getAdPostId } from "@/lib/meta/ads";
-import { createAdCreative, uploadImage, uploadVideo } from "@/lib/meta/creatives";
+import { createAdCreative, uploadImage, uploadVideo, waitForVideoReady, getVideoThumbnail } from "@/lib/meta/creatives";
+import { metaApi, getAdAccountId } from "@/lib/meta/client";
+
+export const maxDuration = 300; // large videos: Meta-side download + processing wait
 
 interface CreativeInput {
   name: string; // filename / creative name
@@ -173,6 +176,7 @@ export async function POST(
 
       let videoId = creative.metaVideoId;
       let imageHash = creative.metaImageHash;
+      let thumbnailUrl: string | undefined;
 
       if (!useExistingPost) {
         if (creative.base64) {
@@ -185,18 +189,35 @@ export async function POST(
             imageHash = Object.values(result.images)[0]?.hash;
           }
         } else if (creative.deliverableUrl) {
-          // Download from R2 URL and upload to Meta
-          const fileRes = await fetch(creative.deliverableUrl);
-          if (!fileRes.ok) throw new Error(`Failed to download deliverable from ${creative.deliverableUrl}`);
-          const arrayBuffer = await fileRes.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
           if (creative.type === "video") {
-            const result = await uploadVideo(buffer, creative.name);
-            videoId = result.id;
+            // Direct cloud→Meta: Meta pulls the file itself from the R2 public URL
+            try {
+              const result = await metaApi<{ id: string }>(`/${await getAdAccountId()}/advideos`, {
+                method: "POST",
+                body: { file_url: creative.deliverableUrl, title: creative.name },
+              });
+              videoId = result.id;
+            } catch {
+              // Fallback: download from R2 and upload the bytes
+              const fileRes = await fetch(creative.deliverableUrl);
+              if (!fileRes.ok) throw new Error(`Failed to download deliverable from ${creative.deliverableUrl}`);
+              const buffer = Buffer.from(await fileRes.arrayBuffer());
+              const result = await uploadVideo(buffer, creative.name);
+              videoId = result.id;
+            }
           } else {
+            const fileRes = await fetch(creative.deliverableUrl);
+            if (!fileRes.ok) throw new Error(`Failed to download deliverable from ${creative.deliverableUrl}`);
+            const buffer = Buffer.from(await fileRes.arrayBuffer());
             const result = await uploadImage(buffer, creative.name);
             imageHash = Object.values(result.images)[0]?.hash;
           }
+        }
+
+        // Wait for Meta-side processing and grab the auto thumbnail for the creative
+        if (videoId && creative.type === "video") {
+          await waitForVideoReady(videoId);
+          thumbnailUrl = (await getVideoThumbnail(videoId)) || undefined;
         }
       }
 
@@ -227,7 +248,7 @@ export async function POST(
           };
 
           if (videoId) {
-            (creativePayload.object_story_spec as Record<string, unknown>).video_data = {
+            const videoData: Record<string, unknown> = {
               video_id: videoId,
               message: primaryTexts[0] || "",
               title: headlines[0] || "",
@@ -236,6 +257,8 @@ export async function POST(
                 value: { link: landingPage },
               },
             };
+            if (thumbnailUrl) videoData.image_url = thumbnailUrl;
+            (creativePayload.object_story_spec as Record<string, unknown>).video_data = videoData;
           } else if (imageHash) {
             (creativePayload.object_story_spec as Record<string, unknown>).link_data = {
               link: landingPage,

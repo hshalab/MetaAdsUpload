@@ -571,6 +571,47 @@ export default function UploadPage() {
     if (activeTab === "cloudflare") browseR2("");
   }, [activeTab, browseR2]);
 
+  // ─── Prefill an assignment deliverable (?assignment=<id>) ───
+  // "Send to Uploader" on an assignment lands here: the editor's video is
+  // already in R2, so it's preselected as a cloud file — no re-upload, and
+  // Meta later pulls it straight from the R2 URL.
+  useEffect(() => {
+    const assignmentId = new URLSearchParams(window.location.search).get("assignment");
+    if (!assignmentId) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/assignments/${assignmentId}`);
+        if (!res.ok) throw new Error("Could not load the assignment");
+        const a = await res.json();
+        if (!a.deliverableUrl || !a.deliverableR2Key) {
+          toast.error("The assignment has no uploaded deliverable yet");
+          return;
+        }
+        let filename = a.deliverableR2Key.split("/").pop() || "deliverable.mp4";
+        try {
+          const infoRes = await fetch(`/api/assignments/${assignmentId}/deliverable-info`);
+          if (infoRes.ok) {
+            const info = await infoRes.json();
+            if (info.filename) filename = info.filename;
+          }
+        } catch { /* fall back to key-derived name */ }
+        const mediaType: "video" | "image" = /\.(jpg|jpeg|png|webp)$/i.test(filename) ? "image" : "video";
+        setActiveTab("cloudflare");
+        setR2Selected([{
+          key: a.deliverableR2Key,
+          name: filename,
+          size: 0,
+          url: a.deliverableUrl,
+          type: "file",
+          mediaType,
+        }]);
+        toast.success(`Deliverable from "${a.autoName || a.title}" loaded — pick a template and campaign`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not load the deliverable");
+      }
+    })();
+  }, []);
+
   // Auto-start queue processing when new jobs are added
   useEffect(() => {
     if (shouldAutoStart && !isUploading && jobs.some((j) => j.status === "pending")) {
