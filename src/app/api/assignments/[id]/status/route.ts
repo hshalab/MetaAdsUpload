@@ -53,6 +53,7 @@ export async function PATCH(
     } else {
       // Admins: allow all except going backward from posted
       const adminTransitions: Record<string, string[]> = {
+        draft: ["ready_for_editing"],
         ready_for_editing: ["editing_now", "revision"],
         editing_now: ["ready_for_review", "ready_for_editing", "revision"],
         ready_for_review: ["ready_for_posting", "revision", "editing_now"],

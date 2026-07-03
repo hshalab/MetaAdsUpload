@@ -399,8 +399,41 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
         setDraftRestored(true);
         if (draft.form.customerAvatarIds?.length) setShowAvatars(true);
       } else {
-        setForm({ ...emptyForm });
-        setScript({ ...emptyScript, hooks: [{ id: "h1", label: "H1", eng: "", se: "" }] });
+        // No local draft — fall back to server-saved values (drafts auto-save
+        // to the server), so reopening a draft doesn't look like work was lost.
+        const briefContent = (assignment as { briefContent?: string | null }).briefContent || "";
+        const references = (assignment as { references?: FormState["references"] }).references || [];
+        const hasSavedContent =
+          assignment.batchNumber > 0 || !!briefContent || !!assignment.description ||
+          !!assignment.formatId || !!assignment.scriptContent || references.length > 0;
+        if (hasSavedContent) {
+          setForm({
+            batchNumber: assignment.batchNumber > 0 ? assignment.batchNumber.toString() : "",
+            version: assignment.version.toString(),
+            formatId: assignment.formatId || "",
+            angleId: assignment.angleId || "",
+            productId: assignment.productId || "",
+            countryId: assignment.countryId || "",
+            offerTypeId: assignment.offerTypeId || "",
+            scriptStructureId: assignment.scriptStructureId || "",
+            customerAvatarIds: assignment.customerAvatars || [],
+            landingPage: assignment.landingPage || "",
+            // Drafts are auto-assigned to their creator; don't prefill that as the editor
+            assignedToId: assignment.assignedToId === assignment.assignedById ? "" : assignment.assignedToId,
+            creativeStrategistId: assignment.creativeStrategistId || "",
+            creativeStrategistName: assignment.creativeStrategistName || "",
+            priority: assignment.priority,
+            dueDate: assignment.dueDate ? new Date(assignment.dueDate).toISOString() : undefined,
+            description: assignment.description || "",
+            briefContent,
+            references,
+          });
+          setScript(assignment.scriptContent || { ...emptyScript, hooks: [{ id: "h1", label: "H1", eng: "", se: "" }] });
+          if (assignment.customerAvatars?.length) setShowAvatars(true);
+        } else {
+          setForm({ ...emptyForm });
+          setScript({ ...emptyScript, hooks: [{ id: "h1", label: "H1", eng: "", se: "" }] });
+        }
         setDraftRestored(false);
       }
     } else if (assignment) {
@@ -551,11 +584,15 @@ export function AssignmentModal({ open, onOpenChange, assignment, onSaved }: Ass
 
       // If this was a draft, move it to ready_for_editing
       if (isDraftAssignment && assignment) {
-        await fetch(`/api/assignments/${assignment.id}/status`, {
+        const statusRes = await fetch(`/api/assignments/${assignment.id}/status`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "READY_FOR_EDITING" }),
         });
+        if (!statusRes.ok) {
+          const data = await statusRes.json().catch(() => ({}));
+          throw new Error((data as { error?: string }).error || "Saved, but could not move out of Draft");
+        }
       }
 
       toast.success(isDraftAssignment ? "Assignment created" : assignment ? "Assignment updated" : "Assignment created");
