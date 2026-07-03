@@ -583,29 +583,46 @@ export default function UploadPage() {
         const res = await fetch(`/api/assignments/${assignmentId}`);
         if (!res.ok) throw new Error("Could not load the assignment");
         const a = await res.json();
-        if (!a.deliverableUrl || !a.deliverableR2Key) {
+
+        // All uploaded deliverable files (one versions row per file)
+        let files: Array<{ key: string; url: string; name: string }> = [];
+        try {
+          const vRes = await fetch(`/api/assignments/${assignmentId}/versions`);
+          if (vRes.ok) {
+            const versions: Array<{ r2Key: string; r2Url: string; filename: string }> = await vRes.json();
+            const seen = new Set<string>();
+            for (const v of versions) {
+              if (v.r2Key && !seen.has(v.r2Key)) {
+                seen.add(v.r2Key);
+                files.push({ key: v.r2Key, url: v.r2Url, name: v.filename });
+              }
+            }
+          }
+        } catch { /* fall back to the single latest deliverable below */ }
+        if (files.length === 0 && a.deliverableUrl && a.deliverableR2Key) {
+          files = [{
+            key: a.deliverableR2Key,
+            url: a.deliverableUrl,
+            name: a.deliverableR2Key.split("/").pop() || "deliverable.mp4",
+          }];
+        }
+        if (files.length === 0) {
           toast.error("The assignment has no uploaded deliverable yet");
           return;
         }
-        let filename = a.deliverableR2Key.split("/").pop() || "deliverable.mp4";
-        try {
-          const infoRes = await fetch(`/api/assignments/${assignmentId}/deliverable-info`);
-          if (infoRes.ok) {
-            const info = await infoRes.json();
-            if (info.filename) filename = info.filename;
-          }
-        } catch { /* fall back to key-derived name */ }
-        const mediaType: "video" | "image" = /\.(jpg|jpeg|png|webp)$/i.test(filename) ? "image" : "video";
+
         setActiveTab("cloudflare");
-        setR2Selected([{
-          key: a.deliverableR2Key,
-          name: filename,
+        setR2Selected(files.map((f) => ({
+          key: f.key,
+          name: f.name,
           size: 0,
-          url: a.deliverableUrl,
-          type: "file",
-          mediaType,
-        }]);
-        toast.success(`Deliverable from "${a.autoName || a.title}" loaded — pick a template and campaign`);
+          url: f.url,
+          type: "file" as const,
+          mediaType: (/\.(jpg|jpeg|png|webp)$/i.test(f.name) ? "image" : "video") as "video" | "image",
+        })));
+        toast.success(
+          `${files.length} file${files.length !== 1 ? "s" : ""} from "${a.autoName || a.title}" loaded — pick a template and campaign`
+        );
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Could not load the deliverable");
       }

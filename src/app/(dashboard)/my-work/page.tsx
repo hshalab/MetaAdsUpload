@@ -54,6 +54,14 @@ interface MyAssignmentsResponse {
   total: number;
 }
 
+interface DeliverableFileInfo {
+  id: string;
+  filename: string;
+  r2Url: string;
+  versionNumber: number;
+  createdAt: string;
+}
+
 interface AdInsight {
   assignmentId: string;
   adId: string;
@@ -90,6 +98,8 @@ export default function MyWorkPage() {
   // Upload state
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadQueue, setUploadQueue] = useState<{ current: number; total: number } | null>(null);
+  const [versionsByAssignment, setVersionsByAssignment] = useState<Record<string, DeliverableFileInfo[]>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Video length modal state
@@ -133,70 +143,99 @@ export default function MyWorkPage() {
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
   useEffect(() => { fetchInsights(); }, [fetchInsights]);
 
-  // Upload file to R2
-  const handleUpload = async (assignmentId: string, file: File) => {
-    setUploadingId(assignmentId);
-    setUploadProgress(0);
+  // Fetch the list of uploaded deliverable files for an assignment
+  const fetchVersions = useCallback(async (assignmentId: string) => {
     try {
-      // 1. Get presigned URL
-      const presignRes = await fetch("/api/upload/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          fileSize: file.size,
-          assignmentId,
-        }),
-      });
-      if (!presignRes.ok) {
-        const err = await presignRes.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to get upload URL");
+      const res = await fetch(`/api/assignments/${assignmentId}/versions`);
+      if (!res.ok) return;
+      const versions: DeliverableFileInfo[] = await res.json();
+      setVersionsByAssignment((prev) => ({ ...prev, [assignmentId]: versions }));
+    } catch { /* list is a nice-to-have; single deliverableUrl still shows */ }
+  }, []);
+
+  useEffect(() => {
+    if (expandedId) fetchVersions(expandedId);
+  }, [expandedId, fetchVersions]);
+
+  // Upload a single file to R2 and register it as a deliverable
+  const uploadOne = async (assignmentId: string, file: File) => {
+    // 1. Get presigned URL
+    const presignRes = await fetch("/api/upload/presign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        contentType: file.type,
+        fileSize: file.size,
+        assignmentId,
+      }),
+    });
+    if (!presignRes.ok) {
+      const err = await presignRes.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to get upload URL");
+    }
+    const { uploadUrl, publicUrl, key } = await presignRes.json();
+    setUploadProgress(10);
+
+    // 2. Upload directly to R2
+    const xhr = new XMLHttpRequest();
+    await new Promise<void>((resolve, reject) => {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          setUploadProgress(10 + Math.round((e.loaded / e.total) * 80));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Upload failed: ${xhr.status}`));
+      };
+      xhr.onerror = () => reject(new Error("Upload failed"));
+      xhr.open("PUT", uploadUrl);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.send(file);
+    });
+    setUploadProgress(95);
+
+    // 3. Save as a deliverable file on the assignment
+    const saveRes = await fetch(`/api/assignments/${assignmentId}/deliverable`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deliverableUrl: publicUrl,
+        deliverableR2Key: key,
+        filename: file.name,
+        contentType: file.type,
+        fileSize: file.size,
+      }),
+    });
+    if (!saveRes.ok) throw new Error("Failed to save deliverable");
+    setUploadProgress(100);
+  };
+
+  // Upload one or more files, sequentially, with per-file progress
+  const handleUpload = async (assignmentId: string, files: File[]) => {
+    setUploadingId(assignmentId);
+    let failedAt: string | null = null;
+    try {
+      for (let i = 0; i < files.length; i++) {
+        setUploadQueue({ current: i + 1, total: files.length });
+        setUploadProgress(0);
+        failedAt = files[i].name;
+        await uploadOne(assignmentId, files[i]);
+        failedAt = null;
       }
-      const { uploadUrl, publicUrl, key } = await presignRes.json();
-      setUploadProgress(20);
-
-      // 2. Upload directly to R2
-      const xhr = new XMLHttpRequest();
-      await new Promise<void>((resolve, reject) => {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            setUploadProgress(20 + Math.round((e.loaded / e.total) * 70));
-          }
-        };
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) resolve();
-          else reject(new Error(`Upload failed: ${xhr.status}`));
-        };
-        xhr.onerror = () => reject(new Error("Upload failed"));
-        xhr.open("PUT", uploadUrl);
-        xhr.setRequestHeader("Content-Type", file.type);
-        xhr.send(file);
-      });
-      setUploadProgress(90);
-
-      // 3. Save deliverable URL on assignment
-      const saveRes = await fetch(`/api/assignments/${assignmentId}/deliverable`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deliverableUrl: publicUrl,
-          deliverableR2Key: key,
-          filename: file.name,
-          contentType: file.type,
-          fileSize: file.size,
-        }),
-      });
-      if (!saveRes.ok) throw new Error("Failed to save deliverable");
-      setUploadProgress(100);
-
-      // Refresh data
-      await fetchAssignments();
+      await Promise.all([fetchAssignments(), fetchVersions(assignmentId)]);
     } catch (err) {
       console.error("Upload error:", err);
-      alert(err instanceof Error ? err.message : "Upload failed");
+      alert(
+        (failedAt ? `"${failedAt}": ` : "") +
+        (err instanceof Error ? err.message : "Upload failed")
+      );
+      // Keep what did upload — refresh so the successful files show
+      await Promise.all([fetchAssignments(), fetchVersions(assignmentId)]);
     } finally {
       setUploadingId(null);
+      setUploadQueue(null);
       setUploadProgress(0);
     }
   };
@@ -387,12 +426,13 @@ export default function MyWorkPage() {
       <input
         ref={fileInputRef}
         type="file"
+        multiple
         accept="video/mp4,video/quicktime,video/webm,image/jpeg,image/png,image/webp"
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file && uploadingId === null && expandedId) {
-            handleUpload(expandedId, file);
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0 && uploadingId === null && expandedId) {
+            handleUpload(expandedId, files);
           }
           e.target.value = "";
         }}
@@ -602,36 +642,13 @@ export default function MyWorkPage() {
                           <div>
                             <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Upload Deliverable</h4>
                             <div className="rounded-lg border border-white/5 bg-[#0d1220] p-3">
-                              {assignment.deliverableUrl ? (
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2 text-sm">
-                                    <FileVideo className="h-4 w-4 text-emerald-400" />
-                                    <span className="text-emerald-400 font-medium">Video uploaded</span>
-                                  </div>
-                                  <a
-                                    href={assignment.deliverableUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-xs text-cyan-400 hover:underline"
-                                  >
-                                    View file <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      fileInputRef.current?.click();
-                                    }}
-                                    disabled={uploadingId !== null}
-                                    className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                                  >
-                                    Replace file
-                                  </button>
-                                </div>
-                              ) : uploadingId === assignment.id ? (
+                              {uploadingId === assignment.id ? (
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-2 text-sm text-cyan-400">
                                     <Loader2 className="h-4 w-4 animate-spin" />
-                                    Uploading...
+                                    {uploadQueue && uploadQueue.total > 1
+                                      ? `Uploading video ${uploadQueue.current} of ${uploadQueue.total}...`
+                                      : "Uploading..."}
                                   </div>
                                   <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
                                     <div
@@ -642,16 +659,55 @@ export default function MyWorkPage() {
                                   <p className="text-xs text-slate-500">{uploadProgress}%</p>
                                 </div>
                               ) : (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    fileInputRef.current?.click();
-                                  }}
-                                  className="flex items-center gap-2 px-3 py-2 w-full rounded-lg border-2 border-dashed border-white/10 text-sm text-slate-400 hover:border-cyan-500/30 hover:text-cyan-400 hover:bg-cyan-500/5 transition-all"
-                                >
-                                  <Upload className="h-4 w-4" />
-                                  Upload Video
-                                </button>
+                                <div className="space-y-2">
+                                  {/* Already uploaded files */}
+                                  {(versionsByAssignment[assignment.id]?.length ?? 0) > 0 ? (
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-center gap-2 text-sm">
+                                        <FileVideo className="h-4 w-4 text-emerald-400" />
+                                        <span className="text-emerald-400 font-medium">
+                                          {versionsByAssignment[assignment.id].length} video{versionsByAssignment[assignment.id].length !== 1 ? "s" : ""} uploaded
+                                        </span>
+                                      </div>
+                                      {versionsByAssignment[assignment.id].map((v) => (
+                                        <a
+                                          key={v.id}
+                                          href={v.r2Url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-1.5 text-xs text-cyan-400 hover:underline truncate"
+                                        >
+                                          <FileVideo className="h-3 w-3 flex-shrink-0 text-slate-500" />
+                                          <span className="truncate">{v.filename}</span>
+                                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                        </a>
+                                      ))}
+                                    </div>
+                                  ) : assignment.deliverableUrl ? (
+                                    <a
+                                      href={assignment.deliverableUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1 text-xs text-cyan-400 hover:underline"
+                                    >
+                                      View uploaded file <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  ) : null}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      fileInputRef.current?.click();
+                                    }}
+                                    disabled={uploadingId !== null}
+                                    className="flex items-center gap-2 px-3 py-2 w-full rounded-lg border-2 border-dashed border-white/10 text-sm text-slate-400 hover:border-cyan-500/30 hover:text-cyan-400 hover:bg-cyan-500/5 transition-all disabled:opacity-50"
+                                  >
+                                    <Upload className="h-4 w-4" />
+                                    {(versionsByAssignment[assignment.id]?.length ?? 0) > 0 || assignment.deliverableUrl
+                                      ? "Upload More Videos"
+                                      : "Upload Videos"}
+                                  </button>
+                                  <p className="text-[11px] text-slate-600">You can select multiple files at once</p>
+                                </div>
                               )}
                             </div>
                           </div>

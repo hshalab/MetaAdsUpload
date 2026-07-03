@@ -151,32 +151,39 @@ export function PublishDialog({
       setAdsetName(assignment.autoName || assignment.title);
       setLandingPages([assignment.landingPage || ""]);
 
-      // Auto-add deliverable as creative if available
+      // Auto-add ALL uploaded deliverable files as creatives
       if (assignment.deliverableUrl) {
-        // Fetch original filename from deliverable version
-        const fetchOriginalFilename = async () => {
+        const loadDeliverables = async (): Promise<CreativeFile[]> => {
           try {
-            const res = await fetch(`/api/assignments/${assignment.id}/deliverable-info`);
+            const res = await fetch(`/api/assignments/${assignment.id}/versions`);
             if (res.ok) {
-              const data = await res.json();
-              return data.filename || null;
+              const versions: Array<{ id: string; r2Key: string; r2Url: string; filename: string }> = await res.json();
+              const seen = new Set<string>();
+              const files: CreativeFile[] = [];
+              for (const v of versions) {
+                if (!v.r2Url || seen.has(v.r2Key)) continue;
+                seen.add(v.r2Key);
+                files.push({
+                  id: v.id,
+                  name: v.filename,
+                  type: /\.(jpg|jpeg|png|webp)$/i.test(v.filename) ? "image" : "video",
+                  deliverableUrl: v.r2Url,
+                });
+              }
+              if (files.length > 0) return files;
             }
-          } catch {}
-          return null;
-        };
-        fetchOriginalFilename().then((originalFilename) => {
+          } catch { /* fall back to the single latest deliverable */ }
           const fallbackFilename = assignment.deliverableR2Key
             ? assignment.deliverableR2Key.split("/").pop() || "deliverable.mp4"
             : "deliverable.mp4";
-          const filename = originalFilename || fallbackFilename;
-          const isImage = /\.(jpg|jpeg|png|webp)$/i.test(filename);
-          setCreatives([{
+          return [{
             id: "deliverable",
-            name: filename,
-            type: isImage ? "image" : "video",
+            name: fallbackFilename,
+            type: /\.(jpg|jpeg|png|webp)$/i.test(fallbackFilename) ? "image" : "video",
             deliverableUrl: assignment.deliverableUrl!,
-          }]);
-        });
+          }];
+        };
+        loadDeliverables().then(setCreatives);
       } else {
         setCreatives([]);
       }
