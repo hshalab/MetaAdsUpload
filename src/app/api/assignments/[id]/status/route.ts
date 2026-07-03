@@ -50,24 +50,8 @@ export async function PATCH(
       if (!allowedTransitions[current.status]?.includes(dbStatus)) {
         return NextResponse.json({ error: "Invalid status transition" }, { status: 403 });
       }
-    } else {
-      // Admins: allow all except going backward from posted
-      const adminTransitions: Record<string, string[]> = {
-        draft: ["ready_for_editing"],
-        ready_for_editing: ["editing_now", "revision"],
-        editing_now: ["ready_for_review", "ready_for_editing", "revision"],
-        ready_for_review: ["ready_for_posting", "revision", "editing_now"],
-        revision: ["editing_now", "ready_for_review", "ready_for_editing"],
-        ready_for_posting: ["posted", "revision", "ready_for_review"],
-        posted: [], // Cannot go backward from posted
-      };
-      if (!adminTransitions[current.status]?.includes(dbStatus)) {
-        return NextResponse.json(
-          { error: `Cannot change status from ${current.status} to ${dbStatus}` },
-          { status: 400 }
-        );
-      }
     }
+    // Admins: any status → any status (e.g. jump Editing Now straight to Posted)
 
     const updateData: Record<string, unknown> = { status: dbStatus, updatedAt: new Date() };
 

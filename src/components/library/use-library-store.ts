@@ -16,6 +16,7 @@ export interface CreativeMetricsClient {
   hookRate: number;
   holdRate: number;
   classification: string | null;
+  stars: number | null;
 }
 
 export interface Creative {
@@ -43,7 +44,7 @@ export type ViewMode = "grid" | "list";
 export type Density = "sm" | "md" | "lg";
 export type SortOption =
   | "date_desc" | "date_asc" | "name_asc" | "name_desc" | "size_desc" | "size_asc"
-  | "spend_desc" | "roas_desc" | "hook_desc" | "hold_desc" | "ctr_desc";
+  | "stars_desc" | "spend_desc" | "roas_desc" | "hook_desc" | "hold_desc" | "ctr_desc";
 export type StatusFilter = "all" | "uploaded" | "in_review" | "approved" | "archived";
 export type TypeFilter = "all" | "video" | "image";
 

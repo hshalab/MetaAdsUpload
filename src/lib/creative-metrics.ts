@@ -25,6 +25,57 @@ export interface CreativeMetrics {
   hookRate: number;
   holdRate: number;
   classification: string | null;
+  stars: number | null;
+}
+
+// ─── Star rating (0.5–5, halves) ────────────────────────────────────────────
+// ROAS anchors follow the account's decision thresholds: 1.42 breakeven → 3★,
+// 1.7 hold → 4★, 2.0 scale → 5★. Spend acts as confidence: under
+// MIN_RATED_SPEND the sample is too small to rate at all, and the score is
+// shrunk toward the 2.5 midpoint until spend reaches PROVEN_SPEND — a 5★ has
+// to be earned with real money, and a low-spend fluke can't tank to 0.5★.
+export const MIN_RATED_SPEND = 500; // SEK
+const PROVEN_SPEND = 3000; // SEK
+const ROAS_ANCHORS: Array<[number, number]> = [
+  [0, 0.5],
+  [0.5, 1],
+  [1.0, 2],
+  [1.42, 3],
+  [1.7, 4],
+  [2.0, 5],
+];
+
+export function calculateStars(m: {
+  spend: number;
+  roas: number;
+  hookRate: number;
+  holdRate: number;
+  ctr: number;
+}): number | null {
+  if (m.spend < MIN_RATED_SPEND) return null;
+
+  // Piecewise-linear ROAS → base score
+  let base = 5;
+  for (let i = 1; i < ROAS_ANCHORS.length; i++) {
+    const [x0, y0] = ROAS_ANCHORS[i - 1];
+    const [x1, y1] = ROAS_ANCHORS[i];
+    if (m.roas <= x1) {
+      base = y0 + ((m.roas - x0) / (x1 - x0)) * (y1 - y0);
+      break;
+    }
+  }
+
+  // Engagement nudge (max ±0.4) — hook/hold only nudge when video metrics exist
+  let nudge = 0;
+  if (m.hookRate >= 30) nudge += 0.15;
+  else if (m.hookRate > 0 && m.hookRate < 15) nudge -= 0.15;
+  if (m.holdRate >= 25) nudge += 0.15;
+  else if (m.holdRate > 0 && m.holdRate < 10) nudge -= 0.15;
+  if (m.ctr >= 1) nudge += 0.1;
+
+  const confidence = Math.min(m.spend / PROVEN_SPEND, 1);
+  const raw = 2.5 + (base + nudge - 2.5) * (0.5 + 0.5 * confidence);
+  return Math.round(Math.max(0.5, Math.min(5, raw)) * 2) / 2;
 }
 
 export interface CreativeAdBreakdownRow {
@@ -155,6 +206,7 @@ export async function getCreativeMetrics(creativeIds: number[], days = 30): Prom
     const linkClicks = num(r.link_clicks);
     const v3 = num(r.v3);
     const thru = num(r.thru);
+    const derived = derive(spend, revenue, purchases, impressions, linkClicks, v3, thru);
     map.set(creativeId, {
       creativeId,
       adCount: num(r.ad_count),
@@ -166,8 +218,9 @@ export async function getCreativeMetrics(creativeIds: number[], days = 30): Prom
       linkClicks,
       videoViews3s: v3,
       thruplays: thru,
-      ...derive(spend, revenue, purchases, impressions, linkClicks, v3, thru),
+      ...derived,
       classification: null,
+      stars: calculateStars({ spend, ...derived }),
     });
   }
 

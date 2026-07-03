@@ -5,6 +5,7 @@ import { Video, Image as ImageIcon, CheckSquare, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration, formatFileSize, formatResolutionShort } from "@/lib/format-utils";
 import { HoverScrubThumbnail } from "./hover-scrub-thumbnail";
+import { StarRating } from "./star-rating";
 import type { Creative } from "./use-library-store";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -201,39 +202,53 @@ export function LibraryCard({
             </span>
           )}
         </div>
-        {/* Performance strip — always visible so the library reads as an ads library */}
+        {/* Performance — stars + metrics so the library reads as an ads library */}
         {c.metrics && c.metrics.adCount === 0 && (
-          <div className="mt-1.5 rounded-md bg-white/[0.02] border border-white/[0.04] px-1.5 py-1"
-            title="Not linked to a Meta ad yet — publish it or run an insights sync">
-            <p className="text-[9px] text-slate-600">No linked ads yet — publish or sync</p>
+          <div className="mt-1.5 flex items-center justify-between rounded-md bg-white/[0.02] border border-white/[0.04] px-1.5 py-1"
+            title="Not linked to a Meta ad yet — publish it from the uploader">
+            <StarRating value={null} size={11} />
+            <p className="text-[9px] text-slate-600">Not published</p>
           </div>
         )}
         {c.metrics && c.metrics.adCount > 0 && (
-          <div className="mt-1.5 grid grid-cols-4 gap-1 rounded-md bg-white/[0.03] border border-white/[0.05] px-1.5 py-1"
-            title={`${c.metrics.adCount} linked ad${c.metrics.adCount === 1 ? "" : "s"} (${c.metrics.activeAdCount} active)`}>
-            <div className="min-w-0">
-              <p className="text-[8px] uppercase tracking-wide text-slate-600">Spend</p>
-              <p className="text-[10px] font-semibold text-white truncate">{fmtSpend(c.metrics.spend)}</p>
+          <>
+            <div className="mt-1.5 flex items-center justify-between"
+              title={`${c.metrics.adCount} linked ad${c.metrics.adCount === 1 ? "" : "s"} (${c.metrics.activeAdCount} active)`}>
+              <StarRating value={c.metrics.stars} size={12} showValue />
+              {c.metrics.stars == null ? (
+                <span className="text-[9px] font-medium text-blue-400/80">🧪 Testing</span>
+              ) : (
+                <span className="text-[9px] text-slate-500">
+                  {c.metrics.adCount} ad{c.metrics.adCount === 1 ? "" : "s"}
+                  {c.metrics.activeAdCount > 0 && <span className="text-emerald-500"> · {c.metrics.activeAdCount} live</span>}
+                </span>
+              )}
             </div>
-            <div className="min-w-0">
-              <p className="text-[8px] uppercase tracking-wide text-slate-600">ROAS</p>
-              <p className={cn("text-[10px] font-semibold truncate", c.metrics.roas >= 2 ? "text-emerald-400" : c.metrics.roas >= 1 ? "text-yellow-400" : "text-red-400")}>
-                {c.metrics.spend > 0 ? c.metrics.roas.toFixed(2) : "—"}
-              </p>
+            <div className="mt-1 grid grid-cols-4 gap-1 rounded-md bg-white/[0.03] border border-white/[0.05] px-1.5 py-1">
+              <div className="min-w-0">
+                <p className="text-[8px] uppercase tracking-wide text-slate-600">Spend</p>
+                <p className="text-[10px] font-semibold text-white truncate">{fmtSpend(c.metrics.spend)}</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[8px] uppercase tracking-wide text-slate-600">ROAS</p>
+                <p className={cn("text-[10px] font-semibold truncate", c.metrics.roas >= 2 ? "text-emerald-400" : c.metrics.roas >= 1.42 ? "text-yellow-400" : "text-red-400")}>
+                  {c.metrics.spend > 0 ? c.metrics.roas.toFixed(2) : "—"}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[8px] uppercase tracking-wide text-slate-600">Hook</p>
+                <p className="text-[10px] font-semibold text-white truncate">
+                  {c.metrics.hookRate > 0 ? `${c.metrics.hookRate.toFixed(1)}%` : "—"}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[8px] uppercase tracking-wide text-slate-600">Hold</p>
+                <p className="text-[10px] font-semibold text-white truncate">
+                  {c.metrics.holdRate > 0 ? `${c.metrics.holdRate.toFixed(1)}%` : "—"}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-[8px] uppercase tracking-wide text-slate-600">Hook</p>
-              <p className="text-[10px] font-semibold text-white truncate">
-                {c.metrics.hookRate > 0 ? `${c.metrics.hookRate.toFixed(1)}%` : "—"}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[8px] uppercase tracking-wide text-slate-600">Hold</p>
-              <p className="text-[10px] font-semibold text-white truncate">
-                {c.metrics.holdRate > 0 ? `${c.metrics.holdRate.toFixed(1)}%` : "—"}
-              </p>
-            </div>
-          </div>
+          </>
         )}
 
         {c.tags.length > 0 && (

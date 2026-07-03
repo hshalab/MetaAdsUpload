@@ -10,6 +10,7 @@ import { VideoPlayer } from "@/components/review/video-player";
 import type { Creative } from "./use-library-store";
 import { toast } from "sonner";
 import { CLASSIFICATION_BADGES, fmtSpend } from "./library-card";
+import { StarRating } from "./star-rating";
 
 interface AdBreakdownRow {
   adId: string;
@@ -181,6 +182,20 @@ export function LibraryDetailPanel({ creative: c, metricDays, onClose, onRefresh
             </label>
             {c.metrics && c.metrics.adCount > 0 ? (
               <>
+                <div className="mt-2 flex items-center justify-between rounded-lg bg-amber-500/[0.06] border border-amber-500/15 px-2.5 py-2">
+                  <StarRating value={c.metrics.stars} size={16} showValue />
+                  <span className="text-[10px] text-slate-500">
+                    {c.metrics.stars == null
+                      ? "Testing — needs more spend to rate"
+                      : c.metrics.stars >= 4.5
+                        ? "Proven winner"
+                        : c.metrics.stars >= 3.5
+                          ? "Strong performer"
+                          : c.metrics.stars >= 2.5
+                            ? "Around breakeven"
+                            : "Underperforming"}
+                  </span>
+                </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-center">
                   {[
                     { label: "Spend", value: fmtSpend(c.metrics.spend) },

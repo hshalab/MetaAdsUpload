@@ -310,6 +310,20 @@ export async function POST(request: NextRequest) {
       await updateJob(jobId, { imageHash });
     }
 
+    // Self-link: if this file lives in the Creative Library, stamp the Meta
+    // ids (and thumbnail) on it so the library aggregates this ad's performance
+    try {
+      const linkUpdates: Record<string, unknown> = {};
+      if (videoId) linkUpdates.metaVideoId = videoId;
+      if (imageHash) linkUpdates.metaImageHash = imageHash;
+      if (results.thumbnailUrl) linkUpdates.thumbnailUrl = results.thumbnailUrl;
+      if (Object.keys(linkUpdates).length > 0) {
+        await db.update(schema.creatives).set(linkUpdates).where(eq(schema.creatives.r2Key, r2Key));
+      }
+    } catch (e) {
+      console.error("Library creative link failed (non-fatal):", e);
+    }
+
     // Upload variant images to Meta (placement variants)
     const variantHashes: string[] = [];
     if (hasVariants && mediaType === "image") {

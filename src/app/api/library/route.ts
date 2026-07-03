@@ -7,6 +7,7 @@ import { getR2Client } from "@/lib/r2";
 import { getCreativeMetrics, type CreativeMetrics } from "@/lib/creative-metrics";
 
 const METRIC_SORTS: Record<string, { key: keyof CreativeMetrics; dir: 1 | -1 }> = {
+  stars_desc: { key: "stars", dir: -1 },
   spend_desc: { key: "spend", dir: -1 },
   roas_desc: { key: "roas", dir: -1 },
   hook_desc: { key: "hookRate", dir: -1 },

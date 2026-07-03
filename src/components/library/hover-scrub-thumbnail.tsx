@@ -114,17 +114,33 @@ export function HoverScrubThumbnail({
       onMouseLeave={handleMouseLeave}
       style={{ position: "relative", overflow: "hidden" }}
     >
-      {/* Static thumbnail (visible when not scrubbing) */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={thumbnailUrl || videoUrl}
-        alt={alt}
-        className="h-full w-full object-cover"
-        style={{
-          opacity: hovering && canvasReady ? 0 : 1,
-          transition: "opacity 0.15s ease",
-        }}
-      />
+      {/* Static thumbnail (visible when not scrubbing). Without a stored
+          thumbnail, a metadata-only <video> paints the first frame — an <img>
+          pointed at a video file renders nothing. #t=0.1 forces the seek. */}
+      {thumbnailUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={thumbnailUrl}
+          alt={alt}
+          className="h-full w-full object-cover"
+          style={{
+            opacity: hovering && canvasReady ? 0 : 1,
+            transition: "opacity 0.15s ease",
+          }}
+        />
+      ) : (
+        <video
+          src={`${videoUrl}#t=0.1`}
+          preload="metadata"
+          muted
+          playsInline
+          className="h-full w-full object-cover"
+          style={{
+            opacity: hovering && canvasReady ? 0 : 1,
+            transition: "opacity 0.15s ease",
+          }}
+        />
+      )}
 
       {/* Canvas (visible when scrubbing) */}
       <canvas

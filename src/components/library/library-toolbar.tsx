@@ -13,6 +13,7 @@ import type {
 } from "./use-library-store";
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "stars_desc", label: "★ Top rated" },
   { value: "date_desc", label: "Newest first" },
   { value: "date_asc", label: "Oldest first" },
   { value: "spend_desc", label: "Top spend" },
