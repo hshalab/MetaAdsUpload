@@ -23,7 +23,7 @@ const ADSET_FIELDS = "id,campaign_id,name,status,daily_budget,lifetime_budget,ta
 export type AttributionEntry = { event_type: string; window_days: number };
 export const DEFAULT_ATTRIBUTION_SPEC: AttributionEntry[] = [
   { event_type: "CLICK_THROUGH", window_days: 7 },
-  { event_type: "ENGAGED_VIEW", window_days: 1 },
+  { event_type: "ENGAGED_VIDEO_VIEW", window_days: 1 },
   { event_type: "VIEW_THROUGH", window_days: 1 },
 ];
 
