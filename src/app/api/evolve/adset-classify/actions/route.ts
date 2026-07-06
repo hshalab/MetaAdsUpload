@@ -5,6 +5,7 @@ import { getAds, getAdPostIds, createAdWithPostId } from "@/lib/meta/ads";
 import { updateAdSet, createAdSet } from "@/lib/meta/adsets";
 import { metaApi } from "@/lib/meta/client";
 import { getEvolveSettings } from "@/lib/evolve/settings";
+import { isBig5Targeting, createZombiePlacer } from "@/lib/evolve/zombie";
 
 export const dynamic = "force-dynamic";
 
@@ -81,48 +82,83 @@ export async function POST(request: NextRequest) {
           params: { fields: "name,targeting,optimization_goal,billing_event,promoted_object" },
         });
 
-        // 3. Create a NEW ad set in Graveyard with cost cap = targetCPA × 0.80
+        // 3. Batch-fetch post IDs for all active ads (needed for every path)
         const costCapValue = Math.round(settings.targetCpa * (1 - settings.zombieCostCapDiscount) * 100); // in cents
-        const gyAdsetName = `[GY] ${sourceAdset.name}`;
-
-        const newAdset = await createAdSet({
-          campaign_id: targetGraveyardId,
-          name: gyAdsetName,
-          targeting: sourceAdset.targeting,
-          optimization_goal: sourceAdset.optimization_goal,
-          billing_event: sourceAdset.billing_event,
-          bid_strategy: "LOWEST_COST_WITH_BID_CAP",
-          bid_amount: costCapValue,
-          status: "ACTIVE",
-          ...(sourceAdset.promoted_object && { promoted_object: sourceAdset.promoted_object }),
-        });
-
-        // 4. Batch-fetch post IDs for all active ads, then create in graveyard
         const postIdMap = await getAdPostIds(activeAds.map((a) => a.id));
 
         const results: string[] = [];
         const errors: string[] = [];
+        let placementSummary = "";
 
-        for (const ad of activeAds) {
-          try {
-            const postId = postIdMap.get(ad.id);
-            if (!postId) {
-              errors.push(`${ad.name}: could not fetch post ID`);
-              continue;
+        // 4. Place ads. BIG 5 / US → one shared zombie ad set (spill to a sibling
+        //    when full). Other markets → a fresh [GY] ad set per move (as before).
+        if (isBig5Targeting(sourceAdset.targeting)) {
+          const placer = await createZombiePlacer({
+            graveyardCampaignId: targetGraveyardId,
+            targeting: sourceAdset.targeting,
+            optimizationGoal: sourceAdset.optimization_goal,
+            billingEvent: sourceAdset.billing_event,
+            promotedObject: sourceAdset.promoted_object,
+            costCapValue,
+          });
+
+          for (const ad of activeAds) {
+            try {
+              const postId = postIdMap.get(ad.id);
+              if (!postId) {
+                errors.push(`${ad.name}: could not fetch post ID`);
+                continue;
+              }
+              const targetAdsetId = await placer.next();
+              const result = await createAdWithPostId({
+                adset_id: targetAdsetId,
+                name: ad.name,
+                postId,
+                status: "ACTIVE",
+              });
+              newAdIds.push(result.id);
+              results.push(`${ad.name} → ${result.id}`);
+            } catch (err) {
+              errors.push(`${ad.name}: ${err instanceof Error ? err.message : "failed"}`);
             }
-
-            const result = await createAdWithPostId({
-              adset_id: newAdset.id,
-              name: ad.name,
-              postId,
-              status: "ACTIVE",
-            });
-
-            newAdIds.push(result.id);
-            results.push(`${ad.name} → ${result.id}`);
-          } catch (err) {
-            errors.push(`${ad.name}: ${err instanceof Error ? err.message : "failed"}`);
           }
+
+          placementSummary = `BIG 5 Graveyard: ${results.length}/${activeAds.length} ads → delade zombie ad set (${placer.reusedAdsetIds.length} återanvänt, ${placer.createdAdsetIds.length} nytt).`;
+        } else {
+          const gyAdsetName = `[GY] ${sourceAdset.name}`;
+          const newAdset = await createAdSet({
+            campaign_id: targetGraveyardId,
+            name: gyAdsetName,
+            targeting: sourceAdset.targeting,
+            optimization_goal: sourceAdset.optimization_goal,
+            billing_event: sourceAdset.billing_event,
+            bid_strategy: "LOWEST_COST_WITH_BID_CAP",
+            bid_amount: costCapValue,
+            status: "ACTIVE",
+            ...(sourceAdset.promoted_object && { promoted_object: sourceAdset.promoted_object }),
+          });
+
+          for (const ad of activeAds) {
+            try {
+              const postId = postIdMap.get(ad.id);
+              if (!postId) {
+                errors.push(`${ad.name}: could not fetch post ID`);
+                continue;
+              }
+              const result = await createAdWithPostId({
+                adset_id: newAdset.id,
+                name: ad.name,
+                postId,
+                status: "ACTIVE",
+              });
+              newAdIds.push(result.id);
+              results.push(`${ad.name} → ${result.id}`);
+            } catch (err) {
+              errors.push(`${ad.name}: ${err instanceof Error ? err.message : "failed"}`);
+            }
+          }
+
+          placementSummary = `Nytt GY ad set "${gyAdsetName}" (cost cap ${costCapValue / 100} kr). ${results.length}/${activeAds.length} ads duplicerade.`;
         }
 
         // 5. Pause the original ad set
@@ -151,7 +187,7 @@ export async function POST(request: NextRequest) {
           } catch { /* best-effort outcome tracking */ }
         }
 
-        actionDescription = `${graveyardOutcome === "spend_winner" ? "Spend Winner" : "Loser"} → Graveyard. Ad set pausad → nytt GY ad set "${gyAdsetName}" (cost cap ${costCapValue / 100} kr). ${results.length}/${activeAds.length} ads duplicerade.`;
+        actionDescription = `${graveyardOutcome === "spend_winner" ? "Spend Winner" : "Loser"} → Graveyard. Ad set pausad. ${placementSummary}`;
         if (errors.length > 0) {
           actionDescription += ` Fel: ${errors.join("; ")}`;
         }

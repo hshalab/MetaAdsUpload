@@ -5,6 +5,7 @@ import { updateAd, getAdPostId, createAdWithPostId } from "@/lib/meta/ads";
 import { createAdSet } from "@/lib/meta/adsets";
 import { metaApi } from "@/lib/meta/client";
 import { getEvolveSettings } from "@/lib/evolve/settings";
+import { isBig5Targeting, createZombiePlacer } from "@/lib/evolve/zombie";
 
 export const dynamic = "force-dynamic";
 
@@ -83,35 +84,54 @@ export async function POST(request: NextRequest) {
           params: { fields: "name,targeting,optimization_goal,billing_event,promoted_object" },
         });
 
-        // 3. Create new ad set in Graveyard with cost cap
+        // 3. Choose the destination ad set. BIG 5 / US → shared zombie ad set
+        //    (created/reused, spills to a sibling when full). Other markets → a
+        //    fresh [GY] ad set for this ad (as before).
         const costCapValue = Math.round(settings.targetCpa * (1 - settings.zombieCostCapDiscount) * 100);
-        const gyAdsetName = `[GY] ${adName || adId}`;
+        let destAdsetId: string;
+        let placementSummary: string;
 
-        const newAdset = await createAdSet({
-          campaign_id: targetGraveyardId,
-          name: gyAdsetName,
-          targeting: sourceAdset.targeting,
-          optimization_goal: sourceAdset.optimization_goal,
-          billing_event: sourceAdset.billing_event,
-          bid_strategy: "LOWEST_COST_WITH_BID_CAP",
-          bid_amount: costCapValue,
-          status: "ACTIVE",
-          ...(sourceAdset.promoted_object && { promoted_object: sourceAdset.promoted_object }),
-        });
+        if (isBig5Targeting(sourceAdset.targeting)) {
+          const placer = await createZombiePlacer({
+            graveyardCampaignId: targetGraveyardId,
+            targeting: sourceAdset.targeting,
+            optimizationGoal: sourceAdset.optimization_goal,
+            billingEvent: sourceAdset.billing_event,
+            promotedObject: sourceAdset.promoted_object,
+            costCapValue,
+          });
+          destAdsetId = await placer.next();
+          placementSummary = `BIG 5 Graveyard: delade zombie ad set (${placer.reusedAdsetIds.length} återanvänt, ${placer.createdAdsetIds.length} nytt).`;
+        } else {
+          const gyAdsetName = `[GY] ${adName || adId}`;
+          const newAdset = await createAdSet({
+            campaign_id: targetGraveyardId,
+            name: gyAdsetName,
+            targeting: sourceAdset.targeting,
+            optimization_goal: sourceAdset.optimization_goal,
+            billing_event: sourceAdset.billing_event,
+            bid_strategy: "LOWEST_COST_WITH_BID_CAP",
+            bid_amount: costCapValue,
+            status: "ACTIVE",
+            ...(sourceAdset.promoted_object && { promoted_object: sourceAdset.promoted_object }),
+          });
+          destAdsetId = newAdset.id;
+          placementSummary = `nytt GY ad set "${gyAdsetName}" (cost cap ${costCapValue / 100} kr).`;
+        }
 
         // 4. Pause the original ad
         await updateAd(adId, { status: "PAUSED" });
 
         // 5. Create new ad in graveyard with post ID
         const result = await createAdWithPostId({
-          adset_id: newAdset.id,
+          adset_id: destAdsetId,
           name: adName || adId,
           postId,
           status: "ACTIVE",
         });
 
         newAdId = result.id;
-        actionDescription = `Pausad → nytt GY ad set "${gyAdsetName}" (cost cap ${costCapValue / 100} kr). Ny ad: ${result.id}`;
+        actionDescription = `Pausad → ${placementSummary} Ny ad: ${result.id}`;
         break;
       }
     }

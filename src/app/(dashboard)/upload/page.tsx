@@ -217,6 +217,31 @@ function extractLpLabel(url: string): string | null {
   return match ? `LP${match[1]}` : null;
 }
 
+// ─── Geo targeting groups ────────────────────────────────────────────────────
+// A "group" selection (e.g. BIG5) expands to several country codes; a plain
+// selection (e.g. "SE") targets that single country.
+const BIG5_COUNTRIES = ["US", "CA", "GB", "AU", "NZ"]; // USA, Canada, UK, Australia, New Zealand
+const COUNTRY_GROUPS: Record<string, string[]> = {
+  BIG5: BIG5_COUNTRIES,
+};
+
+// Expand a dropdown selection into the list of country codes for geo_locations.
+function countriesForSelection(selection: string): string[] {
+  return COUNTRY_GROUPS[selection] ? [...COUNTRY_GROUPS[selection]] : [selection];
+}
+
+// Reverse: map a set of country codes back to a dropdown value (group id or single code).
+function selectionForCountries(countries?: string[]): string {
+  if (!countries || countries.length === 0) return "SE";
+  if (countries.length > 1) {
+    const sorted = [...countries].sort().join(",");
+    for (const [groupId, codes] of Object.entries(COUNTRY_GROUPS)) {
+      if ([...codes].sort().join(",") === sorted) return groupId;
+    }
+  }
+  return countries[0];
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function UploadPage() {
@@ -434,7 +459,7 @@ export default function UploadPage() {
     }
     setCtaType(tpl.ctaType || "SHOP_NOW");
     setNewAdsetBudget(tpl.dailyBudget || 50);
-    setNewAdsetCountry(tpl.targetCountries?.[0] || "SE");
+    setNewAdsetCountry(selectionForCountries(tpl.targetCountries));
     setNewAdsetOptGoal(tpl.optimizationGoal || "OFFSITE_CONVERSIONS");
     setNewAdsetBidStrategy(tpl.bidStrategy || "LOWEST_COST_WITHOUT_CAP");
     setNewAdsetConvEvent(tpl.conversionEvent || "PURCHASE");
@@ -883,7 +908,7 @@ export default function UploadPage() {
       payload.adsetConfig = {
         name: newAdsetName || `AdSet ${new Date().toLocaleDateString("sv")}`,
         dailyBudget: newAdsetBudget,
-        targeting: { geo_locations: { countries: [newAdsetCountry] } },
+        targeting: { geo_locations: { countries: countriesForSelection(newAdsetCountry) } },
         optimizationGoal: newAdsetOptGoal,
         bidStrategy: newAdsetBidStrategy,
         conversionEvent: newAdsetConvEvent,
@@ -1044,7 +1069,7 @@ export default function UploadPage() {
       const adsetConfig: Record<string, unknown> = {
         name: newAdsetName || `AdSet ${new Date().toLocaleDateString("sv")}`,
         dailyBudget: newAdsetBudget,
-        targeting: { geo_locations: { countries: [newAdsetCountry] } },
+        targeting: { geo_locations: { countries: countriesForSelection(newAdsetCountry) } },
         optimizationGoal: newAdsetOptGoal,
         bidStrategy: newAdsetBidStrategy,
         conversionEvent: newAdsetConvEvent,
@@ -2427,10 +2452,22 @@ export default function UploadPage() {
                   <div>
                     <label className={labelCls}>Country</label>
                     <select value={newAdsetCountry} onChange={(e) => setNewAdsetCountry(e.target.value)} className={inputSmCls}>
-                      <option value="SE">Sweden</option>
-                      <option value="NO">Norway</option>
-                      <option value="DK">Denmark</option>
-                      <option value="FI">Finland</option>
+                      <optgroup label="Groups">
+                        <option value="BIG5">🌍 BIG 5 (US · CA · UK · AU · NZ)</option>
+                      </optgroup>
+                      <optgroup label="Nordics">
+                        <option value="SE">Sweden</option>
+                        <option value="NO">Norway</option>
+                        <option value="DK">Denmark</option>
+                        <option value="FI">Finland</option>
+                      </optgroup>
+                      <optgroup label="English-speaking">
+                        <option value="US">United States</option>
+                        <option value="CA">Canada</option>
+                        <option value="GB">United Kingdom</option>
+                        <option value="AU">Australia</option>
+                        <option value="NZ">New Zealand</option>
+                      </optgroup>
                     </select>
                   </div>
                 </div>
