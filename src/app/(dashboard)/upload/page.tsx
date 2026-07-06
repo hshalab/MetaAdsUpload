@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { KNOWN_PIXELS, pixelLabel } from "@/lib/meta/pixels";
 import {
   Upload,
   Cloud,
@@ -1887,6 +1888,23 @@ export default function UploadPage() {
             </div>
           ) : (
             <div className="space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {KNOWN_PIXELS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPixelId(p.id)}
+                    className={cn(
+                      "text-[11px] px-2 py-1 rounded-md border transition-all",
+                      pixelId === p.id
+                        ? "bg-purple-500/20 border-purple-500/40 text-purple-200"
+                        : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
               <input
                 type="text"
                 value={pixelId}
@@ -1896,6 +1914,11 @@ export default function UploadPage() {
               />
               {pixelId && (
                 <div className="flex flex-wrap gap-1.5">
+                  {pixelLabel(pixelId) && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300">
+                      {pixelLabel(pixelId)}
+                    </span>
+                  )}
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/[0.06] text-slate-400">
                     Tracking: Purchase
                   </span>

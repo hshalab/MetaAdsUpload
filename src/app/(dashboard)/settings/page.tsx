@@ -4,9 +4,10 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Link2, Unlink, CheckCircle, AlertCircle, ExternalLink, Settings, Shield } from "lucide-react";
+import { Link2, Unlink, CheckCircle, AlertCircle, ExternalLink, Settings, Shield, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { KNOWN_PIXELS } from "@/lib/meta/pixels";
 
 interface AdAccount {
   id: string;
@@ -45,6 +46,7 @@ export default function SettingsPage() {
 function SettingsContent() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [pixelInput, setPixelInput] = useState("");
   const searchParams = useSearchParams();
 
@@ -71,6 +73,30 @@ function SettingsContent() {
   }, [searchParams]);
 
   const handleConnect = () => { window.location.href = "/api/meta/connect"; };
+
+  const handleRefreshPages = async (id: number) => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/meta/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Refresh failed");
+      const added = (data.newPages as string[] | undefined) ?? [];
+      if (added.length > 0) {
+        toast.success(`Found ${data.pageCount} pages — new: ${added.join(", ")}`);
+      } else {
+        toast.success(`Refreshed: ${data.pageCount} pages, ${data.adAccountCount} ad accounts (no new pages)`);
+      }
+      fetchConnections();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to refresh pages");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleUpdateConnection = async (id: number, updates: Record<string, unknown>) => {
     try {
@@ -177,6 +203,22 @@ function SettingsContent() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Pixel ID (optional)</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {KNOWN_PIXELS.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => { setPixelInput(p.id); handleUpdateConnection(activeConnection.id, { pixelId: p.id }); }}
+                      className={cn(
+                        "text-xs px-2.5 py-1 rounded-md border transition-all",
+                        activeConnection.pixelId === p.id
+                          ? "bg-purple-500/20 border-purple-500/40 text-purple-200"
+                          : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex gap-2">
                   <Input
                     value={pixelInput || activeConnection.pixelId || ""}
@@ -194,6 +236,13 @@ function SettingsContent() {
               </div>
 
               <div className="flex gap-2 pt-2 border-t border-white/5">
+                <button
+                  onClick={() => handleRefreshPages(activeConnection.id)}
+                  disabled={refreshing}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-sm text-cyan-300 hover:bg-cyan-500/20 transition-all disabled:opacity-50"
+                >
+                  <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} /> {refreshing ? "Refreshing…" : "Refresh pages"}
+                </button>
                 <button
                   onClick={handleConnect}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"

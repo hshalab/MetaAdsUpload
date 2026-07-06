@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { db, schema } from "@/db";
 import { encryptSecret } from "@/lib/crypto";
 import { invalidateAccountCache } from "@/lib/meta/client";
+import { fetchAdAccountsAndPages } from "@/lib/meta/assets";
 
 export async function GET(request: NextRequest) {
   // C4: Auth + admin role check
@@ -48,27 +49,8 @@ export async function GET(request: NextRequest) {
     );
     const meData = await meRes.json();
 
-    // Get ad accounts
-    const adAccountsRes = await fetch(
-      `https://graph.facebook.com/v21.0/me/adaccounts?fields=id,name,currency,account_status&limit=50&access_token=${accessToken}`
-    );
-    const adAccountsData = await adAccountsRes.json();
-    const adAccounts = (adAccountsData.data || []).map((a: { id: string; name: string; currency: string; account_status: number }) => ({
-      id: a.id,
-      name: a.name,
-      currency: a.currency,
-      status: a.account_status,
-    }));
-
-    // Get pages
-    const pagesRes = await fetch(
-      `https://graph.facebook.com/v21.0/me/accounts?fields=id,name&limit=50&access_token=${accessToken}`
-    );
-    const pagesData = await pagesRes.json();
-    const pages = (pagesData.data || []).map((p: { id: string; name: string }) => ({
-      id: p.id,
-      name: p.name,
-    }));
+    // Get ad accounts + pages (paginated — never cap at the first 50)
+    const { adAccounts, pages } = await fetchAdAccountsAndPages(accessToken);
 
     // Deactivate existing connections
     await db.update(schema.metaConnections).set({ isActive: false });
