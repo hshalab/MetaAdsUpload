@@ -163,6 +163,16 @@
   background-size: 40px 40px;
 }
 
+/* Native <select> dropdown options.
+   Without this, the open option list renders on the OS-default white
+   background while the options inherit light theme text — white-on-white,
+   so the choices are invisible. Force the dark theme colors instead. */
+select option,
+select optgroup {
+  background-color: #111827;
+  color: #e2e8f0;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
