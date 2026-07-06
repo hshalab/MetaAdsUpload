@@ -567,12 +567,18 @@ export default function TemplatesPage() {
                   {form.targetCountries.map((c, i) => (
                     <div key={i} className="flex items-center gap-1">
                       <Select value={c} onValueChange={(v) => updateListItem("targetCountries", i, v)}>
-                        <SelectTrigger className="bg-white/5 border-white/10 w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="bg-white/5 border-white/10 w-[150px] h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-[#111827] border-white/10">
+                          <SelectItem value="BIG5">🌍 BIG 5</SelectItem>
                           <SelectItem value="SE">Sweden</SelectItem>
                           <SelectItem value="NO">Norway</SelectItem>
                           <SelectItem value="DK">Denmark</SelectItem>
                           <SelectItem value="FI">Finland</SelectItem>
+                          <SelectItem value="US">United States</SelectItem>
+                          <SelectItem value="CA">Canada</SelectItem>
+                          <SelectItem value="GB">United Kingdom</SelectItem>
+                          <SelectItem value="AU">Australia</SelectItem>
+                          <SelectItem value="NZ">New Zealand</SelectItem>
                           <SelectItem value="DE">Germany</SelectItem>
                           <SelectItem value="NL">Netherlands</SelectItem>
                         </SelectContent>

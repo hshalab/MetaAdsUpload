@@ -33,6 +33,10 @@ const CTA_OPTIONS = [
   "SHOP_NOW", "LEARN_MORE", "SIGN_UP", "GET_OFFER", "ORDER_NOW", "BUY_NOW", "SEE_MORE",
 ];
 
+// Persist the shared setup (campaign, ad set, page, pixel, LP, CTA…) across
+// batches so uploading many in a row doesn't mean re-picking everything.
+const NATIVE_PREFS_KEY = "meta-native-upload-prefs";
+
 const inputCls = "w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40";
 const inputSmCls = "w-full rounded-lg bg-white/5 border border-white/10 px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-cyan-500/40";
 const labelCls = "text-[10px] font-medium text-slate-400 uppercase tracking-wider";
@@ -65,6 +69,44 @@ export default function NativeUploadPage() {
   const [creatives, setCreatives] = useState<Creative[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const hydrated = useRef(false);
+
+  // ─── Restore saved setup (runs before connection defaults apply) ───────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(NATIVE_PREFS_KEY);
+      if (saved) {
+        const p = JSON.parse(saved);
+        if (p.campaignId) setSelectedCampaignId(p.campaignId);
+        if (p.adsetMode) setAdsetMode(p.adsetMode);
+        if (p.selectedAdsetId) setSelectedAdsetId(p.selectedAdsetId);
+        if (p.pageId) setSelectedPageId(p.pageId);
+        if (p.pixelId) setPixelId(p.pixelId);
+        if (p.country) setNewAdsetCountry(p.country);
+        if (typeof p.budget === "number") setNewAdsetBudget(p.budget);
+        if (p.optGoal) setNewAdsetOptGoal(p.optGoal);
+        if (p.bidStrategy) setNewAdsetBidStrategy(p.bidStrategy);
+        if (p.convEvent) setNewAdsetConvEvent(p.convEvent);
+        if (p.landingPage) setLandingPage(p.landingPage);
+        if (p.cta) setCtaType(p.cta);
+      }
+    } catch { /* ignore */ }
+    hydrated.current = true;
+  }, []);
+
+  // Persist the shared setup on change (creatives themselves are never saved).
+  useEffect(() => {
+    if (!hydrated.current) return;
+    try {
+      localStorage.setItem(NATIVE_PREFS_KEY, JSON.stringify({
+        campaignId: selectedCampaignId, adsetMode, selectedAdsetId,
+        pageId: selectedPageId, pixelId, country: newAdsetCountry,
+        budget: newAdsetBudget, optGoal: newAdsetOptGoal, bidStrategy: newAdsetBidStrategy,
+        convEvent: newAdsetConvEvent, landingPage, cta: ctaType,
+      }));
+    } catch { /* ignore */ }
+  }, [selectedCampaignId, adsetMode, selectedAdsetId, selectedPageId, pixelId, newAdsetCountry,
+      newAdsetBudget, newAdsetOptGoal, newAdsetBidStrategy, newAdsetConvEvent, landingPage, ctaType]);
 
   // ─── Load campaigns + connection ───────────────────────────────────────────
   useEffect(() => {
@@ -83,8 +125,11 @@ export default function NativeUploadPage() {
           const active = connData.active;
           const activeConn = connData.connections?.find((c: { isActive: boolean }) => c.isActive);
           if (activeConn?.pages) setPages(activeConn.pages);
-          if (active?.activePageId) setSelectedPageId(active.activePageId);
-          if (active?.pixelId) setPixelId(active.pixelId);
+          // Only fall back to the connection defaults if the user hasn't saved a choice.
+          const savedPrefs = localStorage.getItem(NATIVE_PREFS_KEY);
+          const prefs = savedPrefs ? JSON.parse(savedPrefs) : {};
+          if (!prefs.pageId && active?.activePageId) setSelectedPageId(active.activePageId);
+          if (!prefs.pixelId && active?.pixelId) setPixelId(active.pixelId);
         }
       } catch {
         toast.error("Failed to load campaigns/connection");
