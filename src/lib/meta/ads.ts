@@ -49,6 +49,7 @@ export async function createAdWithTextOptions(params: {
   imageHash?: string;
   variantHashes?: string[];
   videoId?: string;
+  videoThumbnailUrl?: string;
   linkUrl: string;
   ctaType?: string;
 }) {
@@ -78,7 +79,10 @@ export async function createAdWithTextOptions(params: {
     }
     group.images = images;
   } else if (params.videoId) {
-    group.videos = [{ video_id: params.videoId }];
+    group.videos = [{
+      video_id: params.videoId,
+      ...(params.videoThumbnailUrl ? { thumbnail_url: params.videoThumbnailUrl } : {}),
+    }];
   }
 
   // Build creative with object_story_spec that matches the asset group.
@@ -100,6 +104,7 @@ export async function createAdWithTextOptions(params: {
       message: params.primaryTexts[0] || "",
       title: params.headlines[0] || "",
       link_description: params.headlines[0] || "",
+      ...(params.videoThumbnailUrl ? { image_url: params.videoThumbnailUrl } : {}),
       call_to_action: { type: ctaType, value: { link: params.linkUrl } },
     };
   }

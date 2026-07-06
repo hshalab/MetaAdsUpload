@@ -357,42 +357,22 @@ export async function POST(request: NextRequest) {
       const firstText = textsArr[0] || "";
 
       const storySpec: Record<string, unknown> = { page_id: pageId };
-      // For a VIDEO with multiple headlines/primary texts we can't use
-      // creative_asset_groups_spec (it rejects video), so attach every text
-      // variant via asset_feed_spec and let Meta optimize across them. Without
-      // this, only the first headline + first primary text ever reached the ad.
-      let assetFeedSpec: Record<string, unknown> | undefined;
 
       if (videoId) {
-        if (hasMultipleTexts) {
-          assetFeedSpec = {
-            ad_formats: ["SINGLE_VIDEO"],
-            videos: [{
-              video_id: videoId,
-              ...(results.thumbnailUrl ? { thumbnail_url: results.thumbnailUrl } : {}),
-            }],
-            ...(textsArr.length ? { bodies: textsArr.map((t) => ({ text: t })) } : {}),
-            ...(headlinesArr.length ? { titles: headlinesArr.map((h) => ({ text: h })) } : {}),
-            link_urls: [{ website_url: adCopy.linkUrl || "" }],
-            call_to_action_types: [adCopy.ctaType || "SHOP_NOW"],
-          };
-          // object_story_spec stays just the page — assets come from asset_feed_spec
-        } else {
-          const videoData: Record<string, unknown> = {
-            video_id: videoId,
-            message: firstText,
-            title: firstHeadline,
-            call_to_action: {
-              type: adCopy.ctaType || "SHOP_NOW",
-              value: { link: adCopy.linkUrl || "" },
-            },
-          };
-          // Thumbnail is REQUIRED for video creatives
-          if (results.thumbnailUrl) {
-            videoData.image_url = results.thumbnailUrl;
-          }
-          storySpec.video_data = videoData;
+        const videoData: Record<string, unknown> = {
+          video_id: videoId,
+          message: firstText,
+          title: firstHeadline,
+          call_to_action: {
+            type: adCopy.ctaType || "SHOP_NOW",
+            value: { link: adCopy.linkUrl || "" },
+          },
+        };
+        // Thumbnail is REQUIRED for video creatives
+        if (results.thumbnailUrl) {
+          videoData.image_url = results.thumbnailUrl;
         }
+        storySpec.video_data = videoData;
       } else if (imageHash) {
         storySpec.link_data = {
           link: adCopy.linkUrl || "",
@@ -407,9 +387,8 @@ export async function POST(request: NextRequest) {
       const creativeForm = new FormData();
       creativeForm.append("name", creativeName);
       creativeForm.append("object_story_spec", JSON.stringify(storySpec));
-      if (assetFeedSpec) creativeForm.append("asset_feed_spec", JSON.stringify(assetFeedSpec));
 
-      const creativePayloadForError = { name: creativeName, object_story_spec: storySpec, asset_feed_spec: assetFeedSpec };
+      const creativePayloadForError = { name: creativeName, object_story_spec: storySpec };
 
       let adCreative: { id: string };
       try {
@@ -545,8 +524,51 @@ export async function POST(request: NextRequest) {
         });
         return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
       }
+    } else if (hasMultipleTexts && videoId) {
+      // Multiple headlines/texts WITH VIDEO: use creative_asset_groups_spec
+      // (Flexible Ads) — it works on standard ad sets AND supports video, unlike
+      // a dynamic-creative asset_feed_spec which the ad set rejects (error 1885998).
+      // If Meta still refuses the flexible video ad, fall back to the single-text
+      // creative from Step 2 so the upload always succeeds (first text only).
+      const flexParams = {
+        adset_id: adsetId,
+        name: adNameValue || creativeName,
+        page_id: pageId,
+        status: "ACTIVE",
+        headlines: headlinesArr,
+        primaryTexts: textsArr,
+        videoId,
+        videoThumbnailUrl: results.thumbnailUrl,
+        linkUrl: adCopy.linkUrl,
+        ctaType: adCopy.ctaType,
+      };
+      adPayloadForError = flexParams as unknown as Record<string, unknown>;
+      try {
+        ad = await createAdWithTextOptions(flexParams);
+      } catch (flexErr) {
+        console.warn("Flexible video ad failed, falling back to single-text creative:", flexErr);
+        const adParams = {
+          adset_id: adsetId,
+          name: adNameValue || creativeName,
+          creative: { creative_id: creativeId! },
+          status: "ACTIVE" as const,
+        };
+        adPayloadForError = adParams as unknown as Record<string, unknown>;
+        try {
+          ad = await createAd(adParams);
+        } catch (e) {
+          const details = buildErrorDetails(e, currentStep, adPayloadForError);
+          await updateJob(jobId, {
+            status: "failed",
+            error: details.message,
+            stepLabel: `Misslyckades: ${details.failedStepName}`,
+            config: { ...body, errorDetails: details },
+          });
+          return NextResponse.json({ error: details.message, jobId, errorDetails: details }, { status: 500 });
+        }
+      }
     } else {
-      // Standard ad with creative_id (single text, OR video with any number of texts)
+      // Standard ad with creative_id (single text)
       const adParams = {
         adset_id: adsetId,
         name: adNameValue || creativeName,
