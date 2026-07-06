@@ -32,6 +32,7 @@ import {
   TrendingUp,
   ScrollText,
   ShoppingBag,
+  Rocket,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -71,6 +72,7 @@ const navSections: NavSection[] = [
     label: "MANAGE",
     items: [
       { href: "/upload", label: "Upload", icon: Upload },
+      { href: "/upload/native", label: "Native Ad", icon: Rocket },
       { href: "/upload-log", label: "Upload Log", icon: History },
       { href: "/templates", label: "Templates", icon: FileText },
       { href: "/creatives", label: "Creatives", icon: Image },

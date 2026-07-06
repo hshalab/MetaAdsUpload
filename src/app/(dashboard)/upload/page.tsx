@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { KNOWN_PIXELS, pixelLabel } from "@/lib/meta/pixels";
+import { countriesForSelection, selectionForCountries } from "@/lib/meta/geo";
 import {
   Upload,
   Cloud,
@@ -216,31 +217,6 @@ function detectAspectRatio(w: number, h: number): string {
 function extractLpLabel(url: string): string | null {
   const match = url.match(/\/lp(\d+)/i);
   return match ? `LP${match[1]}` : null;
-}
-
-// ─── Geo targeting groups ────────────────────────────────────────────────────
-// A "group" selection (e.g. BIG5) expands to several country codes; a plain
-// selection (e.g. "SE") targets that single country.
-const BIG5_COUNTRIES = ["US", "CA", "GB", "AU", "NZ"]; // USA, Canada, UK, Australia, New Zealand
-const COUNTRY_GROUPS: Record<string, string[]> = {
-  BIG5: BIG5_COUNTRIES,
-};
-
-// Expand a dropdown selection into the list of country codes for geo_locations.
-function countriesForSelection(selection: string): string[] {
-  return COUNTRY_GROUPS[selection] ? [...COUNTRY_GROUPS[selection]] : [selection];
-}
-
-// Reverse: map a set of country codes back to a dropdown value (group id or single code).
-function selectionForCountries(countries?: string[]): string {
-  if (!countries || countries.length === 0) return "SE";
-  if (countries.length > 1) {
-    const sorted = [...countries].sort().join(",");
-    for (const [groupId, codes] of Object.entries(COUNTRY_GROUPS)) {
-      if ([...codes].sort().join(",") === sorted) return groupId;
-    }
-  }
-  return countries[0];
 }
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
