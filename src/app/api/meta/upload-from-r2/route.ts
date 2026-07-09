@@ -4,7 +4,7 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { uploadImage, uploadVideo, createAdCreative, waitForVideoReady, getVideoThumbnail } from "@/lib/meta/creatives";
 import { createAdSet } from "@/lib/meta/adsets";
 import { createAd, createAdWithTextOptions } from "@/lib/meta/ads";
-import { getPageId, getPixelId, metaApi, getAdAccountId, MetaApiError, withAccount } from "@/lib/meta/client";
+import { getPageId, getPixelId, metaApi, getAdAccountId, MetaApiError, withAccount, withAdAccount } from "@/lib/meta/client";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { getR2Client, getR2Bucket } from "@/lib/r2";
@@ -172,6 +172,7 @@ export async function POST(request: NextRequest) {
       pixelId: overridePixelId,
       variants,
       connectionId,
+      adAccountId,
     } = body as {
       r2Key: string;
       r2Url: string;
@@ -195,18 +196,23 @@ export async function POST(request: NextRequest) {
       pixelId?: string;
       variants?: Array<{ r2Key: string; r2Url: string; filename: string }>;
       connectionId?: number; // optional: publish via a non-active Meta connection
+      adAccountId?: string; // optional: publish to a specific ad account (from template)
     };
 
     if (!r2Key || !campaignId || !adCopy) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Multi-account: scope every Meta call below to the requested connection.
-    // AsyncLocalStorage propagates it through getPageId/getAdAccountId/etc.
-    const runScoped = <T,>(fn: () => Promise<T>): Promise<T> =>
-      typeof connectionId === "number" && Number.isFinite(connectionId)
-        ? withAccount(connectionId, fn)
-        : fn();
+    // Multi-account: scope every Meta call below to the requested connection
+    // and/or ad account (e.g. a template's US account). AsyncLocalStorage
+    // propagates it through getPageId/getAdAccountId/etc.
+    const runScoped = <T,>(fn: () => Promise<T>): Promise<T> => {
+      const inner = () =>
+        withAdAccount(typeof adAccountId === "string" && adAccountId.trim() ? adAccountId.trim() : null, fn);
+      return typeof connectionId === "number" && Number.isFinite(connectionId)
+        ? withAccount(connectionId, inner)
+        : inner();
+    };
     return await runScoped(async () => {
 
     // Use existing job record if provided, otherwise create new one

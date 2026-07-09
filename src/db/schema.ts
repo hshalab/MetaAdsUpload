@@ -219,6 +219,11 @@ export const templates = pgTable("templates", {
   // Pixel
   pixelId: text("pixel_id"),
 
+  // Ad account this template publishes to ("act_..." or bare id).
+  // null = the connection's active/default account. Lets e.g. US templates
+  // target the future US ad account while Nordic templates stay on Glimmora.
+  adAccountId: text("ad_account_id"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

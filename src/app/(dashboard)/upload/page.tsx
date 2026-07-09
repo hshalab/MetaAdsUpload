@@ -84,6 +84,7 @@ interface Template {
   productName?: string;
   angleName?: string;
   pixelId?: string;
+  adAccountId?: string | null;
 }
 
 interface MetaPage {
@@ -242,6 +243,11 @@ export default function UploadPage() {
   const [pages, setPages] = useState<MetaPage[]>([]);
   const [selectedPageId, setSelectedPageId] = useState("");
   const [pixelId, setPixelId] = useState("");
+  // Ad account the selected template targets ("" = connection default).
+  // Campaign/ad-set lists and the publish payload all follow this.
+  const [templateAdAccountId, setTemplateAdAccountId] = useState("");
+  const [adAccountOptions, setAdAccountOptions] = useState<Array<{ id: string; name: string; currency: string }>>([]);
+  const prevAdAccountRef = useRef<string | null>(null);
   const [loadingConnection, setLoadingConnection] = useState(true);
 
   // Team attribution — who made this creative (for bonus + stats tracking)
@@ -367,9 +373,8 @@ export default function UploadPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [tplRes, campRes, connRes] = await Promise.all([
+        const [tplRes, connRes] = await Promise.all([
           fetch("/api/templates"),
-          fetch("/api/meta/campaigns"),
           fetch("/api/meta/connection"),
         ]);
         if (tplRes.ok) {
@@ -385,15 +390,12 @@ export default function UploadPage() {
             if (def) setSelectedTemplateId(def.id);
           }
         }
-        if (campRes.ok) {
-          const { data } = await campRes.json();
-          setCampaigns(data || []);
-        }
         if (connRes.ok) {
           const connData = await connRes.json();
           const active = connData.active;
           const activeConn = connData.connections?.find((c: { isActive: boolean }) => c.isActive);
           if (activeConn?.pages) setPages(activeConn.pages);
+          if (activeConn?.adAccounts) setAdAccountOptions(activeConn.adAccounts);
           // Set defaults from connection if no saved prefs
           const saved = localStorage.getItem(PREFS_KEY);
           const prefs = saved ? JSON.parse(saved) : {};
@@ -404,11 +406,40 @@ export default function UploadPage() {
         toast.error("Failed to load data");
       } finally {
         setLoadingTemplates(false);
-        setLoadingCampaigns(false);
         setLoadingConnection(false);
       }
     })();
   }, []);
+
+  // ─── Fetch campaigns scoped to the template's ad account ────────────────
+  // Runs on mount ("" = connection default) and again whenever the selected
+  // template points at a different ad account. On an actual account SWITCH the
+  // campaign/ad-set selection is reset — publishing to a campaign id that
+  // belongs to another account must be impossible.
+  useEffect(() => {
+    const prev = prevAdAccountRef.current;
+    prevAdAccountRef.current = templateAdAccountId;
+    if (prev !== null && prev !== templateAdAccountId) {
+      setSelectedCampaignId("");
+      setAdsets([]);
+    }
+    setLoadingCampaigns(true);
+    (async () => {
+      try {
+        const qs = templateAdAccountId ? `?adAccountId=${encodeURIComponent(templateAdAccountId)}` : "";
+        const res = await fetch(`/api/meta/campaigns${qs}`);
+        if (res.ok) {
+          const { data } = await res.json();
+          setCampaigns(data || []);
+        }
+      } catch {
+        toast.error("Failed to load campaigns");
+      } finally {
+        setLoadingCampaigns(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateAdAccountId]);
 
   // ─── Apply template when selected ───────────────────────────────────────
 
@@ -440,6 +471,7 @@ export default function UploadPage() {
     setNewAdsetOptGoal(tpl.optimizationGoal || "OFFSITE_CONVERSIONS");
     setNewAdsetBidStrategy(tpl.bidStrategy || "LOWEST_COST_WITHOUT_CAP");
     setNewAdsetConvEvent(tpl.conversionEvent || "PURCHASE");
+    setTemplateAdAccountId(tpl.adAccountId || "");
   }, []);
 
   useEffect(() => {
@@ -459,7 +491,8 @@ export default function UploadPage() {
     setLoadingAdsets(true);
     (async () => {
       try {
-        const res = await fetch(`/api/meta/adsets?campaign_id=${selectedCampaignId}`);
+        const actQs = templateAdAccountId ? `&adAccountId=${encodeURIComponent(templateAdAccountId)}` : "";
+        const res = await fetch(`/api/meta/adsets?campaign_id=${selectedCampaignId}${actQs}`);
         if (res.ok) {
           const { data } = await res.json();
           setAdsets(data || []);
@@ -470,7 +503,7 @@ export default function UploadPage() {
         setLoadingAdsets(false);
       }
     })();
-  }, [selectedCampaignId]);
+  }, [selectedCampaignId, templateAdAccountId]);
 
   // ─── Poll for active job status ─────────────────────────────────────────
 
@@ -868,9 +901,10 @@ export default function UploadPage() {
       adName: jobAdName || filename.replace(/\.[^.]+$/, ""),
     };
 
-    // Pass page/pixel overrides if selected
+    // Pass page/pixel/ad-account overrides if selected
     if (selectedPageId) payload.pageId = selectedPageId;
     if (pixelId) payload.pixelId = pixelId;
+    if (templateAdAccountId) payload.adAccountId = templateAdAccountId;
 
     // Placement variants
     if (variantR2Data && variantR2Data.length > 0) {
@@ -1061,6 +1095,7 @@ export default function UploadPage() {
     }
     if (selectedPageId) jobConfig.pageId = selectedPageId;
     if (pixelId) jobConfig.pixelId = pixelId;
+    if (templateAdAccountId) jobConfig.adAccountId = templateAdAccountId;
 
     try {
       dbJobId = await createDbJob(job.filename, job.mediaType, selectedCampaignId, jobConfig);
@@ -1457,6 +1492,7 @@ export default function UploadPage() {
           adName,
           pageId: (hConfig?.pageId as string) || undefined,
           pixelId: (hConfig?.pixelId as string) || undefined,
+          adAccountId: (hConfig?.adAccountId as string) || undefined,
           existingJobId: h.id,
         }),
       });
@@ -1778,6 +1814,18 @@ export default function UploadPage() {
                   </span>
                 </div>
               )}
+              {/* Which ad account this upload publishes to — always visible */}
+              <div className={`text-[10px] px-2 py-1 rounded border ${templateAdAccountId ? "bg-amber-500/10 border-amber-500/20 text-amber-400" : "bg-white/[0.03] border-white/[0.06] text-slate-500"}`}>
+                Annonskonto:{" "}
+                {templateAdAccountId
+                  ? (() => {
+                      const acc = adAccountOptions.find(
+                        (a) => a.id === templateAdAccountId || `act_${a.id}` === templateAdAccountId || a.id === `act_${templateAdAccountId}`
+                      );
+                      return acc ? `${acc.name} (${acc.currency})` : templateAdAccountId;
+                    })()
+                  : "kontots standard (Settings)"}
+              </div>
             </div>
           )}
         </div>

@@ -195,8 +195,10 @@ async function refreshTokenIfNeeded(
 // Every Meta call resolves an AccountContext: token + ad account + page +
 // pixel + currency for ONE connection. By default that's the active
 // connection (previous behaviour). Wrap any code in withAccount(connectionId,
-// fn) to target a different connection — nested lib calls pick it up
-// automatically via AsyncLocalStorage, no signature changes needed.
+// fn) to target a different connection, and/or withAdAccount(actId, fn) to
+// target a specific ad account WITHIN the connection (e.g. the future US
+// account) — nested lib calls pick it up automatically via AsyncLocalStorage,
+// no signature changes needed.
 
 export interface AccountContext {
   connectionId: number | null;
@@ -207,11 +209,22 @@ export interface AccountContext {
   currency: string | null;
 }
 
-const accountAls = new AsyncLocalStorage<{ connectionId: number }>();
+const accountAls = new AsyncLocalStorage<{ connectionId?: number; adAccountId?: string }>();
 
 /** Run fn with all nested Meta calls scoped to a specific connection. */
 export function withAccount<T>(connectionId: number, fn: () => Promise<T>): Promise<T> {
-  return accountAls.run({ connectionId }, fn);
+  return accountAls.run({ ...accountAls.getStore(), connectionId }, fn);
+}
+
+/**
+ * Run fn with all nested Meta calls targeting a specific ad account (must be
+ * one of the connection's adAccounts — resolveAccount throws loudly otherwise,
+ * because silently creating ads in the wrong account is the worse failure).
+ * Falsy id = no-op, so callers can pass a template's optional value directly.
+ */
+export function withAdAccount<T>(adAccountId: string | null | undefined, fn: () => Promise<T>): Promise<T> {
+  if (!adAccountId) return fn();
+  return accountAls.run({ ...accountAls.getStore(), adAccountId }, fn);
 }
 
 const ctxCache = new Map<string, { ctx: AccountContext; ts: number }>();
@@ -240,8 +253,10 @@ async function loadConnection(connectionId?: number) {
 }
 
 export async function resolveAccount(connectionId?: number): Promise<AccountContext> {
-  const override = connectionId ?? accountAls.getStore()?.connectionId;
-  const key = override != null ? `conn:${override}` : "active";
+  const store = accountAls.getStore();
+  const override = connectionId ?? store?.connectionId;
+  const adOverride = store?.adAccountId ? formatActId(store.adAccountId) : null;
+  const key = (override != null ? `conn:${override}` : "active") + (adOverride ? `|${adOverride}` : "");
   const hit = ctxCache.get(key);
   if (hit && Date.now() - hit.ts < CTX_CACHE_TTL_MS) return hit.ctx;
 
@@ -263,11 +278,26 @@ export async function resolveAccount(connectionId?: number): Promise<AccountCont
       tokenExpiresAt: conn.tokenExpiresAt,
     });
 
-    const adAccountId = formatActId(conn.activeAdAccountId);
     const accounts = (conn.adAccounts ?? []) as Array<{ id: string; currency?: string }>;
-    const acc = accounts.find(
+    let adAccountId = formatActId(conn.activeAdAccountId);
+    let acc = accounts.find(
       (a) => a.id === conn.activeAdAccountId || formatActId(a.id) === adAccountId
     );
+
+    // Explicit ad-account override (withAdAccount / template.adAccountId).
+    // Must exist on the connection — a typo here must fail loudly, never fall
+    // back to the default account and create ads in the wrong place.
+    if (adOverride) {
+      const wanted = accounts.find((a) => formatActId(a.id) === adOverride);
+      if (!wanted) {
+        throw new Error(
+          `Ad account ${adOverride} is not available on the connected Meta user. ` +
+            `Refresh accounts in Settings (or check the template's ad account).`
+        );
+      }
+      adAccountId = adOverride;
+      acc = wanted;
+    }
 
     const ctx: AccountContext = {
       connectionId: conn.id,
@@ -289,7 +319,7 @@ export async function resolveAccount(connectionId?: number): Promise<AccountCont
   const ctx: AccountContext = {
     connectionId: null,
     token: envToken,
-    adAccountId: formatActId(process.env.META_AD_ACCOUNT_ID),
+    adAccountId: adOverride ?? formatActId(process.env.META_AD_ACCOUNT_ID),
     pageId: process.env.META_PAGE_ID || null,
     pixelId: process.env.META_PIXEL_ID || null,
     currency: null,

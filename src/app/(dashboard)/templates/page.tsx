@@ -43,7 +43,10 @@ interface Template {
   pixelId: string | null;
   productName: string | null;
   angleName: string | null;
+  adAccountId: string | null;
 }
+
+interface AdAccountOption { id: string; name: string; currency: string; status?: number }
 
 interface FormState {
   name: string;
@@ -61,6 +64,7 @@ interface FormState {
   bidStrategy: string;
   pixelId: string;
   productName: string;
+  adAccountId: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -79,6 +83,7 @@ const EMPTY_FORM: FormState = {
   bidStrategy: "LOWEST_COST_WITHOUT_CAP",
   pixelId: "",
   productName: "",
+  adAccountId: "",
 };
 
 export default function TemplatesPage() {
@@ -86,6 +91,8 @@ export default function TemplatesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [adAccounts, setAdAccounts] = useState<AdAccountOption[]>([]);
+  const [defaultAdAccountId, setDefaultAdAccountId] = useState<string | null>(null);
 
   const fetchTemplates = async () => {
     const res = await fetch("/api/templates");
@@ -94,6 +101,20 @@ export default function TemplatesPage() {
   };
 
   useEffect(() => { fetchTemplates(); }, []);
+
+  // Ad accounts on the active Meta connection (for the per-template account picker)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/meta/connection");
+        if (!res.ok) return;
+        const data = await res.json();
+        const active = (data.connections || []).find((c: { isActive: boolean }) => c.isActive);
+        setAdAccounts(active?.adAccounts || []);
+        setDefaultAdAccountId(active?.activeAdAccountId || null);
+      } catch { /* ignore — picker just stays empty */ }
+    })();
+  }, []);
 
   const openCreate = () => {
     setEditingId(null);
@@ -119,6 +140,7 @@ export default function TemplatesPage() {
       bidStrategy: t.bidStrategy || "LOWEST_COST_WITHOUT_CAP",
       pixelId: t.pixelId || "",
       productName: t.productName || "",
+      adAccountId: t.adAccountId || "",
     });
     setDialogOpen(true);
   };
@@ -138,6 +160,7 @@ export default function TemplatesPage() {
         targetCountries: form.targetCountries.filter(Boolean),
         pixelId: form.pixelId || null,
         productName: form.productName || null,
+        adAccountId: form.adAccountId || null,
       };
 
       if (editingId) {
@@ -196,6 +219,7 @@ export default function TemplatesPage() {
       bidStrategy: t.bidStrategy || "LOWEST_COST_WITHOUT_CAP",
       pixelId: t.pixelId || "",
       productName: t.productName || "",
+      adAccountId: t.adAccountId || "",
     });
     setDialogOpen(true);
   };
@@ -357,6 +381,26 @@ export default function TemplatesPage() {
                 <Switch checked={form.isDefault} onCheckedChange={(v) => setForm({ ...form, isDefault: v })} />
                 <label className="text-xs text-slate-400">Default</label>
               </div>
+            </div>
+
+            {/* ─── AD ACCOUNT ─── */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Annonskonto</label>
+              <select
+                value={form.adAccountId}
+                onChange={(e) => setForm({ ...form, adAccountId: e.target.value })}
+                className="w-full rounded-md bg-white/5 border border-white/10 px-3 py-2 text-sm text-white [color-scheme:dark]"
+              >
+                <option value="">Kontots standard{defaultAdAccountId ? ` (${adAccounts.find((a) => a.id === defaultAdAccountId || `act_${a.id}` === defaultAdAccountId || a.id === `act_${defaultAdAccountId}`)?.name || defaultAdAccountId})` : ""}</option>
+                {adAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} — {a.id.startsWith("act_") ? a.id : `act_${a.id}`} ({a.currency})
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-600">
+                Alla uploads med den här templaten skapas i valt konto (kampanjer/ad sets listas därifrån). Tomt = aktiva kontot i Settings.
+              </p>
             </div>
 
             {/* ─── AD COPY ─── */}

@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getCampaigns, createCampaign, updateCampaign } from "@/lib/meta/campaigns";
-import { withAccount } from "@/lib/meta/client";
+import { withAccount, withAdAccount } from "@/lib/meta/client";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-// Optional multi-account scoping: pass ?connectionId=<id> (or connectionId in
-// the JSON body for writes) to target a non-active Meta connection.
-function scopeRunner(connectionId: unknown) {
+// Optional multi-account scoping: pass ?connectionId=<id> to target a
+// non-active Meta connection and/or ?adAccountId=act_... to target a specific
+// ad account on it (e.g. the US account from a template).
+function scopeRunner(connectionId: unknown, adAccountId?: unknown) {
   const id = typeof connectionId === "string" ? parseInt(connectionId, 10) : typeof connectionId === "number" ? connectionId : NaN;
-  return <T,>(fn: () => Promise<T>): Promise<T> => (Number.isFinite(id) ? withAccount(id as number, fn) : fn());
+  const act = typeof adAccountId === "string" && adAccountId.trim() ? adAccountId.trim() : null;
+  return <T,>(fn: () => Promise<T>): Promise<T> => {
+    const inner = () => withAdAccount(act, fn);
+    return Number.isFinite(id) ? withAccount(id as number, inner) : inner();
+  };
 }
 
 
@@ -22,7 +27,10 @@ export async function GET(request: NextRequest) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const run = scopeRunner(request.nextUrl.searchParams.get("connectionId"));
+    const run = scopeRunner(
+      request.nextUrl.searchParams.get("connectionId"),
+      request.nextUrl.searchParams.get("adAccountId")
+    );
     const campaigns = await run(() => getCampaigns());
 
     // Update cache
@@ -72,7 +80,9 @@ export async function POST(request: NextRequest) {
     if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
-    const result = await createCampaign(body);
+    const { connectionId, adAccountId, ...params } = body;
+    const run = scopeRunner(connectionId, adAccountId);
+    const result = await run(() => createCampaign(params));
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(

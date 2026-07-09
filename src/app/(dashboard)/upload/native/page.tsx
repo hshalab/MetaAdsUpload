@@ -45,6 +45,8 @@ const cardCls = "rounded-xl border border-white/[0.06] bg-[#111827] p-4";
 export default function NativeUploadPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState("");
+  const [adAccountId, setAdAccountId] = useState(""); // "" = connection default
+  const [adAccountOptions, setAdAccountOptions] = useState<Array<{ id: string; name: string; currency: string }>>([]);
   const [pages, setPages] = useState<Page[]>([]);
   const [selectedPageId, setSelectedPageId] = useState("");
   const [pixelId, setPixelId] = useState("");
@@ -89,6 +91,7 @@ export default function NativeUploadPage() {
         if (p.convEvent) setNewAdsetConvEvent(p.convEvent);
         if (p.landingPage) setLandingPage(p.landingPage);
         if (p.cta) setCtaType(p.cta);
+        if (p.adAccountId) setAdAccountId(p.adAccountId);
       }
     } catch { /* ignore */ }
     hydrated.current = true;
@@ -102,29 +105,23 @@ export default function NativeUploadPage() {
         campaignId: selectedCampaignId, adsetMode, selectedAdsetId,
         pageId: selectedPageId, pixelId, country: newAdsetCountry,
         budget: newAdsetBudget, optGoal: newAdsetOptGoal, bidStrategy: newAdsetBidStrategy,
-        convEvent: newAdsetConvEvent, landingPage, cta: ctaType,
+        convEvent: newAdsetConvEvent, landingPage, cta: ctaType, adAccountId,
       }));
     } catch { /* ignore */ }
   }, [selectedCampaignId, adsetMode, selectedAdsetId, selectedPageId, pixelId, newAdsetCountry,
-      newAdsetBudget, newAdsetOptGoal, newAdsetBidStrategy, newAdsetConvEvent, landingPage, ctaType]);
+      newAdsetBudget, newAdsetOptGoal, newAdsetBidStrategy, newAdsetConvEvent, landingPage, ctaType, adAccountId]);
 
-  // ─── Load campaigns + connection ───────────────────────────────────────────
+  // ─── Load connection (pages, ad accounts, defaults) ────────────────────────
   useEffect(() => {
     (async () => {
       try {
-        const [campRes, connRes] = await Promise.all([
-          fetch("/api/meta/campaigns"),
-          fetch("/api/meta/connection"),
-        ]);
-        if (campRes.ok) {
-          const { data } = await campRes.json();
-          setCampaigns(data || []);
-        }
+        const connRes = await fetch("/api/meta/connection");
         if (connRes.ok) {
           const connData = await connRes.json();
           const active = connData.active;
           const activeConn = connData.connections?.find((c: { isActive: boolean }) => c.isActive);
           if (activeConn?.pages) setPages(activeConn.pages);
+          if (activeConn?.adAccounts) setAdAccountOptions(activeConn.adAccounts);
           // Only fall back to the connection defaults if the user hasn't saved a choice.
           const savedPrefs = localStorage.getItem(NATIVE_PREFS_KEY);
           const prefs = savedPrefs ? JSON.parse(savedPrefs) : {};
@@ -132,24 +129,41 @@ export default function NativeUploadPage() {
           if (!prefs.pixelId && active?.pixelId) setPixelId(active.pixelId);
         }
       } catch {
-        toast.error("Failed to load campaigns/connection");
+        toast.error("Failed to load connection");
       }
     })();
   }, []);
+
+  // ─── Load campaigns scoped to the chosen ad account ────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const qs = adAccountId ? `?adAccountId=${encodeURIComponent(adAccountId)}` : "";
+        const campRes = await fetch(`/api/meta/campaigns${qs}`);
+        if (campRes.ok) {
+          const { data } = await campRes.json();
+          setCampaigns(data || []);
+        }
+      } catch {
+        toast.error("Failed to load campaigns");
+      }
+    })();
+  }, [adAccountId]);
 
   // ─── Load ad sets when campaign changes ────────────────────────────────────
   useEffect(() => {
     if (!selectedCampaignId) { setAdsets([]); return; }
     (async () => {
       try {
-        const res = await fetch(`/api/meta/adsets?campaign_id=${selectedCampaignId}`);
+        const actQs = adAccountId ? `&adAccountId=${encodeURIComponent(adAccountId)}` : "";
+        const res = await fetch(`/api/meta/adsets?campaign_id=${selectedCampaignId}${actQs}`);
         if (res.ok) {
           const { data } = await res.json();
           setAdsets(data || []);
         }
       } catch { toast.error("Failed to load ad sets"); }
     })();
-  }, [selectedCampaignId]);
+  }, [selectedCampaignId, adAccountId]);
 
   // ─── Creatives ─────────────────────────────────────────────────────────────
   const onFilesPicked = (files: FileList | null) => {
@@ -246,6 +260,7 @@ export default function NativeUploadPage() {
     };
     if (selectedPageId) payload.pageId = selectedPageId;
     if (pixelId) payload.pixelId = pixelId;
+    if (adAccountId) payload.adAccountId = adAccountId;
     if (adsetIdToUse) payload.adsetId = adsetIdToUse;
     else if (adsetMode === "existing" && selectedAdsetId) payload.adsetId = selectedAdsetId;
     else payload.adsetConfig = buildAdsetConfig();
@@ -341,6 +356,28 @@ export default function NativeUploadPage() {
 
       {/* Campaign + Ad set */}
       <div className={cardCls}>
+        {/* Ad account — campaigns/ad sets below are listed from (and ads created in) this account */}
+        <div className="mb-3 space-y-1.5">
+          <label className={labelCls}>Annonskonto</label>
+          <select
+            value={adAccountId}
+            onChange={(e) => {
+              setAdAccountId(e.target.value);
+              // A campaign id belongs to ONE account — never carry the selection across.
+              setSelectedCampaignId("");
+              setSelectedAdsetId("");
+              setAdsets([]);
+            }}
+            className={inputSmCls}
+          >
+            <option value="">Kontots standard (Settings)</option>
+            {adAccountOptions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} — {a.id.startsWith("act_") ? a.id : `act_${a.id}`} ({a.currency})
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-1.5">
             <label className={labelCls}>Campaign</label>
