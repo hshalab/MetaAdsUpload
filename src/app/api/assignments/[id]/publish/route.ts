@@ -270,14 +270,17 @@ export async function POST(
             };
           }
 
-          // If multiple headlines/texts, use asset_feed_spec
+          // If multiple headlines/texts, add them as text options (Multiple Text
+          // Optimization). optimization_type DEGREES_OF_FREEDOM is REQUIRED —
+          // without it Meta treats the asset feed as dynamic creative and rejects
+          // it ("exactly one ad format", #1885374) or demands a dynamic ad set
+          // (#1885852). Link/CTA stay in link_data/video_data — never in the feed.
           if (headlines.length > 1 || primaryTexts.length > 1) {
             creativePayload.asset_feed_spec = {
               ...(headlines.length > 0 ? { titles: headlines.map((t) => ({ text: t })) } : {}),
               ...(primaryTexts.length > 0 ? { bodies: primaryTexts.map((t) => ({ text: t })) } : {}),
               ...(descriptions.length > 0 ? { descriptions: descriptions.map((t) => ({ text: t })) } : {}),
-              link_urls: [{ website_url: landingPage }],
-              call_to_action_types: [ctaType],
+              optimization_type: "DEGREES_OF_FREEDOM",
             };
           }
 

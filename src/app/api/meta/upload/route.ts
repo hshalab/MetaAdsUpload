@@ -69,13 +69,16 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // If multiple headlines/texts, use asset_feed_spec
+    // If multiple headlines/texts, add them as text options (Multiple Text
+    // Optimization). optimization_type DEGREES_OF_FREEDOM is REQUIRED — without
+    // it Meta treats the asset feed as dynamic creative and rejects it
+    // ("exactly one ad format", #1885374) or demands a dynamic ad set (#1885852).
+    // Link/CTA stay in link_data/video_data — never in the feed.
     if ((creativeConfig.headlines?.length > 1 || creativeConfig.primaryTexts?.length > 1)) {
       creativePayload.asset_feed_spec = {
         ...(creativeConfig.headlines?.length > 0 ? { titles: creativeConfig.headlines.map((t: string) => ({ text: t })) } : {}),
         ...(creativeConfig.primaryTexts?.length > 0 ? { bodies: creativeConfig.primaryTexts.map((t: string) => ({ text: t })) } : {}),
-        ...(creativeConfig.linkUrl ? { link_urls: [{ website_url: creativeConfig.linkUrl }] } : {}),
-        call_to_action_types: [creativeConfig.ctaType || "SHOP_NOW"],
+        optimization_type: "DEGREES_OF_FREEDOM",
       };
     }
 

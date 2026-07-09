@@ -118,6 +118,9 @@ export async function createAdCreative(params: {
     call_to_action_types?: string[];
     images?: Array<{ hash: string }>;
     videos?: Array<{ video_id: string }>;
+    // DEGREES_OF_FREEDOM = text options on a standard ad; without it Meta treats
+    // the feed as dynamic creative (requires dynamic ad set, error #1885852).
+    optimization_type?: string;
   };
   degrees_of_freedom_spec?: {
     creative_features_spec: {
