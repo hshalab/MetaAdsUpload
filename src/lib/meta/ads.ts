@@ -1,4 +1,5 @@
 import { metaApi, metaApiPaginated, getAdAccountId, getAccessToken } from "./client";
+import { META_URL_TAGS } from "./creatives";
 
 export interface Ad {
   id: string;
@@ -117,6 +118,7 @@ export async function createAdWithTextOptions(params: {
   form.append("creative", JSON.stringify({
     name: params.name,
     object_story_spec: storySpec,
+    url_tags: META_URL_TAGS,
   }));
   form.append("creative_asset_groups_spec", JSON.stringify({
     groups: [group],
@@ -149,6 +151,7 @@ export async function createAdWithPostId(params: {
   form.append("status", params.status || "ACTIVE");
   form.append("creative", JSON.stringify({
     object_story_id: params.postId,
+    url_tags: META_URL_TAGS,
   }));
 
   return metaApi<{ id: string }>(`/${await getAdAccountId()}/ads`, {

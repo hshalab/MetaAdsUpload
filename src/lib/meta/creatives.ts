@@ -1,6 +1,16 @@
 import { metaApi, getAdAccountId } from "./client";
 
 /**
+ * Standard UTM tags for every ad we create. Meta expands the {{...}} macros at
+ * delivery time. utm_term = ad set ID, utm_content = ad ID — the store's
+ * utm-capture snippet writes these into cart attributes -> order
+ * note_attributes -> shopify_orders, which is what powers per-ad ncROAS.
+ * (Added 2026-07-09 after finding all July ads shipped with NO url_tags.)
+ */
+export const META_URL_TAGS =
+  "utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.id}}&utm_term={{adset.id}}&utm_content={{ad.id}}";
+
+/**
  * Poll until a video is ready for use in ad creatives.
  * Meta needs time to process uploaded videos before they can be referenced.
  */
@@ -114,9 +124,10 @@ export async function createAdCreative(params: {
       standard_enhancements: { enroll_status: string };
     };
   };
+  url_tags?: string;
 }) {
   return metaApi<{ id: string }>(`/${await getAdAccountId()}/adcreatives`, {
     method: "POST",
-    body: params,
+    body: { url_tags: META_URL_TAGS, ...params },
   });
 }
