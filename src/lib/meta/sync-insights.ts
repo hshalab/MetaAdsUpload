@@ -3,7 +3,7 @@
 // from Meta into the insights table, and refreshes campaign/ad metadata caches.
 
 import { db, schema } from "@/db";
-import { and, eq, gte, lte, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, gte, lte, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import {
   getInsights,
   getAdsetInsightsByAd,
@@ -15,7 +15,7 @@ import {
 } from "./insights";
 import { getCampaigns } from "./campaigns";
 import { getAds } from "./ads";
-import { metaApi, resolveAccount } from "./client";
+import { metaApi, resolveAccount, withAdAccount } from "./client";
 
 function extractLinkClicks(actions?: Array<{ action_type: string; value: string }>): number {
   return parseInt(actions?.find((a) => a.action_type === "link_click")?.value || "0", 10);
@@ -52,13 +52,32 @@ function toRow(row: InsightData, entityId: string, entityType: string, adAccount
   };
 }
 
-/** Replace all rows of an entityType within [since, until] with fresh data (bulk). */
-async function replaceInsights(entityType: string, since: string, until: string, rows: InsightRow[]) {
+/**
+ * Replace all rows of an entityType within [since, until] with fresh data (bulk).
+ * Scoped to ONE ad account — with multi-account sync, deleting globally would
+ * wipe the other accounts' rows every run. `includeLegacyNull` widens the
+ * delete to rows with a NULL ad_account_id (pre-stamping era) so the primary
+ * account migrates its legacy rows instead of duplicating them forever.
+ */
+async function replaceInsights(
+  entityType: string,
+  since: string,
+  until: string,
+  rows: InsightRow[],
+  adAccountId: string | null,
+  includeLegacyNull: boolean,
+) {
+  const accountScope = adAccountId
+    ? includeLegacyNull
+      ? or(eq(schema.insights.adAccountId, adAccountId), isNull(schema.insights.adAccountId))
+      : eq(schema.insights.adAccountId, adAccountId)
+    : isNull(schema.insights.adAccountId);
   await db.delete(schema.insights).where(
     and(
       eq(schema.insights.entityType, entityType),
       gte(schema.insights.dateStart, since),
       lte(schema.insights.dateStop, until),
+      accountScope,
     )
   );
   const CHUNK = 200;
@@ -129,10 +148,15 @@ export async function runEditorInsightsSync() {
 
     try {
       let since = windowSince;
+      // The ad set's own account — adset ids are global, so an owned US-account
+      // ad set syncs fine, but its rows must be stamped with ITS account, not
+      // the connection's active one.
+      let adsetAccountId = adAccountId;
 
       // Keep the ad set's display name fresh; created_time bounds the backfill.
       try {
-        const info = await metaApi<{ name?: string; created_time?: string }>(`/${adsetId}`, { params: { fields: "name,created_time" } });
+        const info = await metaApi<{ name?: string; created_time?: string; account_id?: string }>(`/${adsetId}`, { params: { fields: "name,created_time,account_id" } });
+        if (info?.account_id) adsetAccountId = formatAct(info.account_id);
         if (info?.name && ownerRow) {
           await db.update(schema.adsetOwners).set({ adsetName: info.name, updatedAt: new Date() }).where(eq(schema.adsetOwners.adsetId, adsetId));
         }
@@ -153,7 +177,7 @@ export async function runEditorInsightsSync() {
         adsetAdIds.add(ad.id);
         await db.insert(schema.adsCache).values({
           id: ad.id,
-          adAccountId,
+          adAccountId: adsetAccountId,
           adsetId: ad.adset_id || adsetId,
           campaignId: ad.campaign_id || "",
           name: ad.name,
@@ -165,7 +189,7 @@ export async function runEditorInsightsSync() {
           target: schema.adsCache.id,
           set: {
             name: ad.name, status: ad.status, adsetId: ad.adset_id || adsetId,
-            adAccountId,
+            adAccountId: adsetAccountId,
             creativeId: ad.creative?.id || null,
             videoId: ad.creative?.video_id || null,
             imageHash: ad.creative?.image_hash || null,
@@ -182,7 +206,7 @@ export async function runEditorInsightsSync() {
         const chunkEnd = addDays(cursor, BACKFILL_CHUNK_DAYS - 1) < today ? addDays(cursor, BACKFILL_CHUNK_DAYS - 1) : today;
         const data = await getAdsetInsightsByAd(adsetId, { since: cursor, until: chunkEnd }, 1);
         for (const r of data) {
-          if (r.ad_id) { rows.push(toRow(r, r.ad_id, "ad", adAccountId)); adsetAdIds.add(r.ad_id); }
+          if (r.ad_id) { rows.push(toRow(r, r.ad_id, "ad", adsetAccountId)); adsetAdIds.add(r.ad_id); }
         }
         cursor = addDays(chunkEnd, 1);
       }
@@ -230,9 +254,60 @@ export async function runEditorInsightsSync() {
   };
 }
 
+function formatAct(id: string): string {
+  return id.startsWith("act_") ? id : `act_${id}`;
+}
+
+/**
+ * The accounts the daily sync covers — self-configuring, no hardcoded list:
+ *  - the connection's active/default account (always),
+ *  - every ad account referenced by a template (the moment a template targets
+ *    the US account, the sync starts covering it),
+ *  - every account that already has stamped insights rows (keeps history fresh
+ *    even if the template that introduced the account is later deleted).
+ */
+async function accountsToSync(activeAdAccountId: string | null): Promise<string[]> {
+  const set = new Set<string>();
+  if (activeAdAccountId) set.add(formatAct(activeAdAccountId));
+  const tpl = await db
+    .selectDistinct({ act: schema.templates.adAccountId })
+    .from(schema.templates)
+    .where(isNotNull(schema.templates.adAccountId));
+  for (const t of tpl) if (t.act) set.add(formatAct(t.act));
+  const hist = await db
+    .selectDistinct({ act: schema.insights.adAccountId })
+    .from(schema.insights)
+    .where(isNotNull(schema.insights.adAccountId));
+  for (const h of hist) if (h.act) set.add(formatAct(h.act));
+  // ads_cache covers accounts that have ads but no delivery yet (e.g. a fresh
+  // US account right after its first uploads) — without this they'd stay
+  // invisible until the first insights row exists, which requires this sync.
+  const cached = await db
+    .selectDistinct({ act: schema.adsCache.adAccountId })
+    .from(schema.adsCache)
+    .where(isNotNull(schema.adsCache.adAccountId));
+  for (const c of cached) if (c.act) set.add(formatAct(c.act));
+  return [...set];
+}
+
 export async function runSync() {
   const account = await resolveAccount();
-  const adAccountId = account.adAccountId;
+  const accounts = await accountsToSync(account.adAccountId);
+  const results: Record<string, unknown> = {};
+  for (const act of accounts) {
+    try {
+      results[act] = await withAdAccount(act, () =>
+        syncOneAccount(act, act === account.adAccountId)
+      );
+    } catch (e) {
+      results[act] = { error: e instanceof Error ? e.message : String(e) };
+      console.error(`runSync failed for ${act}:`, e);
+    }
+  }
+  return results;
+}
+
+async function syncOneAccount(adAccountId: string, isPrimary: boolean) {
   const today = new Date().toISOString().split("T")[0];
   const since = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
 
@@ -281,7 +356,7 @@ export async function runSync() {
     timeIncrement: 1,
   });
   const campaignRows = campaignInsights.filter((r) => r.campaign_id).map((r) => toRow(r, r.campaign_id!, "campaign", adAccountId));
-  await replaceInsights("campaign", since, today, campaignRows);
+  await replaceInsights("campaign", since, today, campaignRows, adAccountId, isPrimary);
 
   // 4. Ad-level daily insights (powers the editor dashboard) — with video metrics
   const adInsights = await getInsights({
@@ -291,7 +366,7 @@ export async function runSync() {
     includeVideoMetrics: true,
   });
   const adRows = adInsights.filter((r) => r.ad_id).map((r) => toRow(r, r.ad_id!, "ad", adAccountId));
-  await replaceInsights("ad", since, today, adRows);
+  await replaceInsights("ad", since, today, adRows, adAccountId, isPrimary);
 
   return {
     campaigns: campaigns.length,
