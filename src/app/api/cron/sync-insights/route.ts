@@ -19,19 +19,27 @@ async function handle(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    // Account-wide sync first (multi-account: active + template + historical
-    // accounts) — this is what feeds the strategist bridge. The targeted
-    // editor sync runs after; failures are isolated so one bad account never
-    // blocks the other work.
-    let accountSync: unknown = null;
-    try {
-      accountSync = await runSync();
-    } catch (e) {
-      accountSync = { error: e instanceof Error ? e.message : String(e) };
-      console.error("runSync failed:", e);
+    // The two syncs each need most of the 300s budget — they run as SEPARATE
+    // cron invocations (?mode=accounts at 05:40, ?mode=editor at 06:00 in
+    // vercel.json). Default = editor (original behaviour); mode=all is for
+    // manual runs where the caller accepts the timeout risk.
+    const mode = request.nextUrl.searchParams.get("mode") ?? "editor";
+    if (mode === "accounts") {
+      const accountSync = await runSync();
+      return NextResponse.json({ success: true, accountSync });
+    }
+    if (mode === "all") {
+      let accountSync: unknown = null;
+      try {
+        accountSync = await runSync();
+      } catch (e) {
+        accountSync = { error: e instanceof Error ? e.message : String(e) };
+      }
+      const synced = await runEditorInsightsSync();
+      return NextResponse.json({ success: true, accountSync, synced });
     }
     const synced = await runEditorInsightsSync();
-    return NextResponse.json({ success: true, accountSync, synced });
+    return NextResponse.json({ success: true, synced });
   } catch (error) {
     console.error("Sync error:", error);
     return NextResponse.json(

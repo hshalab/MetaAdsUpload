@@ -1,7 +1,11 @@
 {
   "crons": [
     {
-      "path": "/api/cron/sync-insights",
+      "path": "/api/cron/sync-insights?mode=accounts",
+      "schedule": "40 5 * * *"
+    },
+    {
+      "path": "/api/cron/sync-insights?mode=editor",
       "schedule": "0 6 * * *"
     }
   ]

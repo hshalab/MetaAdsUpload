@@ -72,18 +72,33 @@ async function replaceInsights(
       ? or(eq(schema.insights.adAccountId, adAccountId), isNull(schema.insights.adAccountId))
       : eq(schema.insights.adAccountId, adAccountId)
     : isNull(schema.insights.adAccountId);
-  await db.delete(schema.insights).where(
-    and(
-      eq(schema.insights.entityType, entityType),
-      gte(schema.insights.dateStart, since),
-      lte(schema.insights.dateStop, until),
-      accountScope,
-    )
-  );
-  const CHUNK = 200;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const slice = rows.slice(i, i + CHUNK);
-    if (slice.length) await db.insert(schema.insights).values(slice);
+  // Day-by-day delete+insert (oldest first): the HTTP driver has no
+  // transactions, so a mid-run timeout must never leave a large half-deleted
+  // window — at worst ONE day goes missing and tomorrow's run repairs it.
+  const byDay = new Map<string, InsightRow[]>();
+  for (const r of rows) {
+    const d = String(r.dateStart);
+    byDay.set(d, [...(byDay.get(d) ?? []), r]);
+  }
+  const allDays = new Set<string>(byDay.keys());
+  // Also clear days in range that no longer have rows (e.g. data corrections)
+  for (let d = since; d <= until; d = new Date(new Date(`${d}T00:00:00Z`).getTime() + 86400000).toISOString().slice(0, 10)) {
+    allDays.add(d);
+  }
+  for (const day of [...allDays].sort()) {
+    await db.delete(schema.insights).where(
+      and(
+        eq(schema.insights.entityType, entityType),
+        eq(schema.insights.dateStart, day),
+        accountScope,
+      )
+    );
+    const dayRows = byDay.get(day) ?? [];
+    const CHUNK = 200;
+    for (let i = 0; i < dayRows.length; i += CHUNK) {
+      const slice = dayRows.slice(i, i + CHUNK);
+      if (slice.length) await db.insert(schema.insights).values(slice);
+    }
   }
 }
 
