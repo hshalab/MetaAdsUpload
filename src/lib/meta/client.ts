@@ -207,6 +207,7 @@ export interface AccountContext {
   pageId: string | null;
   pixelId: string | null;
   currency: string | null;
+  defaultExclusions: string[]; // custom-audience IDs to auto-exclude on new ad sets
 }
 
 const accountAls = new AsyncLocalStorage<{ connectionId?: number; adAccountId?: string }>();
@@ -299,6 +300,7 @@ export async function resolveAccount(connectionId?: number): Promise<AccountCont
       acc = wanted;
     }
 
+    const exclusionMap = (conn.defaultExclusions ?? {}) as Record<string, string[]>;
     const ctx: AccountContext = {
       connectionId: conn.id,
       token,
@@ -306,6 +308,7 @@ export async function resolveAccount(connectionId?: number): Promise<AccountCont
       pageId: conn.activePageId ?? null,
       pixelId: conn.pixelId ?? null,
       currency: acc?.currency ?? null,
+      defaultExclusions: (adAccountId && Array.isArray(exclusionMap[adAccountId])) ? exclusionMap[adAccountId] : [],
     };
     ctxCache.set(key, { ctx, ts: Date.now() });
     return ctx;
@@ -323,9 +326,19 @@ export async function resolveAccount(connectionId?: number): Promise<AccountCont
     pageId: process.env.META_PAGE_ID || null,
     pixelId: process.env.META_PIXEL_ID || null,
     currency: null,
+    defaultExclusions: [],
   };
   ctxCache.set(key, { ctx, ts: Date.now() });
   return ctx;
+}
+
+/**
+ * Custom-audience IDs that every new ad set on the resolved ad account should
+ * exclude (e.g. returning customers). Account-scoped, so switching accounts
+ * never leaks one brand's exclusions onto another.
+ */
+export async function getDefaultExclusions(): Promise<string[]> {
+  return (await resolveAccount()).defaultExclusions;
 }
 
 export async function getAccessToken(): Promise<string> {

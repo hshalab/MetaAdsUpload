@@ -514,6 +514,9 @@ export const metaConnections = pgTable("meta_connections", {
   pages: jsonb("pages").$type<Array<{ id: string; name: string }>>().default([]),
   activePageId: text("active_page_id"),
   pixelId: text("pixel_id"),
+  // Custom audiences to auto-exclude on every new ad set, keyed by ad account id.
+  // e.g. { "act_261297039993717": ["120250065842190350"] }
+  defaultExclusions: jsonb("default_exclusions").$type<Record<string, string[]>>().default({}),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

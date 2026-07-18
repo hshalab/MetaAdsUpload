@@ -1,4 +1,28 @@
-import { metaApi, metaApiPaginated, getAdAccountId } from "./client";
+import { metaApi, metaApiPaginated, getAdAccountId, getDefaultExclusions } from "./client";
+
+/**
+ * Merge the ad account's default excluded custom audiences into a targeting spec.
+ * Preserves any exclusions already present and de-dupes by audience id.
+ */
+async function applyDefaultExclusions(
+  targeting: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const defaults = await getDefaultExclusions();
+  if (defaults.length === 0) return targeting;
+
+  const existing = Array.isArray(targeting?.excluded_custom_audiences)
+    ? (targeting.excluded_custom_audiences as Array<{ id: string }>)
+    : [];
+  const ids = new Set(existing.map((a) => String(a.id)));
+  const merged = [...existing];
+  for (const id of defaults) {
+    if (!ids.has(String(id))) {
+      merged.push({ id: String(id) });
+      ids.add(String(id));
+    }
+  }
+  return { ...(targeting || {}), excluded_custom_audiences: merged };
+}
 
 export interface AdSet {
   id: string;
@@ -71,9 +95,12 @@ export async function createAdSet(params: {
     params.attribution_spec ??
     (ATTRIBUTION_CONVERSION_GOALS.has(params.optimization_goal) ? DEFAULT_ATTRIBUTION_SPEC : undefined);
 
+  // Auto-apply the ad account's default audience exclusions (e.g. returning customers)
+  const targeting = await applyDefaultExclusions(params.targeting);
+
   return metaApi<{ id: string }>(`/${await getAdAccountId()}/adsets`, {
     method: "POST",
-    body: { ...params, attribution_spec, status: params.status || "PAUSED" },
+    body: { ...params, targeting, attribution_spec, status: params.status || "PAUSED" },
   });
 }
 
